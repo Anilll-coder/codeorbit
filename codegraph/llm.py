@@ -37,14 +37,24 @@ def models() -> list[str]:
 
 
 def generate(prompt: str, model: str = DEFAULT_MODEL, system: str | None = None,
-             temperature: float = 0.1, num_ctx: int = 8192) -> str:
+             temperature: float = 0.1, num_ctx: int = 8192,
+             num_predict: int = 320) -> str:
     """One-shot completion. Low temperature: this is retrieval-grounded Q&A,
-    not creative writing - we want it to quote the context, not embroider it."""
+    not creative writing - we want it to quote the context, not embroider it.
+
+    num_predict is capped because on CPU this machine generates ~1-2 tokens/sec,
+    so total time is dominated by how much the model says, not by how much
+    context it was given. Capping output is the single biggest speed lever.
+    """
     body = {
         "model": model,
         "prompt": prompt,
         "stream": False,
-        "options": {"temperature": temperature, "num_ctx": num_ctx},
+        "options": {
+            "temperature": temperature,
+            "num_ctx": num_ctx,
+            "num_predict": num_predict,
+        },
     }
     if system:
         body["system"] = system
@@ -59,13 +69,18 @@ def generate(prompt: str, model: str = DEFAULT_MODEL, system: str | None = None,
 
 
 def stream(prompt: str, model: str = DEFAULT_MODEL, system: str | None = None,
-           temperature: float = 0.1, num_ctx: int = 8192) -> Iterator[str]:
+           temperature: float = 0.1, num_ctx: int = 8192,
+           num_predict: int = 320) -> Iterator[str]:
     """Token stream, so a slow CPU model still feels alive."""
     body = {
         "model": model,
         "prompt": prompt,
         "stream": True,
-        "options": {"temperature": temperature, "num_ctx": num_ctx},
+        "options": {
+            "temperature": temperature,
+            "num_ctx": num_ctx,
+            "num_predict": num_predict,
+        },
     }
     if system:
         body["system"] = system

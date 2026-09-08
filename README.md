@@ -111,17 +111,29 @@ project (`append`, `len`, `Path`, library methods). Those correctly get no edge.
 
 ### Performance on constrained hardware
 
-Measured on 7.3 GB RAM, CPU-only (no usable GPU), `phi4-mini`:
+Measured on 7.3 GB RAM with **no usable GPU** — `ollama ps` reports phi4-mini
+resident at 3.7 GB running **100% CPU**. Retrieval itself is instant (SQLite);
+every number below is the model.
 
-| retrieved context | answer time |
-|---|---|
-| 5,187 chars (1 symbol) | **32 s** |
-| 11,476 chars (3 symbols) | **4 m 21 s** |
+| model | output cap | time |
+|---|---|---|
+| `phi4-mini` | uncapped (~200 words) | 103 s – 190 s |
+| `phi4-mini` | 120 tokens | **50 s** |
+| `qwen2.5:0.5b` | 120 tokens | 21 s |
 
-2.2× the context costs 8× the time — prompt ingestion dominates and degrades
-sharply under memory pressure. **Context budget is the main performance lever
-here, not model choice.** Hence the conservative default of 2 symbols; raise it
-with `-n` when the answer needs more and you can wait.
+**Generation speed is the bottleneck — roughly 1–2 tokens/sec on CPU — so total
+time tracks how much the model *says*, not how much context it was given.**
+Three runs of one identical query took 190 s, 123 s and 103 s purely on
+answer-length variance, all with the model already warm.
+
+Two consequences:
+
+- **Capping output is the main lever.** `--max-tokens` defaults to 320; drop it
+  to ~150 for quick lookups. Retrieval size (`-n`) is a much weaker lever than
+  it first appears.
+- **`phi4-mini` is the floor for usable answers.** `qwen2.5:0.5b` is 2.5×
+  faster and worthless here — asked what `resolve_project` does, it echoed the
+  function signature and stopped. Speed below this size buys nothing.
 
 ## Status
 

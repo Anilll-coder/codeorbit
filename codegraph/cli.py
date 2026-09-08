@@ -180,6 +180,8 @@ def ask(
     path: str = typer.Option(".", "--path", "-p"),
     model: str = typer.Option(llm.DEFAULT_MODEL, "--model", "-m"),
     symbols: int = typer.Option(2, "--symbols", "-n", help="How many symbols to retrieve"),
+    max_tokens: int = typer.Option(320, "--max-tokens", "-t",
+                                   help="Cap the answer length (CPU generates ~1-2 tok/s)"),
     show_context: bool = typer.Option(False, "--show-context", help="Print what was retrieved"),
     no_llm: bool = typer.Option(False, "--no-llm", help="Retrieve only, skip the model"),
 ):
@@ -215,7 +217,8 @@ def ask(
 
     prompt = ctxmod.prompt_for(question, ctx)
     try:
-        for piece in llm.stream(prompt, model=model, system=ctxmod.SYSTEM):
+        for piece in llm.stream(prompt, model=model, system=ctxmod.SYSTEM,
+                                num_predict=max_tokens):
             sys.stdout.write(piece)
             sys.stdout.flush()
     except llm.OllamaError as e:
