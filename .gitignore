@@ -1,7 +1,8 @@
-.venv/
-__pycache__/
+*.egg-info/
 *.pyc
 .codegraph/
-*.egg-info/
+.codeorbit/
+.venv/
+__pycache__/
 build/
 dist/
