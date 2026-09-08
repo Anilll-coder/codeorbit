@@ -6,7 +6,7 @@ import time
 from pathlib import Path
 
 SCHEMA = Path(__file__).with_name("schema.sql")
-DB_DIRNAME = ".codegraph"
+DB_DIRNAME = ".codeorbit"
 DB_FILENAME = "graph.db"
 
 
@@ -19,7 +19,7 @@ def connect(root: Path, create: bool = False) -> sqlite3.Connection:
     p = db_path(root)
     if not p.exists() and not create:
         raise FileNotFoundError(
-            f"No CodeGraph index for {root}. Run: codegraph index {root}"
+            f"No CodeOrbit index for {root}. Run: codeorbit index {root}"
         )
     p.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(p)

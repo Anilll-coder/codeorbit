@@ -1,4 +1,4 @@
-# CodeGraph
+# CodeOrbit
 
 Local-first code intelligence. It parses a repository with tree-sitter, builds a
 structural knowledge graph of its symbols and their relationships in SQLite, and
@@ -21,32 +21,64 @@ answer questions that need whole-codebase context.**
 
 ## Install
 
-```bash
+**Linux / macOS / Git Bash**
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Anilll-coder/codeorbit/main/install.sh | sh
+```
+
+**Windows (PowerShell)**
+
+```powershell
+irm https://raw.githubusercontent.com/Anilll-coder/codeorbit/main/install.ps1 | iex
+```
+
+Or from a clone: `./install.sh` / `.\install.ps1`.
+
+The installer puts CodeOrbit in its own virtualenv so it can never disturb your
+system Python, adds a `codeorbit` launcher to your PATH, and offers to pull the
+Ollama model. Re-running upgrades in place; `--uninstall` / `-Uninstall` removes
+it and leaves your project indexes alone.
+
+Needs Python 3.10+, and [Ollama](https://ollama.com) for `codeorbit ask`.
+
+<details>
+<summary>Install knobs</summary>
+
+| sh | PowerShell | meaning |
+|---|---|---|
+| `CODEORBIT_HOME` | `-InstallDir` | where the virtualenv lives |
+| `CODEORBIT_BIN` | `-BinDir` | where the launcher goes |
+| `CODEORBIT_NO_MODEL=1` | `-NoModel` | skip the model download |
+| `CODEORBIT_REF` | `-Ref` | branch or tag to install |
+
+</details>
+
+<details>
+<summary>Developing on it instead</summary>
+
+```sh
 python -m venv .venv
 .venv/Scripts/activate        # Windows;  source .venv/bin/activate on Unix
 pip install -e .
 ```
 
-Requires Python 3.10+ and [Ollama](https://ollama.com) for the `ask` command:
-
-```bash
-ollama pull phi4-mini
-```
+</details>
 
 ## Use
 
 ```bash
-codegraph index .                      # build the graph
-codegraph status                       # what the index holds
+codeorbit index .                      # build the graph
+codeorbit status                       # what the index holds
 
-codegraph search Console               # find symbols by name
-codegraph show Console.print           # source + callers + callees
-codegraph callers render               # who calls this
-codegraph impact Segment --depth 2     # blast radius of a change
-codegraph entry                        # what the most code depends on
-codegraph dead                         # definitions nothing calls
+codeorbit search Console               # find symbols by name
+codeorbit show Console.print           # source + callers + callees
+codeorbit callers render               # who calls this
+codeorbit impact Segment --depth 2     # blast radius of a change
+codeorbit entry                        # what the most code depends on
+codeorbit dead                         # definitions nothing calls
 
-codegraph ask "How does Console.print render output?"
+codeorbit ask "How does Console.print render output?"
 ```
 
 Point any command at another project with `-p/--path`.

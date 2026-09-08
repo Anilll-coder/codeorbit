@@ -1,4 +1,4 @@
-"""CodeGraph CLI - local-first code intelligence with a local LLM."""
+"""CodeOrbit CLI - local-first code intelligence with a local LLM."""
 from __future__ import annotations
 
 import sys
@@ -79,7 +79,7 @@ def status(path: str = typer.Argument(".")):
     ).fetchall()
     t.add_row("edges by kind", ", ".join(f"{r['kind']}={r['c']}" for r in ek))
     t.add_row("ollama", "up" if llm.available() else "[red]not running[/red]")
-    console.print(Panel(t, title="CodeGraph"))
+    console.print(Panel(t, title="CodeOrbit"))
 
 
 @app.command()
@@ -193,7 +193,7 @@ def ask(
 
     if not picks:
         console.print("[yellow]Nothing in the graph matched that question.[/yellow]")
-        console.print("Try naming a symbol, or run [bold]codegraph search <name>[/bold].")
+        console.print("Try naming a symbol, or run [bold]codeorbit search <name>[/bold].")
         raise typer.Exit(1)
 
     console.print("[dim]retrieved: " + ", ".join(

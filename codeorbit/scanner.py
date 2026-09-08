@@ -15,7 +15,7 @@ LANG_BY_SUFFIX = {
 SKIP_DIRS = {
     ".git", ".hg", ".svn", "node_modules", "__pycache__", ".venv", "venv",
     "env", "dist", "build", ".next", ".nuxt", "target", ".mypy_cache",
-    ".pytest_cache", ".ruff_cache", "site-packages", ".codegraph", ".tox",
+    ".pytest_cache", ".ruff_cache", "site-packages", ".codeorbit", ".tox",
     "coverage", ".idea", ".vscode", "vendor", "bower_components",
 }
 

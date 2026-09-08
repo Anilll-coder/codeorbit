@@ -1,5 +1,5 @@
 [project]
-name = "codegraph"
+name = "codeorbit"
 version = "0.1.0"
 description = "Local-first code intelligence: a structural code graph answered by a local LLM"
 requires-python = ">=3.10"
@@ -13,14 +13,14 @@ dependencies = [
 ]
 
 [project.scripts]
-codegraph = "codegraph.cli:main"
+codeorbit = "codeorbit.cli:main"
 
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = ["codegraph", "codegraph.extract"]
+packages = ["codeorbit", "codeorbit.extract"]
 
 [tool.setuptools.package-data]
-codegraph = ["schema.sql"]
+codeorbit = ["schema.sql"]
