@@ -300,7 +300,7 @@ pip install -e ".[dev]"
 pytest
 ```
 
-59 tests, no mocks: each builds a small project on disk, indexes it, and asserts
+60 tests, no mocks: each builds a small project on disk, indexes it, and asserts
 against the real graph. Mocking the parser would only test the mock, and the
 fixer's tests never call the model - what has to hold is that everything
 *around* the model is safe regardless of what it returns.
@@ -315,6 +315,11 @@ Writing them found two real bugs, both now pinned by a test:
   Every string on that page comes from the codebase being analysed, so that is
   attacker-controlled input the moment you point this at a repository you did
   not write. Now escaped to `<`.
+
+A third was found by running the CLI end to end rather than by a test: a
+JavaScript `import { load } from "./svc"` bound to a *Python* `svc.load` on the
+name alone, and was reported as an `exact` call edge. Project-wide name matching
+is now scoped to one language.
 
 ## Status
 
