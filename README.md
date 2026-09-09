@@ -83,6 +83,12 @@ codeorbit ask "How does Console.print render output?"
 codeorbit review                       # review your change with its blast radius
 codeorbit review --base main           # ...against a branch
 codeorbit review --staged --no-llm     # just the risk table, no model
+
+codeorbit audit                        # bugs and security issues, ranked by reach
+codeorbit audit -s high --explain      # high severity only, explained by the model
+codeorbit why make_user normalize      # the call path between two symbols
+
+codeorbit embed                        # enable search by meaning (one time)
 ```
 
 Point any command at another project with `-p/--path`.
@@ -98,6 +104,9 @@ files
   -> query.py        callers / callees / impact / search / source
   -> context.py      question -> relevant subgraph -> grounded prompt
   -> review.py       diff -> changed symbols -> blast radius -> review prompt
+  -> rules.py        29 security / bug / quality patterns
+  -> audit.py        findings, attributed to symbols and ranked by reach
+  -> semantic.py     symbol embeddings, fused with keyword search by RRF
   -> llm.py          Ollama, streaming, local only
   -> cli.py          the commands above
 ```
@@ -191,6 +200,64 @@ ordered by what they reach rather than by how many lines moved, and changed file
 that are not indexed are named rather than silently skipped.
 
 `--no-llm` prints the risk table alone, which is instant.
+
+## Finding problems, ranked by what they reach
+
+A linter hands you a flat list. On a real codebase that list is unusable,
+because it will not say which of 400 findings to fix first. The graph answers
+that: every finding is attributed to the symbol containing it, and ordered by
+severity, then by how much code transitively depends on that symbol, then by
+whether any test reaches it.
+
+On `rich` (38.6k lines), the top finding sits inside a symbol 82 other symbols
+depend on. The same rule firing in dead code sorts to the bottom, which is
+where it belongs.
+
+`--explain` then asks the local model which findings are real. That step earns
+its keep: the scan flags `hashlib.sha1` in this project's own scanner, and a
+regex cannot know that it is hashing file contents for change detection rather
+than protecting a password. A reviewer can.
+
+## Search by meaning as well as by name
+
+Keyword search answers "where is `parse_and_extract`". It cannot answer "where
+do we decide which files to skip" - none of those words appear in the code.
+`codeorbit embed` embeds each symbol (name, signature, docstring and a slice of
+body) with `nomic-embed-text`, locally.
+
+The unit is the **symbol**, not a file chunk. That is the whole point: a
+semantic hit is only the door, and the neighbourhood around it still comes from
+real call edges. Meaning finds the door; structure walks the building.
+
+Two things here were measured and both were wrong on the first attempt, which is
+worth recording:
+
+1. `nomic-embed-text` requires `search_document:` / `search_query:` prefixes.
+   Without them, similarity is materially worse.
+2. Blending keyword and similarity scores **additively does nothing**. Cosine
+   similarities sit in a narrow 0.55-0.65 band, so the blend applies a near
+   constant offset that ranks nothing, and the keyword scores simply win. The
+   hybrid returned the keyword-only answer for every question tried.
+
+The fix is Reciprocal Rank Fusion, which throws the scores away and fuses only
+each list's *order*. After it, `scanner.scan` surfaces for "where do we decide
+which files to skip" where it previously did not appear at all - and questions
+that do name an identifier still rank it first, so nothing regressed. Compare
+the two yourself with `ask --no-semantic`.
+
+## Tests
+
+```bash
+pip install -e ".[dev]"
+pytest
+```
+
+26 tests, no mocks: each builds a small project on disk, indexes it, and asserts
+against the real graph. Mocking the parser would only test the mock. The suite
+found a real bug while being written - `nodes_fts` is an external-content FTS5
+table, so the `ON DELETE CASCADE` that removes a deleted file's symbols does not
+touch the search index, leaving deleted symbols searchable. Fixed with a delete
+trigger, and pinned by a test.
 
 ## Status
 

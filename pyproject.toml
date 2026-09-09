@@ -12,6 +12,9 @@ dependencies = [
     "requests>=2.31",
 ]
 
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
 [project.scripts]
 codeorbit = "codeorbit.cli:main"
 
@@ -24,3 +27,7 @@ packages = ["codeorbit", "codeorbit.extract"]
 
 [tool.setuptools.package-data]
 codeorbit = ["schema.sql"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
