@@ -79,6 +79,10 @@ codeorbit entry                        # what the most code depends on
 codeorbit dead                         # definitions nothing calls
 
 codeorbit ask "How does Console.print render output?"
+
+codeorbit review                       # review your change with its blast radius
+codeorbit review --base main           # ...against a branch
+codeorbit review --staged --no-llm     # just the risk table, no model
 ```
 
 Point any command at another project with `-p/--path`.
@@ -93,6 +97,7 @@ files
   -> resolve.py      bind call sites to real definitions           (pass 2)
   -> query.py        callers / callees / impact / search / source
   -> context.py      question -> relevant subgraph -> grounded prompt
+  -> review.py       diff -> changed symbols -> blast radius -> review prompt
   -> llm.py          Ollama, streaming, local only
   -> cli.py          the commands above
 ```
@@ -167,12 +172,33 @@ Two consequences:
   faster and worthless here — asked what `resolve_project` does, it echoed the
   function signature and stopped. Speed below this size buys nothing.
 
+## Reviewing a change
+
+A diff says what changed. It cannot say what the change *reaches* — and that is
+where the risk is. `codeorbit review` maps changed line ranges onto the symbols
+that own them, then pulls each one's callers, blast radius and covering tests out
+of the graph before asking the model to review:
+
+```
+2 file(s) changed  +81 -2  |  5 symbol(s) touched
+| symbol                  | blast | callers | tests |
+| codeorbit.query.callers | 2     | 1       | none  |
+```
+
+The two facts that matter most there — *one caller depends on this* and *nothing
+tests it* — are not in the diff. They come from the graph. Changed symbols are
+ordered by what they reach rather than by how many lines moved, and changed files
+that are not indexed are named rather than silently skipped.
+
+`--no-llm` prints the risk table alone, which is instant.
+
 ## Status
 
-Working end to end: index → resolve → query → graph-grounded local answers.
+Working end to end: index → resolve → query → graph-grounded local answers, and
+graph-grounded review of a change.
 
-Not built yet: AI code review over a diff, bug/security detection, automated fix
-generation with verification, and an interactive graph visualisation.
+Not built yet: standalone bug/security detection, automated fix generation with
+verification, and an interactive graph visualisation.
 
 ## Prior art
 

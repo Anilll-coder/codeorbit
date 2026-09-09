@@ -12,6 +12,7 @@ from rich.table import Table
 
 from . import context as ctxmod
 from . import db, llm, query
+from . import review as reviewmod
 from .indexer import index_project
 from .resolve import resolve_project
 
@@ -218,6 +219,82 @@ def ask(
     prompt = ctxmod.prompt_for(question, ctx)
     try:
         for piece in llm.stream(prompt, model=model, system=ctxmod.SYSTEM,
+                                num_predict=max_tokens):
+            sys.stdout.write(piece)
+            sys.stdout.flush()
+    except llm.OllamaError as e:
+        console.print(f"\n[red]{e}[/red]")
+        raise typer.Exit(1)
+    print()
+
+
+@app.command()
+def review(
+    path: str = typer.Option(".", "--path", "-p"),
+    base: str = typer.Option(None, "--base", "-b",
+                             help="Review against this ref (e.g. main, HEAD~1)"),
+    staged: bool = typer.Option(False, "--staged", help="Review staged changes only"),
+    model: str = typer.Option(llm.DEFAULT_MODEL, "--model", "-m"),
+    symbols: int = typer.Option(4, "--symbols", "-n", help="Max changed symbols to review"),
+    max_tokens: int = typer.Option(400, "--max-tokens", "-t"),
+    show_context: bool = typer.Option(False, "--show-context"),
+    no_llm: bool = typer.Option(False, "--no-llm", help="Show the blast radius, skip the model"),
+):
+    """Review the current change together with what the graph says it reaches."""
+    root, conn = _open(path)
+
+    if not reviewmod.is_repo(root):
+        console.print(f"[red]{root} is not a git repository.[/red]")
+        raise typer.Exit(1)
+
+    try:
+        with console.status("reading diff and walking the graph..."):
+            diff, changed, summary = reviewmod.collect(root, conn, base, staged, symbols)
+    except reviewmod.GitError as e:
+        console.print(f"[red]git: {e}[/red]")
+        raise typer.Exit(1)
+
+    if not diff.strip():
+        where = "staged" if staged else (f"vs {base}" if base else "working tree")
+        console.print(f"[yellow]No changes to review ({where}).[/yellow]")
+        raise typer.Exit(0)
+
+    console.print(
+        f"[bold]{summary['files']}[/bold] file(s) changed  "
+        f"[green]+{summary['added']}[/green] [red]-{summary['removed']}[/red]  |  "
+        f"[bold]{summary['symbols']}[/bold] symbol(s) touched"
+    )
+
+    if changed:
+        t = Table("symbol", "blast", "callers", "tests", title="what the change reaches")
+        for cs in changed:
+            t.add_row(
+                cs.row["qname"],
+                str(cs.blast),
+                str(len(cs.callers)),
+                str(len(cs.tests)) if cs.tests else "[red]none[/red]",
+            )
+        console.print(t)
+
+    if summary["unindexed"]:
+        console.print(
+            "[yellow]not in the index[/yellow] (nothing known about what they reach): "
+            + ", ".join(summary["unindexed"][:6])
+        )
+
+    prompt = reviewmod.build_prompt(root, diff, changed, summary)
+    if show_context:
+        console.print(Panel(prompt[:6000], title="review context"))
+    if no_llm:
+        return
+
+    if not llm.available():
+        console.print("[red]Ollama is not running.[/red] Start it with: ollama serve")
+        raise typer.Exit(1)
+
+    console.print()
+    try:
+        for piece in llm.stream(prompt, model=model, system=reviewmod.SYSTEM,
                                 num_predict=max_tokens):
             sys.stdout.write(piece)
             sys.stdout.flush()
