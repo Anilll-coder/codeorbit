@@ -10,6 +10,11 @@ dependencies = [
     "typer>=0.15",
     "rich>=13.0",
     "requests>=2.31",
+    # Required by `codeorbit mcp` and `codeorbit agent`. Omitting it did not
+    # break the dev checkout, where it had been pip-installed by hand - it broke
+    # every real install, where the server died on import and the agent could
+    # only report "not connected".
+    "mcp>=1.0",
 ]
 
 [project.optional-dependencies]
