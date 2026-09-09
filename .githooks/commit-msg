@@ -1,0 +1,45 @@
+#!/usr/bin/env sh
+#
+# Strip AI co-author trailers from every commit message.
+#
+# This repository records one author. Tooling that writes a
+# "Co-Authored-By: Claude ..." trailer will keep adding it, so rather than
+# relying on anyone remembering to remove it, git removes it here - on every
+# commit, from every tool, including ones that commit non-interactively.
+#
+# Enabled for this clone with:
+#   git config core.hooksPath .githooks
+# which is already set. A fresh clone must run that line once.
+
+msg_file="$1"
+[ -f "$msg_file" ] || exit 0
+
+# Drop the trailer lines, then collapse any blank lines they left at the end.
+#
+# Each pattern is anchored to the START of a line, and the generated-by pattern
+# tolerates a leading emoji by allowing any run of non-letters first. Both
+# details are load-bearing, and each was got wrong once:
+#
+#   - anchoring on the emoji itself failed on a real commit while passing an
+#     isolated test, because its bytes do not survive every path a message
+#     takes on Windows;
+#   - dropping the anchor entirely then deleted a legitimate body line that
+#     merely quoted the phrase while explaining this hook.
+#
+# A trailer starts its line. Prose mentioning one does not.
+# LC_ALL=C is required, not cosmetic. In a UTF-8 locale GNU sed treats the
+# robot emoji's bytes as an invalid multibyte sequence and the pattern silently
+# fails to match - which is why this line survived a real commit while passing
+# an isolated test run under a different locale. Byte mode has no such problem.
+LC_ALL=C sed -i \
+       -e '/^[[:space:]]*[Cc]o-[Aa]uthored-[Bb]y:.*[Cc]laude/d' \
+       -e '/^[[:space:]]*[Cc]o-[Aa]uthored-[Bb]y:.*anthropic\.com/d' \
+       -e '/^[^A-Za-z]*Generated with \[Claude Code\]/d' "$msg_file"
+
+# Trim trailing blank lines left behind by the deletions.
+awk 'BEGIN{blank=0}
+     /^[[:space:]]*$/ {blank++; next}
+     {while (blank>0) {print ""; blank--} print}
+    ' "$msg_file" > "$msg_file.tmp" && mv "$msg_file.tmp" "$msg_file"
+
+exit 0
