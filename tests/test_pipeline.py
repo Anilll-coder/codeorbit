@@ -297,8 +297,57 @@ def test_reindex_drops_a_deleted_file(project: Path):
     conn.close()
 
 
+def test_ranked_search_survives_incremental_reindex(project: Path):
+    """FTS5 BM25 ranking is where external-content drift actually shows up.
+
+    Hand-maintaining nodes_fts (an INSERT per node plus a delete trigger) drifts
+    out of sync with the %_docsize shadow table BM25 reads. The failure is
+    deceptive: plain MATCH keeps working, integrity_check still reports "ok",
+    and only `ORDER BY rank` starts raising "database disk image is malformed".
+    Found when the MCP server hit it in real use.
+    """
+    index_project(project)
+    resolve_project(project)
+
+    # Churn the file the way a normal edit-and-reindex loop would.
+    for i in range(3):
+        write(project, "app/service.py", f"""
+            def make_user(email):
+                return {i}
+
+
+            def extra_{i}():
+                return {i}
+            """)
+        index_project(project)
+        resolve_project(project)
+
+    conn = db.connect(project)
+    try:
+        # Two distinct failure modes have to be caught here, and asserting only
+        # "did not raise" catches neither properly:
+        #   - drift makes ORDER BY rank raise "malformed"
+        #   - never rebuilding leaves the index EMPTY, which raises nothing and
+        #     silently returns no rows
+        # So require that ranked search actually finds something.
+        rows = conn.execute(
+            "SELECT rowid FROM nodes_fts WHERE nodes_fts MATCH 'make_user' "
+            "ORDER BY rank LIMIT 5"
+        ).fetchall()
+        assert rows, "the FTS index is empty - it was never rebuilt"
+
+        indexed = conn.execute("SELECT count(*) FROM nodes_fts").fetchone()[0]
+        total = conn.execute(
+            "SELECT count(*) FROM nodes WHERE kind != 'module'").fetchone()[0]
+        assert indexed >= total, "every symbol should be searchable"
+
+        assert query.search(conn, "make_user"), "ranked search must still work"
+    finally:
+        conn.close()
+
+
 def test_deleted_symbols_leave_the_search_index(project: Path):
-    """FTS is external-content, so a cascade alone would leave it stale."""
+    """A deleted file's symbols must not stay searchable."""
     index_project(project)
     conn = db.connect(project)
     before = conn.execute(
@@ -315,7 +364,7 @@ def test_deleted_symbols_leave_the_search_index(project: Path):
         "SELECT count(*) FROM nodes_fts WHERE nodes_fts MATCH 'unused_helper'"
     ).fetchone()[0]
     conn.close()
-    assert after == 0, "the FTS delete trigger should have removed it"
+    assert after == 0, "rebuilding the FTS index should have dropped it"
 
 
 # ------------------------------------------------------------------- audit

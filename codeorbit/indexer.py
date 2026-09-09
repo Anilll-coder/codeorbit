@@ -120,6 +120,7 @@ def index_project(root: Path, progress=None, full: bool = False) -> dict:
         if progress:
             progress(i, len(on_disk), rel)
 
+    db.rebuild_fts(conn)
     conn.commit()
     st = db.stats(conn)
     conn.close()

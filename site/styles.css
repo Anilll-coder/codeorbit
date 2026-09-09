@@ -1,5 +1,10 @@
 /* CodeOrbit landing page
-   Dark-locked by design: this is a devtool brand identity, not an omission. */
+   Dual-theme: light and dark, toggled via [data-theme] on <html> (see the
+   blocking init script in index.html) and falling back to the OS preference.
+   Code/terminal surfaces (the hero graph, the terminal demo, command
+   snippets) stay on the fixed --fx-* dark chrome palette in both modes,
+   like a real terminal usually does regardless of OS theme - everything
+   else (nav, copy, sections, footer) fully retheme. */
 
 @font-face {
   font-family: 'Space Grotesk';
@@ -16,6 +21,8 @@
   --bg-raised: #101216;
   --bg-raised-2: #15171c;
   --bg-well: #060708;
+  --nav-bg: rgba(10, 11, 13, 0.72);
+  --hover-tint: rgba(255, 255, 255, 0.03);
 
   --border: rgba(237, 236, 230, 0.09);
   --border-strong: rgba(237, 236, 230, 0.16);
@@ -31,8 +38,27 @@
   --accent-soft: rgba(226, 161, 63, 0.12);
   --accent-soft-2: rgba(226, 161, 63, 0.22);
   --accent-line: rgba(226, 161, 63, 0.45);
+  --accent-on: #17130a;
 
   --ok: #7fb992;
+
+  --shadow-card: 0 24px 60px -20px rgba(0, 0, 0, 0.6);
+  --shadow-pop: 0 30px 80px -24px rgba(0, 0, 0, 0.7);
+
+  /* fixed dark chrome, intentionally constant across both themes */
+  --fx-bg: #0a0b0d;
+  --fx-bg-raised: #101216;
+  --fx-bg-raised-2: #15171c;
+  --fx-bg-well: #060708;
+  --fx-border: rgba(237, 236, 230, 0.09);
+  --fx-border-strong: rgba(237, 236, 230, 0.16);
+  --fx-text-primary: #edece6;
+  --fx-text-secondary: #9b9ca4;
+  --fx-text-tertiary: #63656d;
+  --fx-accent: #e2a13f;
+  --fx-accent-strong: #f2b658;
+  --fx-ok: #7fb992;
+  --fx-shadow-pop: 0 30px 80px -24px rgba(0, 0, 0, 0.7);
 
   --mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
   --sans: 'Space Grotesk', 'Inter var', ui-sans-serif, system-ui, -apple-system, sans-serif;
@@ -41,13 +67,80 @@
   --radius-input: 8px;
   --radius-pill: 999px;
 
-  --shadow-card: 0 24px 60px -20px rgba(0, 0, 0, 0.6);
-  --shadow-pop: 0 30px 80px -24px rgba(0, 0, 0, 0.7);
-
   --ease: cubic-bezier(0.16, 1, 0.3, 1);
   --nav-h: 68px;
 
   --container: 1240px;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme='dark']) {
+    color-scheme: light;
+
+    --bg: #f7f6f2;
+    --bg-raised: #ffffff;
+    --bg-raised-2: #efeee7;
+    --bg-well: #efeee6;
+    --nav-bg: rgba(247, 246, 242, 0.78);
+    --hover-tint: rgba(23, 21, 14, 0.035);
+
+    --border: rgba(23, 21, 14, 0.1);
+    --border-strong: rgba(23, 21, 14, 0.18);
+    --border-accent: rgba(138, 90, 18, 0.35);
+
+    --text-primary: #18160f;
+    --text-secondary: #5b594f;
+    --text-tertiary: #8d8b7f;
+
+    --accent: #8a5a12;
+    --accent-strong: #a56e17;
+    --accent-dim: #6b460d;
+    --accent-soft: rgba(138, 90, 18, 0.1);
+    --accent-soft-2: rgba(138, 90, 18, 0.18);
+    --accent-line: rgba(138, 90, 18, 0.45);
+    --accent-on: #fbf3e4;
+
+    --ok: #2f8a54;
+
+    --shadow-card: 0 24px 60px -20px rgba(23, 21, 14, 0.14);
+    --shadow-pop: 0 30px 80px -24px rgba(23, 21, 14, 0.18);
+  }
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+
+  --bg: #f7f6f2;
+  --bg-raised: #ffffff;
+  --bg-raised-2: #efeee7;
+  --bg-well: #efeee6;
+  --nav-bg: rgba(247, 246, 242, 0.78);
+  --hover-tint: rgba(23, 21, 14, 0.035);
+
+  --border: rgba(23, 21, 14, 0.1);
+  --border-strong: rgba(23, 21, 14, 0.18);
+  --border-accent: rgba(138, 90, 18, 0.35);
+
+  --text-primary: #18160f;
+  --text-secondary: #5b594f;
+  --text-tertiary: #8d8b7f;
+
+  --accent: #8a5a12;
+  --accent-strong: #a56e17;
+  --accent-dim: #6b460d;
+  --accent-soft: rgba(138, 90, 18, 0.1);
+  --accent-soft-2: rgba(138, 90, 18, 0.18);
+  --accent-line: rgba(138, 90, 18, 0.45);
+  --accent-on: #fbf3e4;
+
+  --ok: #2f8a54;
+
+  --shadow-card: 0 24px 60px -20px rgba(23, 21, 14, 0.14);
+  --shadow-pop: 0 30px 80px -24px rgba(23, 21, 14, 0.18);
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
 }
 
 * {
@@ -76,6 +169,33 @@ body {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
   overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) var(--bg);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  body {
+    transition: background-color 0.25s var(--ease), color 0.25s var(--ease);
+  }
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--bg-raised-2);
+  border: 2px solid var(--bg);
+  border-radius: var(--radius-pill);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-strong);
 }
 
 img,
@@ -225,7 +345,7 @@ p {
   height: var(--nav-h);
   display: flex;
   align-items: center;
-  background: rgba(10, 11, 13, 0.72);
+  background: var(--nav-bg);
   backdrop-filter: blur(14px) saturate(140%);
   -webkit-backdrop-filter: blur(14px) saturate(140%);
   border-bottom: 1px solid transparent;
@@ -297,6 +417,38 @@ p {
 
 .nav-gh:hover {
   color: var(--text-primary);
+}
+
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--text-secondary);
+  transition: color 0.2s var(--ease), border-color 0.2s var(--ease), background 0.2s var(--ease);
+}
+
+.theme-toggle:hover {
+  color: var(--text-primary);
+  border-color: var(--text-secondary);
+  background: var(--hover-tint);
+}
+
+.theme-toggle .icon-moon {
+  display: none;
+}
+
+:root[data-theme='light'] .theme-toggle .icon-sun {
+  display: none;
+}
+
+:root[data-theme='light'] .theme-toggle .icon-moon {
+  display: block;
 }
 
 .nav-mobile-toggle {
@@ -371,7 +523,7 @@ p {
 
 .btn-primary {
   background: var(--accent);
-  color: #17130a;
+  color: var(--accent-on);
 }
 
 .btn-primary:hover {
@@ -386,7 +538,7 @@ p {
 
 .btn-ghost:hover {
   border-color: var(--text-secondary);
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--hover-tint);
 }
 
 .btn-sm {
@@ -448,13 +600,16 @@ p {
   flex-wrap: wrap;
 }
 
+/* This "screen" renders the live graph, so it stays dark chrome in both
+   themes - like a terminal or an embedded product screenshot usually does,
+   regardless of the surrounding page. app.js's canvas colors assume this. */
 .hero-stage {
   position: relative;
   aspect-ratio: 1 / 1;
   max-height: 560px;
   border-radius: 20px;
-  border: 1px solid var(--border);
-  background: radial-gradient(120% 120% at 30% 20%, rgba(226, 161, 63, 0.07), transparent 60%), var(--bg-well);
+  border: 1px solid var(--fx-border);
+  background: radial-gradient(120% 120% at 30% 20%, rgba(226, 161, 63, 0.07), transparent 60%), var(--fx-bg-well);
   overflow: hidden;
 }
 
@@ -471,7 +626,7 @@ p {
   bottom: 18px;
   font-family: var(--mono);
   font-size: 11.5px;
-  color: var(--text-tertiary);
+  color: var(--fx-text-tertiary);
   letter-spacing: 0.02em;
   pointer-events: none;
 }
@@ -482,9 +637,9 @@ p {
   right: 18px;
   font-family: var(--mono);
   font-size: 12px;
-  color: var(--text-secondary);
+  color: var(--fx-text-secondary);
   background: rgba(10, 11, 13, 0.7);
-  border: 1px solid var(--border);
+  border: 1px solid var(--fx-border);
   padding: 7px 11px;
   border-radius: var(--radius-input);
   max-width: 220px;
@@ -499,7 +654,7 @@ p {
 }
 
 .hero-node-label .k {
-  color: var(--accent);
+  color: var(--fx-accent);
 }
 
 @media (max-width: 980px) {
@@ -551,13 +706,14 @@ p {
   color: var(--text-primary);
 }
 
+/* code pill: fixed dark chrome, same reasoning as .hero-stage above */
 .install-code {
   flex: 1 1 380px;
   display: flex;
   align-items: center;
   gap: 12px;
-  background: var(--bg-raised);
-  border: 1px solid var(--border);
+  background: var(--fx-bg-raised);
+  border: 1px solid var(--fx-border);
   border-radius: var(--radius-input);
   padding: 12px 14px;
   min-width: 0;
@@ -566,7 +722,7 @@ p {
 .install-code code {
   font-family: var(--mono);
   font-size: 13.5px;
-  color: var(--text-primary);
+  color: var(--fx-text-primary);
   overflow-x: auto;
   white-space: nowrap;
   flex: 1;
@@ -578,14 +734,14 @@ p {
 }
 
 .install-code .prompt {
-  color: var(--accent);
+  color: var(--fx-accent);
   user-select: none;
 }
 
 .copy-btn {
-  border: 1px solid var(--border-strong);
-  background: var(--bg-raised-2);
-  color: var(--text-secondary);
+  border: 1px solid var(--fx-border-strong);
+  background: var(--fx-bg-raised-2);
+  color: var(--fx-text-secondary);
   border-radius: var(--radius-input);
   width: 34px;
   height: 34px;
@@ -597,13 +753,13 @@ p {
 }
 
 .copy-btn:hover {
-  color: var(--text-primary);
-  border-color: var(--text-secondary);
+  color: var(--fx-text-primary);
+  border-color: var(--fx-text-secondary);
 }
 
 .copy-btn.is-copied {
-  color: var(--ok);
-  border-color: var(--ok);
+  color: var(--fx-ok);
+  border-color: var(--fx-ok);
 }
 
 .install-meta {
@@ -768,11 +924,12 @@ p {
   border-bottom: 1px solid var(--border);
 }
 
+/* fixed dark chrome throughout, same reasoning as .hero-stage above */
 .terminal-window {
   border-radius: 12px;
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--fx-border-strong);
   background: #08090a;
-  box-shadow: var(--shadow-pop);
+  box-shadow: var(--fx-shadow-pop);
   overflow: hidden;
   max-width: 860px;
   margin: 0 auto;
@@ -783,8 +940,8 @@ p {
   align-items: center;
   gap: 8px;
   padding: 12px 16px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-raised);
+  border-bottom: 1px solid var(--fx-border);
+  background: var(--fx-bg-raised);
 }
 
 .tdot {
@@ -798,7 +955,7 @@ p {
   margin-left: 8px;
   font-family: var(--mono);
   font-size: 12px;
-  color: var(--text-tertiary);
+  color: var(--fx-text-tertiary);
 }
 
 .terminal-body {
@@ -815,30 +972,30 @@ p {
 }
 
 .terminal-body .prompt {
-  color: var(--accent);
+  color: var(--fx-accent);
 }
 
 .terminal-body .cmd {
-  color: var(--text-primary);
+  color: var(--fx-text-primary);
 }
 
 .terminal-body .out {
-  color: var(--text-secondary);
+  color: var(--fx-text-secondary);
 }
 
 .terminal-body .accent-out {
-  color: var(--accent-strong);
+  color: var(--fx-accent-strong);
 }
 
 .terminal-body .dim {
-  color: var(--text-tertiary);
+  color: var(--fx-text-tertiary);
 }
 
 .caret {
   display: inline-block;
   width: 7px;
   height: 15px;
-  background: var(--accent);
+  background: var(--fx-accent);
   vertical-align: -2px;
   animation: blink 1s step-end infinite;
 }
@@ -999,10 +1156,14 @@ p {
   content: '';
   position: absolute;
   inset: 0;
-  background-image: radial-gradient(rgba(237, 236, 230, 0.09) 1px, transparent 1px);
+  background-image: radial-gradient(var(--border-strong) 1px, transparent 1px);
   background-size: 22px 22px;
   mask-image: radial-gradient(circle at 90% 10%, black, transparent 65%);
   pointer-events: none;
+}
+
+.bento-cell.is-wide {
+  grid-column: span 3;
 }
 
 .bento-cell.is-graph {
@@ -1041,13 +1202,14 @@ p {
   margin-bottom: 18px;
 }
 
+/* command snippet: fixed dark chrome, same reasoning as .hero-stage above */
 .bento-code {
   margin-top: auto;
   font-family: var(--mono);
   font-size: 12.5px;
-  color: var(--accent-strong);
-  background: rgba(0, 0, 0, 0.28);
-  border: 1px solid var(--border);
+  color: var(--fx-accent-strong);
+  background: var(--fx-bg-well);
+  border: 1px solid var(--fx-border);
   border-radius: var(--radius-input);
   padding: 10px 12px;
   overflow-x: auto;
@@ -1059,7 +1221,8 @@ p {
   .bento {
     grid-template-columns: repeat(2, 1fr);
   }
-  .bento-cell.is-hero {
+  .bento-cell.is-hero,
+  .bento-cell.is-wide {
     grid-column: span 2;
   }
 }
@@ -1068,7 +1231,8 @@ p {
   .bento {
     grid-template-columns: 1fr;
   }
-  .bento-cell.is-hero {
+  .bento-cell.is-hero,
+  .bento-cell.is-wide {
     grid-column: span 1;
   }
 }

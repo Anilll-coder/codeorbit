@@ -82,13 +82,4 @@ CREATE TABLE IF NOT EXISTS embeddings (
   model   TEXT NOT NULL
 );
 
--- nodes_fts is an external-content FTS5 table, so it does NOT follow the
--- ON DELETE CASCADE that removes a file's nodes. Without this trigger a
--- deleted or re-parsed file leaves its old symbols searchable forever, and
--- `search` returns definitions that no longer exist. Insert is done explicitly
--- in db.insert_node, so only the delete side needs a trigger - adding an
--- insert trigger as well would double every row.
-CREATE TRIGGER IF NOT EXISTS nodes_fts_delete AFTER DELETE ON nodes BEGIN
-  INSERT INTO nodes_fts(nodes_fts, rowid, name, qname, docstring)
-  VALUES('delete', old.id, old.name, old.qname, coalesce(old.docstring, ''));
-END;
+

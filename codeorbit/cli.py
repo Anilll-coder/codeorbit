@@ -670,6 +670,154 @@ def why(
 
 
 @app.command()
+def mcp(
+    path: str = typer.Option(None, "--path", "-p", help=PATH_HELP),
+):
+    """Serve the graph over MCP so Claude Code, Cursor and other agents can use it."""
+    from . import mcp_server
+
+    root = Path(_resolve(path)).resolve()
+
+    # stdout is the protocol transport: anything printed there corrupts the
+    # stream and the client drops the connection. Everything user-facing in
+    # this command therefore goes to stderr.
+    if not db.db_path(root).exists():
+        print(f"[codeorbit-mcp] warning: {root} is not indexed yet. "
+              f"Tools will return guidance until `codeorbit index` is run.",
+              file=sys.stderr, flush=True)
+
+    try:
+        mcp_server.serve(root)
+    except KeyboardInterrupt:
+        pass
+
+
+@app.command()
+def agent(
+    question: str,
+    path: str = typer.Option(None, "--path", "-p", help=PATH_HELP),
+    model: str = typer.Option(None, "--model", "-m",
+                              help="A tool-calling Ollama model"),
+    rounds: int = typer.Option(6, "--rounds", "-r", help="Max tool-calling rounds"),
+    max_tokens: int = typer.Option(400, "--max-tokens", "-t"),
+    check: bool = typer.Option(False, "--check",
+                               help="Only report which local models can call tools"),
+):
+    """Let a local Ollama model drive the MCP tools to answer a question."""
+    import asyncio
+
+    from . import agent as agentmod
+
+    root = Path(_resolve(path)).resolve()
+
+    if not llm.available():
+        console.print("[red]Ollama is not running.[/red] Start it with: ollama serve")
+        raise typer.Exit(1)
+
+    if check:
+        console.print("Probing local models for tool-calling support...\n")
+        t = Table("model", "calls tools?")
+        for m in agentmod.installed_models():
+            if "embed" in m:
+                continue
+            ok, _ = agentmod.supports_tools(m)
+            t.add_row(m, "[green]yes[/green]" if ok else "[red]no[/red]")
+        console.print(t)
+        console.print("\n[dim]Tool calling comes from the model's chat template, "
+                      "not from Ollama - a model without one invents results "
+                      "instead of calling.[/dim]")
+        return
+
+    if not model:
+        # Pick an installed model that can actually call tools.
+        for candidate, _ in agentmod.TOOL_CAPABLE_HINTS:
+            base = candidate.split(":")[0]
+            for have in agentmod.installed_models():
+                if have.split(":")[0] == base:
+                    model = have
+                    break
+            if model:
+                break
+    if not model:
+        console.print("[red]No tool-calling model found.[/red]\n")
+        console.print(agentmod.suggest_model())
+        raise typer.Exit(1)
+
+    with console.status(f"checking {model} can call tools..."):
+        ok, reply = agentmod.supports_tools(model)
+    if not ok:
+        console.print(
+            f"[red]{model} cannot call tools.[/red] Its chat template has no "
+            "tool support, so instead of calling anything it invents a "
+            "plausible answer:\n"
+        )
+        if reply:
+            console.print(f"  [dim]{reply[:180]}[/dim]\n")
+        console.print("Use one of these instead:\n")
+        console.print(agentmod.suggest_model())
+        console.print(f"\n[dim]Or ask without an agent loop: "
+                      f'codeorbit ask "{question}"[/dim]')
+        raise typer.Exit(1)
+
+    console.print(f"[dim]{model} driving the MCP tools (max {rounds} rounds)[/dim]\n")
+
+    def show(step):
+        args = ", ".join(f"{k}={v!r}" for k, v in step.args.items() if v is not None)
+        console.print(f"  [cyan]{step.tool}[/cyan]({args[:90]}) "
+                      f"[dim]-> {len(step.result):,} chars[/dim]")
+
+    try:
+        result = asyncio.run(agentmod.run(
+            root, question, model, max_rounds=rounds,
+            num_predict=max_tokens, on_step=show))
+    except OSError as e:
+        console.print(f"[red]Could not run the agent: {e}[/red]")
+        raise typer.Exit(1)
+
+    console.print()
+    if result.answer:
+        console.print(Panel(result.answer, title=f"{model} - {result.rounds} round(s), "
+                                                 f"{len(result.steps)} tool call(s)"))
+    else:
+        console.print(f"[yellow]No answer.[/yellow] {result.stopped}")
+        if result.steps:
+            console.print("[dim]It did call: "
+                          + ", ".join(s.tool for s in result.steps) + "[/dim]")
+
+
+@app.command("install-mcp")
+def install_mcp(
+    path: str = typer.Option(None, "--path", "-p", help=PATH_HELP),
+    agent: str = typer.Option("claude", "--agent", "-a",
+                              help="claude, cursor, or print"),
+):
+    """Print the MCP config to register CodeOrbit with an AI agent."""
+    import json
+    import shutil
+
+    root = Path(_resolve(path)).resolve()
+    exe = shutil.which("codeorbit") or str(Path(sys.executable).with_name("codeorbit"))
+
+    entry = {"command": exe, "args": ["mcp", "--path", str(root)]}
+
+    if agent == "claude":
+        console.print("[bold]Claude Code[/bold] - run this once:\n")
+        console.print(f"  claude mcp add codeorbit -- {exe} mcp --path {root}\n")
+        console.print("[dim]or add to .mcp.json in your project:[/dim]")
+        blob = {"mcpServers": {"codeorbit": entry}}
+    elif agent == "cursor":
+        console.print("[bold]Cursor[/bold] - add to .cursor/mcp.json "
+                      "(or ~/.cursor/mcp.json for every project):\n")
+        blob = {"mcpServers": {"codeorbit": entry}}
+    else:
+        blob = {"mcpServers": {"codeorbit": entry}}
+
+    console.print(Syntax(json.dumps(blob, indent=2), "json", theme="ansi_dark"))
+    console.print("\n[dim]The project must be indexed first: "
+                  f"codeorbit index {root}[/dim]")
+
+
+@app.command()
 def uninstall(
     path: str = typer.Option(None, "--path", "-p", help=PATH_HELP),
     with_index: bool = typer.Option(False, "--index",

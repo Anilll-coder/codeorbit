@@ -4,6 +4,37 @@
   const reduceMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
   const reducedMotion = () => reduceMotionQuery.matches;
 
+  /* ------------------------------------------------------------ theme */
+
+  const THEME_KEY = 'codeorbit-theme';
+  const root = document.documentElement;
+  const themeToggle = document.getElementById('theme-toggle');
+
+  function currentTheme() {
+    return root.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+  }
+
+  function applyTheme(theme) {
+    root.setAttribute('data-theme', theme);
+    try {
+      localStorage.setItem(THEME_KEY, theme);
+    } catch (err) {
+      /* private browsing or storage disabled; theme still applies for this load */
+    }
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', theme === 'light' ? '#f7f6f2' : '#0a0b0d');
+    if (themeToggle) {
+      themeToggle.setAttribute('aria-label', theme === 'light' ? 'Switch to dark theme' : 'Switch to light theme');
+    }
+  }
+
+  if (themeToggle) {
+    applyTheme(currentTheme());
+    themeToggle.addEventListener('click', () => {
+      applyTheme(currentTheme() === 'light' ? 'dark' : 'light');
+    });
+  }
+
   /* ------------------------------------------------------------ nav */
 
   const nav = document.getElementById('nav');
@@ -110,14 +141,19 @@
     { type: 'cmd', text: 'codeorbit index .' },
     { type: 'out', cls: 'out', text: '1,193 symbols · 5,381 edges · 61% of call sites resolved' },
     { type: 'gap' },
-    { type: 'cmd', text: 'codeorbit ask "How does Console.print render output?"' },
+    { type: 'cmd', text: 'codeorbit install-mcp --agent claude' },
+    { type: 'out', cls: 'dim', text: 'claude mcp add codeorbit -- codeorbit mcp --path .' },
+    { type: 'gap' },
+    { type: 'cmd', text: 'claude' },
+    { type: 'out', cls: 'out', text: '> How does Console.print render output?' },
+    { type: 'out', cls: 'dim', text: 'calling codeorbit_explore("Console.print render output")' },
+    { type: 'out', cls: 'dim', text: '3 symbols retrieved, with real source and call edges' },
     {
       type: 'out',
       cls: 'accent-out',
       text:
         'Console.print resolves each renderable through __rich_console__, then Console._collect_renderables walks the results and Console._render_buffer writes segments to the terminal.',
     },
-    { type: 'out', cls: 'dim', text: 'Grounded in 4 symbols, 6 call edges. 1 edge marked [uncertain].' },
   ];
 
   function escapeHtml(s) {

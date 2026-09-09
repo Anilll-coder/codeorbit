@@ -53,12 +53,14 @@ def insert_node(conn, *, name, qname, kind, file_id, start_line, end_line,
            VALUES(?,?,?,?,?,?,?,?)""",
         (name, qname, kind, file_id, start_line, end_line, signature, docstring),
     )
-    nid = int(cur.lastrowid)
-    conn.execute(
-        "INSERT INTO nodes_fts(rowid, name, qname, docstring) VALUES(?,?,?,?)",
-        (nid, name, qname, docstring or ""),
-    )
-    return nid
+    # NOTE: nothing is written to nodes_fts here. It is an external-content
+    # FTS5 table, and hand-maintaining it (an INSERT here plus a delete trigger)
+    # drifts out of sync with the %_docsize shadow table that BM25 needs. The
+    # symptom is nasty: plain MATCH keeps working while `ORDER BY rank` starts
+    # failing with "database disk image is malformed" on a database whose
+    # integrity_check says ok. rebuild_fts() regenerates it from the content
+    # table instead, once, after indexing.
+    return int(cur.lastrowid)
 
 
 def insert_edge(conn, src: int, dst: int, kind: str, line=None, resolution="exact") -> None:
@@ -67,6 +69,15 @@ def insert_edge(conn, src: int, dst: int, kind: str, line=None, resolution="exac
            VALUES(?,?,?,?,?)""",
         (src, dst, kind, line, resolution),
     )
+
+
+def rebuild_fts(conn) -> None:
+    """Regenerate the full-text index from the nodes table.
+
+    Cheap (linear in symbol count) and total: it cannot be left inconsistent
+    with the content table the way incremental maintenance can.
+    """
+    conn.execute("INSERT INTO nodes_fts(nodes_fts) VALUES('rebuild')")
 
 
 def stats(conn) -> dict:

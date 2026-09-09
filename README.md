@@ -4,7 +4,11 @@ Local-first code intelligence. It parses a repository with tree-sitter, builds a
 structural knowledge graph of its symbols and their relationships in SQLite, and
 answers questions about the code using a **local** LLM through Ollama.
 
-Nothing leaves the machine. No API keys, no cloud, no telemetry.
+CodeOrbit itself never calls out: indexing runs on disk, the graph is served over
+local stdio, and there are no API keys and no telemetry. Answer fully offline
+with a model in Ollama, or hand the same graph to Claude Code, Cursor, or any
+agent you already use — in which case what you send travels to whatever that
+agent talks to.
 
 ## The idea
 
@@ -97,6 +101,10 @@ codeorbit viz                          # interactive graph as a standalone HTML 
 codeorbit viz --focus Segment          # ...centred on one symbol
 codeorbit viz --format mermaid         # a diagram for a report
 
+codeorbit mcp                          # serve the graph over MCP to any agent
+codeorbit install-mcp                  # print the config to register it
+codeorbit agent "is load safe to change?"   # a local model drives those tools
+
 codeorbit uninstall --dry-run          # see exactly what removal would touch
 codeorbit uninstall                    # remove CodeOrbit (indexes are kept)
 ```
@@ -128,6 +136,8 @@ files
   -> fixer.py        propose a fix for one symbol, splice it, never trust it
   -> verify.py       the gates a fix must survive before it may touch a file
   -> viz.py          self-contained interactive HTML, or Mermaid
+  -> mcp_server.py   the graph as MCP tools, for Claude Code / Cursor / etc
+  -> agent.py        a local Ollama model driving those same tools
   -> llm.py          Ollama, streaming, local only
   -> cli.py          the commands above
 ```
@@ -304,6 +314,73 @@ methods with call edges, optionally centred on one symbol via `--focus`: *what
 does this touch?* Click any node to isolate it and list its neighbours;
 `--format mermaid` emits a diagram to paste into a report instead.
 
+## Using it from Claude Code, Cursor, or any MCP agent
+
+```bash
+codeorbit install-mcp          # prints the config for your agent
+```
+
+For Claude Code that is one line:
+
+```bash
+claude mcp add codeorbit -- codeorbit mcp --path /your/project
+```
+
+Seven tools are exposed: `explore` (the primary one), `search`, `node`,
+`impact`, `path`, `audit`, `overview`.
+
+**This is the one path where your code can leave the machine.** CodeOrbit still
+makes no outbound call of its own — it speaks stdio to a client on the same
+machine — but a tool result is source code, and a cloud-backed client sends what
+it receives to its own provider. That is the trade for a stronger model. For a
+private codebase, `codeorbit ask` and `codeorbit agent` keep everything local.
+
+**These return context, not answers, and that is the point.** `codeorbit ask`
+runs a local 3.8B model because a developer at a terminal has none to hand. An
+agent connecting over MCP already has a far stronger one - it does not want
+phi4-mini's answer, it wants the surgical context that lets its own model answer
+well. So `explore` hands back the subgraph: the symbols, their real source, who
+calls them, what they call.
+
+Three rules shape the responses, and they are about how agents actually behave:
+
+1. **Be sufficient.** An agent falls back to reading files the moment a tool's
+   answer is not enough, and every fallback costs a turn. A symbol comes back
+   with its full body *and* its call neighbourhood in one response.
+2. **Never send the agent to read a file.** If more is needed, point at another
+   tool.
+3. **An expected condition is not an error.** "Not indexed" and "no such symbol"
+   return ordinary results carrying guidance, because a tool that raises errors
+   trains an agent to stop calling it - after which none of this gets used.
+
+Rule 3 was learned the hard way: a transient read error escaped as a protocol
+error and the agent received only `Error executing tool codeorbit_explore`.
+
+## Driving it with a local model
+
+No cloud agent needed - `codeorbit agent` lets an Ollama model call the same MCP
+tools, over the same protocol an external agent uses:
+
+```bash
+codeorbit agent --check                       # which local models can call tools
+codeorbit agent "what does resolve_project do and what calls it?"
+```
+
+**Tool calling is a property of the model's chat template, not of Ollama**, and a
+model without one does not fail loudly - it invents a plausible result and states
+it as fact. Measured on this machine:
+
+| model | calls tools | usable |
+|---|---|---|
+| `phi4-mini` | no | fabricates results instead |
+| `qwen2.5:0.5b` | yes | too weak - passed a symbol name as `project_path` |
+| `llama3.2:3b` | yes | **yes** - ~2 GB, correct answers |
+
+So capability is probed before the loop starts and an incapable model is refused
+rather than trusted. `ollama pull llama3.2:3b` is the smallest model that both
+calls tools and uses them correctly here. Expect a few minutes per question on
+CPU; the agent loop is several model round-trips, not one.
+
 ## Tests
 
 ```bash
@@ -311,7 +388,7 @@ pip install -e ".[dev]"
 pytest
 ```
 
-109 tests, no mocks: each builds a small project on disk, indexes it, and asserts
+137 tests, no mocks: each builds a small project on disk, indexes it, and asserts
 against the real graph. Mocking the parser would only test the mock, and the
 fixer's tests never call the model - what has to hold is that everything
 *around* the model is safe regardless of what it returns.
@@ -335,8 +412,9 @@ is now scoped to one language.
 ## Status
 
 Complete and working end to end: index → resolve → query → graph-grounded local
-answers, review of a change, ranked auditing, verified fix generation, and an
-interactive graph viewer.
+answers, review of a change, ranked auditing, verified fix generation, an
+interactive graph viewer, an MCP server for external agents, and a local
+Ollama-driven agent over those same tools.
 
 Languages are Python and JavaScript. The known limits are honest ones: static
 parsing cannot follow dynamic dispatch (decorator-registered and dict-dispatched
