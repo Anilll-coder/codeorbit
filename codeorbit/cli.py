@@ -920,7 +920,9 @@ def upgrade(
     with console.status("upgrading..."):
         outcome = upgrademod.run(source, pull=not no_pull)
 
-    if outcome.detail and outcome.ok:
+    # The pending path already reports its own detail below; printing it here
+    # too showed the same line twice.
+    if outcome.detail and outcome.ok and outcome.after != "pending":
         console.print(f"[dim]{outcome.detail}[/dim]")
 
     if not outcome.ok:

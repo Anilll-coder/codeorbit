@@ -131,23 +131,32 @@ def _spawn_detached_upgrade(source: str) -> Path | None:
     pid = os.getpid()
 
     if os.name == "nt":
+        # `*>` redirection writes UTF-16 in PowerShell 5.1, which makes the log
+        # unreadable to anything expecting text. Capture and write it explicitly.
         script = (
             f"$ErrorActionPreference='Continue'\n"
             f"try {{ Wait-Process -Id {pid} -Timeout 60 -ErrorAction SilentlyContinue }} catch {{}}\n"
             f"Start-Sleep -Milliseconds 800\n"
-            f"& '{py}' -m pip install --upgrade '{source}' *> '{log}'\n"
-            f"& '{py}' -c \"import importlib.metadata as m; "
-            f"print('now at ' + m.version('codeorbit'))\" *>> '{log}'\n"
+            f"$out = & '{py}' -m pip install --upgrade '{source}' 2>&1 | Out-String\n"
+            f"$ver = & '{py}' -c \"import importlib.metadata as m; "
+            f"print(m.version('codeorbit'))\" 2>&1 | Out-String\n"
+            f"[System.IO.File]::WriteAllText('{log}', "
+            f"$out + \"`nnow at \" + $ver.Trim() + \"`n\")\n"
         )
         fh = tempfile.NamedTemporaryFile("w", suffix=".ps1", delete=False,
                                          encoding="utf-8")
         fh.write(script)
         fh.close()
         try:
+            # CREATE_NO_WINDOW, not DETACHED_PROCESS. DETACHED_PROCESS gives the
+            # child no console at all, and PowerShell then fails to initialise
+            # and exits without running a line - the upgrade silently did
+            # nothing and left an empty log. CREATE_NO_WINDOW keeps it headless
+            # while still letting it start.
             subprocess.Popen(
                 ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass",
                  "-File", fh.name],
-                creationflags=0x00000008 | 0x00000200,
+                creationflags=0x08000000 | 0x00000200,   # CREATE_NO_WINDOW | NEW_GROUP
                 stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL)
             return log
