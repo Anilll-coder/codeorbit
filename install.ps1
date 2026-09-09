@@ -121,6 +121,7 @@ $tempSrc = $null
 if ($selfDir -and (Test-Path (Join-Path $selfDir 'pyproject.toml')) -and
     (Test-Path (Join-Path $selfDir 'codeorbit'))) {
     $src = $selfDir
+    $srcRecord = $selfDir
     Step 'Installing from this checkout'
     Note $src
 } else {
@@ -129,6 +130,10 @@ if ($selfDir -and (Test-Path (Join-Path $selfDir 'pyproject.toml')) -and
     }
     $tempSrc = Join-Path ([System.IO.Path]::GetTempPath()) ('codeorbit-' + [guid]::NewGuid().ToString('N').Substring(0, 8))
     $src = $tempSrc
+    # Record the REPO, not this temp clone: the clone is deleted on exit,
+    # and recording it left `codeorbit upgrade` pointing at a path that
+    # no longer exists.
+    $srcRecord = "git+$Repo@$Ref"
     Step 'Fetching source'
     Note "$Repo ($Ref)"
     # --quiet: git writes clone progress to stderr, which PowerShell surfaces as
@@ -166,7 +171,7 @@ try {
     # BOM, and a leading U+FEFF makes the recorded path fail to resolve, so
     # `codeorbit upgrade` could not find its own source.
     try { [System.IO.File]::WriteAllText(
-        (Join-Path $InstallDir '.codeorbit-source'), $src) } catch {}
+        (Join-Path $InstallDir '.codeorbit-source'), $srcRecord) } catch {}
 
     # ---------- launcher ----------------------------------------------------
     Step 'Putting codeorbit on your PATH'

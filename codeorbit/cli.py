@@ -977,6 +977,11 @@ def uninstall(
         console.print(f"  a PATH entry                [dim]{plan.path_entry}[/dim]")
     if plan.index:
         console.print(f"  this project's index        [dim]{plan.index}[/dim]")
+    if plan.temp_files:
+        console.print(f"  temporary files             "
+                      f"[dim]{len(plan.temp_files)} in TEMP[/dim]")
+    for cfg in plan.mcp_configs:
+        console.print(f"  its entry in an agent config[dim] {cfg}[/dim]")
 
     console.print("\n[bold]This will NOT touch:[/bold]")
     console.print("  any of your source code")

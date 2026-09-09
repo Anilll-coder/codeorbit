@@ -77,11 +77,16 @@ else
 fi
 if [ -f "$SELF_DIR/pyproject.toml" ] && [ -d "$SELF_DIR/codeorbit" ]; then
   SRC="$SELF_DIR"
+  SRC_RECORD="$SELF_DIR"
   step "Installing from this checkout"
   say "  $SRC"
 else
   command -v git >/dev/null 2>&1 || die "git is required to fetch the source."
   SRC=$(mktemp -d 2>/dev/null || mktemp -d -t codeorbit)
+  # Record the REPO, never this temp clone: it is deleted on exit, and
+  # recording it left `codeorbit upgrade` pointing at a path that no
+  # longer exists.
+  SRC_RECORD="git+$REPO@$REF"
   # shellcheck disable=SC2064
   trap "rm -rf '$SRC'" EXIT INT TERM
   step "Fetching source"
@@ -117,7 +122,7 @@ say "  ${G}ok${N}"
 # Record where this came from. pip does not keep the source of a
 # non-editable install, so `codeorbit upgrade` would otherwise have to
 # guess at the public repo even when installed from a local checkout.
-echo "$SRC" > "$HOME_DIR/.codeorbit-source" 2>/dev/null || true
+echo "$SRC_RECORD" > "$HOME_DIR/.codeorbit-source" 2>/dev/null || true
 
 # ---------- launcher --------------------------------------------------------
 step "Putting codeorbit on your PATH"

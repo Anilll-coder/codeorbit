@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 DEFAULT_REPO = "https://github.com/Anilll-coder/codeorbit.git"
+DEFAULT_REPO_PIP = f"git+{DEFAULT_REPO}@main"
 SOURCE_MARKER = ".codeorbit-source"
 
 
@@ -81,17 +82,37 @@ def record_source(src: str) -> None:
         pass
 
 
+def _is_url(src: str) -> bool:
+    return src.startswith(("git+", "http://", "https://"))
+
+
 def resolve_source(explicit: str | None = None) -> tuple[str, str]:
-    """Return (source, how_we_found_it)."""
+    """Return (source, how_we_found_it).
+
+    A recorded LOCAL path is only usable if it still exists. Installs made by
+    `curl | sh` or `irm | iex` used to record the temp directory the installer
+    cloned into - which is deleted the moment the installer exits, leaving
+    upgrade pointing at nothing. Newer installs record the repo URL instead;
+    older ones are repaired here by falling through to the default repo rather
+    than failing with "path does not exist".
+    """
     if explicit:
         return explicit, "given on the command line"
     ed = editable_source()
     if ed is not None:
         return str(ed), "this editable checkout"
+
     rec = recorded_source()
     if rec:
-        return rec, f"recorded at install time ({SOURCE_MARKER})"
-    return DEFAULT_REPO, "the default repository"
+        if _is_url(rec):
+            return rec, f"recorded at install time ({SOURCE_MARKER})"
+        if Path(rec).exists():
+            return rec, f"recorded at install time ({SOURCE_MARKER})"
+        return DEFAULT_REPO_PIP, (
+            f"the recorded source is gone ({rec}) - it was a temporary clone; "
+            "falling back to the repository"
+        )
+    return DEFAULT_REPO_PIP, "the default repository"
 
 
 def launched_via_console_script() -> bool:
@@ -142,8 +163,14 @@ def _spawn_detached_upgrade(source: str) -> Path | None:
             f"print(m.version('codeorbit'))\" 2>&1 | Out-String\n"
             f"[System.IO.File]::WriteAllText('{log}', "
             f"$out + \"`nnow at \" + $ver.Trim() + \"`n\")\n"
+            # Delete itself last: nothing else knows this file exists, so an
+            # un-swept helper just accumulates in TEMP forever.
+            f"Remove-Item -LiteralPath $MyInvocation.MyCommand.Path -Force "
+            f"-ErrorAction SilentlyContinue\n"
         )
-        fh = tempfile.NamedTemporaryFile("w", suffix=".ps1", delete=False,
+        # A recognisable prefix, so any leftover can be attributed and swept.
+        fh = tempfile.NamedTemporaryFile("w", prefix="codeorbit-upgrade-",
+                                         suffix=".ps1", delete=False,
                                          encoding="utf-8")
         fh.write(script)
         fh.close()
@@ -225,7 +252,7 @@ def run(explicit: str | None = None, pull: bool = True) -> Outcome:
 
     note = ""
     as_path = Path(source)
-    if as_path.exists() and pull:
+    if not _is_url(source) and as_path.exists() and pull:
         ok, msg = git_pull(as_path)
         note = f"git pull: {msg}" if ok else f"git pull skipped ({msg})"
 

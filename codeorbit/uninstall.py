@@ -36,10 +36,74 @@ class Plan:
     path_entry: str | None = None          # Windows user PATH entry to unset
     refusal: str | None = None             # set when uninstall must not proceed
     editable_source: Path | None = None    # a checkout we must NOT delete
+    temp_files: list[Path] = field(default_factory=list)
+    mcp_configs: list[Path] = field(default_factory=list)
 
     @property
     def anything(self) -> bool:
-        return bool(self.venv or self.launchers or self.index or self.path_entry)
+        return bool(self.venv or self.launchers or self.index or self.path_entry
+                    or self.temp_files or self.mcp_configs)
+
+
+def temp_artifacts() -> list[Path]:
+    """Everything CodeOrbit leaves in the system temp directory.
+
+    Named patterns only - never a blanket sweep of TEMP, which holds other
+    programs' work. Each of these is written by a specific code path:
+      codeorbit-upgrade.log      the detached upgrade's output
+      codeorbit-upgrade-*.ps1    the detached upgrade helper itself
+      codeorbit-verify-*         `fix --test` sandboxes
+      codeorbit-<hash>           installer clones, when it fetched the source
+    """
+    import tempfile
+    tmp = Path(tempfile.gettempdir())
+    found: list[Path] = []
+    if not tmp.is_dir():
+        return found
+
+    patterns = ["codeorbit-upgrade.log", "codeorbit-upgrade-*.ps1",
+                "codeorbit-verify-*", "codeorbit-*"]
+    seen: set[Path] = set()
+    for pat in patterns:
+        try:
+            for p in tmp.glob(pat):
+                if p not in seen:
+                    seen.add(p)
+                    found.append(p)
+        except OSError:
+            continue
+    return sorted(found)
+
+
+def mcp_registrations(project: Path | None) -> list[Path]:
+    """Agent config files that still name CodeOrbit.
+
+    Leaving these behind is not cosmetic: the agent goes on spawning a command
+    that no longer exists and reports the server as failed on every start. An
+    uninstall that leaves an agent permanently erroring has not uninstalled.
+    """
+    from . import mcp_config
+
+    candidates: list[Path] = []
+    for agent, target in mcp_config.TARGETS.items():
+        if project is not None:
+            candidates.append(project / target.project_rel)
+        if target.global_rel:
+            candidates.append(Path.home() / target.global_rel)
+
+    out: list[Path] = []
+    for path in candidates:
+        if path in out or not path.exists():
+            continue
+        try:
+            import json
+            data = json.loads(path.read_text(encoding="utf-8") or "{}")
+        except Exception:
+            continue
+        if isinstance(data, dict) and \
+                mcp_config.SERVER_KEY in (data.get("mcpServers") or {}):
+            out.append(path)
+    return out
 
 
 def _is_virtualenv(prefix: Path) -> bool:
@@ -135,6 +199,9 @@ def build_plan(project: Path | None = None, with_index: bool = False) -> Plan:
         if idx.is_dir():
             plan.index = idx
 
+    plan.temp_files = temp_artifacts()
+    plan.mcp_configs = mcp_registrations(project)
+
     return plan
 
 
@@ -190,7 +257,47 @@ def remove_from_windows_path(entry: str) -> bool:
 
 def execute(plan: Plan) -> list[str]:
     """Carry out `plan`. Returns human-readable lines describing what happened."""
+    from . import mcp_config
+
     done: list[str] = []
+
+    # Agent configs first, while CodeOrbit still exists: removing our entry is
+    # then a clean edit. Do it after deleting the binary and the agent has
+    # already started reporting a failed server.
+    #
+    # Edited directly rather than through mcp_config.remove(), because these
+    # paths were found by scanning and need not match a known agent layout -
+    # only our own key is touched either way.
+    for cfg in plan.mcp_configs:
+        try:
+            import json
+            data = json.loads(cfg.read_text(encoding="utf-8") or "{}")
+            servers = data.get("mcpServers") or {}
+            if mcp_config.SERVER_KEY not in servers:
+                continue
+            backup = cfg.with_suffix(cfg.suffix + ".bak")
+            try:
+                shutil.copy2(cfg, backup)
+            except OSError:
+                pass
+            del servers[mcp_config.SERVER_KEY]
+            cfg.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+            others = ", ".join(sorted(servers)) or "none"
+            done.append(f"removed the CodeOrbit entry from {cfg} "
+                        f"(other servers kept: {others})")
+        except Exception as e:
+            done.append(f"could not clean {cfg}: {e}")
+
+    for t in plan.temp_files:
+        try:
+            if t.is_dir():
+                shutil.rmtree(t, ignore_errors=True)
+            else:
+                t.unlink(missing_ok=True)
+        except OSError:
+            continue
+    if plan.temp_files:
+        done.append(f"removed {len(plan.temp_files)} temporary file(s) from TEMP")
 
     if plan.index is not None:
         shutil.rmtree(plan.index, ignore_errors=True)

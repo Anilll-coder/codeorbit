@@ -56,16 +56,54 @@ class Result:
 
 
 def find_executable() -> str:
-    """An absolute path to something an agent can actually spawn."""
+    """An absolute path to something an agent can actually spawn.
+
+    The real entry point beside this interpreter comes FIRST, ahead of a PATH
+    lookup. Two reasons, both learned from a config that did not work:
+
+      * PATH resolves to the installer's `codeorbit.cmd` shim, and a .cmd is a
+        batch file - it needs cmd.exe to interpret it. An MCP client spawns the
+        command directly, with no shell, so a .cmd entry can simply fail to
+        start.
+      * The entry point next to sys.executable is the one belonging to THIS
+        install, which is what should serve the graph.
+    """
+    here = Path(sys.executable).parent
+    for name in ("codeorbit.exe", "codeorbit"):
+        cand = here / name
+        if cand.exists() and cand.is_file():
+            return str(cand.resolve())
+
     found = shutil.which(SERVER_KEY)
     if found and Path(found).exists():
-        return str(Path(found).resolve())
-    here = Path(sys.executable).parent
-    for name in ("codeorbit.exe", "codeorbit.cmd", "codeorbit"):
-        cand = here / name
-        if cand.exists():
-            return str(cand.resolve())
+        resolved = Path(found).resolve()
+        # A .cmd shim names its real target; prefer that.
+        if resolved.suffix.lower() == ".cmd":
+            real = _target_of_cmd_shim(resolved)
+            if real:
+                return str(real)
+        return str(resolved)
+
     return SERVER_KEY
+
+
+def _target_of_cmd_shim(shim: Path) -> Path | None:
+    """The .exe a generated `codeorbit.cmd` launcher points at."""
+    try:
+        for line in shim.read_text(encoding="utf-8", errors="replace").splitlines():
+            line = line.strip().strip('"')
+            if line.lower().endswith(".exe") or ".exe" in line.lower():
+                start = line.find('"')
+                if start != -1:
+                    end = line.find('"', start + 1)
+                    cand = Path(line[start + 1:end]) if end != -1 else None
+                else:
+                    cand = Path(line.split(" %*")[0])
+                if cand and cand.exists():
+                    return cand.resolve()
+    except OSError:
+        pass
+    return None
 
 
 def server_entry(root: Path, exe: str | None = None) -> dict:
