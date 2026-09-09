@@ -10,11 +10,14 @@ from rich.panel import Panel
 from rich.syntax import Syntax
 from rich.table import Table
 
+from . import audit as auditmod
 from . import context as ctxmod
 from . import db, llm, query
 from . import review as reviewmod
 from .indexer import index_project
 from .resolve import resolve_project
+
+SEV_COLOR = {"high": "red", "medium": "yellow", "low": "dim"}
 
 app = typer.Typer(add_completion=False, help="Local code intelligence over a code graph.")
 console = Console()
@@ -302,6 +305,112 @@ def review(
         console.print(f"\n[red]{e}[/red]")
         raise typer.Exit(1)
     print()
+
+
+@app.command()
+def audit(
+    path: str = typer.Option(".", "--path", "-p"),
+    severity: str = typer.Option("low", "--severity", "-s",
+                                 help="Minimum severity: high, medium or low"),
+    include_tests: bool = typer.Option(False, "--include-tests"),
+    limit: int = typer.Option(25, "--limit", "-l", help="Findings to display"),
+    explain: bool = typer.Option(False, "--explain",
+                                 help="Ask the local model which are real and how to fix them"),
+    model: str = typer.Option(llm.DEFAULT_MODEL, "--model", "-m"),
+    max_tokens: int = typer.Option(400, "--max-tokens", "-t"),
+    findings_to_explain: int = typer.Option(4, "--explain-count"),
+):
+    """Find bugs and security issues, ranked by how much code they reach."""
+    root, conn = _open(path)
+
+    if severity not in ("high", "medium", "low"):
+        console.print("[red]--severity must be high, medium or low[/red]")
+        raise typer.Exit(1)
+
+    with console.status("scanning..."):
+        report = auditmod.audit_project(root, conn, include_tests, severity)
+
+    counts = report.by_severity()
+    if not report.findings:
+        console.print(
+            f"[green]No findings[/green] in {report.files_scanned} files "
+            f"({report.lines_scanned:,} lines)."
+        )
+        return
+
+    console.print(
+        f"[bold]{len(report.findings)}[/bold] finding(s) in "
+        f"{report.files_scanned} files ({report.lines_scanned:,} lines)   "
+        + "  ".join(
+            f"[{SEV_COLOR[s]}]{counts.get(s, 0)} {s}[/{SEV_COLOR[s]}]"
+            for s in ("high", "medium", "low") if counts.get(s)
+        )
+    )
+
+    t = Table("sev", "finding", "location", "inside", "reach", "test")
+    for f in report.findings[:limit]:
+        c = SEV_COLOR[f.rule.severity]
+        t.add_row(
+            f"[{c}]{f.rule.severity}[/{c}]",
+            f.rule.title,
+            f"{f.path}:{f.line}",
+            (f.symbol or "-").rsplit(".", 2)[-1],
+            str(f.blast) if f.blast else "-",
+            "yes" if f.tested else "[red]no[/red]",
+        )
+    console.print(t)
+
+    if len(report.findings) > limit:
+        console.print(f"[dim]... and {len(report.findings) - limit} more (raise --limit)[/dim]")
+
+    if not explain:
+        console.print("\n[dim]--explain asks the local model which are real and how to fix them[/dim]")
+        return
+
+    if not llm.available():
+        console.print("[red]Ollama is not running.[/red] Start it with: ollama serve")
+        raise typer.Exit(1)
+
+    prompt = auditmod.build_prompt(root, conn, report.findings, findings_to_explain)
+    console.print()
+    try:
+        for piece in llm.stream(prompt, model=model, system=auditmod.SYSTEM,
+                                num_predict=max_tokens):
+            sys.stdout.write(piece)
+            sys.stdout.flush()
+    except llm.OllamaError as e:
+        console.print(f"\n[red]{e}[/red]")
+        raise typer.Exit(1)
+    print()
+
+
+@app.command()
+def why(
+    source: str,
+    target: str,
+    path: str = typer.Option(".", "--path", "-p"),
+    max_depth: int = typer.Option(8, "--depth", "-d"),
+):
+    """Show the call path from one symbol to another."""
+    root, conn = _open(path)
+    a = _pick(conn, source)
+    b = _pick(conn, target)
+
+    hops = query.call_path(conn, a["id"], b["id"], max_depth)
+    if not hops:
+        console.print(
+            f"[yellow]No call path[/yellow] from {a['qname']} to {b['qname']} "
+            f"within {max_depth} hops."
+        )
+        console.print("[dim]They may be connected only through dynamic dispatch, "
+                      "which static parsing cannot follow.[/dim]")
+        raise typer.Exit(1)
+
+    console.print(f"[bold]{len(hops) - 1}[/bold] hop(s) from {a['qname']} to {b['qname']}\n")
+    for i, (row, line) in enumerate(hops):
+        arrow = "   " if i == 0 else " -> "
+        at = f"  [dim]{row['path']}:{line or row['start_line']}[/dim]"
+        console.print(f"{arrow}{row['qname']}{at}")
 
 
 def main():

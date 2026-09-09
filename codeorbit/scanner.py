@@ -23,7 +23,15 @@ MAX_BYTES = 1_500_000  # skip generated/minified monsters
 
 
 def _git_tracked(root: Path) -> set[str] | None:
-    """Prefer git's own idea of what is source. Returns None outside a repo."""
+    """Prefer git's own idea of what is source. Returns None when git can't say.
+
+    Returning None (rather than an empty set) matters for a directory that sits
+    inside a repo but is ignored by it - a library under .venv/, a vendored
+    checkout. There `git ls-files` succeeds and lists nothing, and treating that
+    as "no file is tracked" would filter the entire target away and index
+    nothing. An empty result means git has no opinion here, so fall back to
+    walking the tree.
+    """
     try:
         out = subprocess.run(
             ["git", "-C", str(root), "ls-files"],
@@ -31,7 +39,8 @@ def _git_tracked(root: Path) -> set[str] | None:
         )
         if out.returncode != 0:
             return None
-        return {line.strip() for line in out.stdout.splitlines() if line.strip()}
+        tracked = {line.strip() for line in out.stdout.splitlines() if line.strip()}
+        return tracked or None
     except Exception:
         return None
 

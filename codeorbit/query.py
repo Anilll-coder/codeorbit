@@ -120,6 +120,50 @@ def impact(conn, node_id: int, max_depth: int = 3) -> list[tuple[int, sqlite3.Ro
     return out
 
 
+def call_path(conn, src_id: int, dst_id: int, max_depth: int = 8):
+    """Shortest call path from src to dst as [(node_row, call_line), ...].
+
+    BFS forward over `calls`. Breadth-first matters: the shortest path is the
+    one a reader can actually hold in their head, and a depth cap keeps a hub
+    function from turning this into a whole-graph walk.
+    """
+    if src_id == dst_id:
+        row = get_node(conn, src_id)
+        return [(row, None)] if row else []
+
+    prev: dict[int, tuple[int, int | None]] = {}   # node -> (came_from, call_line)
+    seen = {src_id}
+    frontier = deque([(src_id, 0)])
+
+    while frontier:
+        nid, depth = frontier.popleft()
+        if depth >= max_depth:
+            continue
+        for r in callees(conn, nid, limit=200):
+            nxt = r["id"]
+            if nxt in seen:
+                continue
+            seen.add(nxt)
+            prev[nxt] = (nid, r["call_line"])
+            if nxt == dst_id:
+                chain: list[tuple[int, int | None]] = []
+                cur = dst_id
+                while cur != src_id:
+                    came, line = prev[cur]
+                    chain.append((cur, line))
+                    cur = came
+                chain.append((src_id, None))
+                chain.reverse()
+                out = []
+                for node_id, line in chain:
+                    row = get_node(conn, node_id)
+                    if row is not None:
+                        out.append((row, line))
+                return out
+            frontier.append((nxt, depth + 1))
+    return []
+
+
 def affected_tests(conn, node_id: int, max_depth: int = 4) -> list[sqlite3.Row]:
     """Of the blast radius, the parts that look like tests."""
     hits = []
