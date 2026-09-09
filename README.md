@@ -96,6 +96,9 @@ codeorbit fix -s high --apply --test   # ...write them, gated on the test suite
 codeorbit viz                          # interactive graph as a standalone HTML file
 codeorbit viz --focus Segment          # ...centred on one symbol
 codeorbit viz --format mermaid         # a diagram for a report
+
+codeorbit uninstall --dry-run          # see exactly what removal would touch
+codeorbit uninstall                    # remove CodeOrbit (indexes are kept)
 ```
 
 Every command takes a project path, in whichever position reads better:
@@ -308,7 +311,7 @@ pip install -e ".[dev]"
 pytest
 ```
 
-99 tests, no mocks: each builds a small project on disk, indexes it, and asserts
+109 tests, no mocks: each builds a small project on disk, indexes it, and asserts
 against the real graph. Mocking the parser would only test the mock, and the
 fixer's tests never call the model - what has to hold is that everything
 *around* the model is safe regardless of what it returns.
@@ -339,6 +342,36 @@ Languages are Python and JavaScript. The known limits are honest ones: static
 parsing cannot follow dynamic dispatch (decorator-registered and dict-dispatched
 functions show up as uncalled), and answer latency is bounded by CPU generation
 speed rather than by anything the graph does.
+
+## Uninstalling
+
+```bash
+codeorbit uninstall --dry-run   # show what would go, change nothing
+codeorbit uninstall             # ask, then remove
+codeorbit uninstall --index     # also drop this project's .codeorbit/
+```
+
+It removes its own virtualenv, the launcher, and the PATH entry the installer
+added. It does not remove your source, your project indexes (unless `--index`),
+or Ollama.
+
+Three guards, because this is the one command that deletes things it did not
+create:
+
+- **It refuses outside a virtualenv.** If CodeOrbit was pip-installed into the
+  system Python then `sys.prefix` *is* that Python, and removing it would take
+  the interpreter with it. There it tells you to `pip uninstall codeorbit`.
+- **It never removes source.** With an editable install it names your checkout
+  as protected and leaves it alone.
+- **It asks first**, and `--dry-run` shows the whole plan without touching
+  anything.
+
+Windows cannot delete a running `.exe`, and the launcher lives inside the
+directory being removed - so there the final step is handed to a short detached
+process that waits for the command to exit first.
+
+The installer scripts still work too: `./install.sh --uninstall` or
+`.\install.ps1 -Uninstall`.
 
 ## Prior art
 

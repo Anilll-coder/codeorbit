@@ -669,6 +669,68 @@ def why(
         console.print(f"{arrow}{row['qname']}{at}")
 
 
+@app.command()
+def uninstall(
+    path: str = typer.Option(None, "--path", "-p", help=PATH_HELP),
+    with_index: bool = typer.Option(False, "--index",
+                                    help="Also delete this project's .codeorbit/ index"),
+    yes: bool = typer.Option(False, "--yes", "-y", help="Do not ask for confirmation"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="Show what would be removed"),
+):
+    """Remove CodeOrbit from this machine."""
+    from . import uninstall as uninstallmod
+
+    project = Path(_resolve(path)).resolve()
+    plan = uninstallmod.build_plan(project, with_index)
+
+    if plan.refusal:
+        console.print(f"[red]{plan.refusal}[/red]")
+        raise typer.Exit(1)
+
+    if not plan.anything:
+        console.print("[green]Nothing to remove[/green] - no CodeOrbit install found.")
+        return
+
+    console.print("[bold]This will remove:[/bold]")
+    if plan.venv:
+        console.print(f"  the CodeOrbit environment   [dim]{plan.venv}[/dim]")
+    for p in plan.launchers:
+        console.print(f"  the launcher                [dim]{p}[/dim]")
+    if plan.path_entry:
+        console.print(f"  a PATH entry                [dim]{plan.path_entry}[/dim]")
+    if plan.index:
+        console.print(f"  this project's index        [dim]{plan.index}[/dim]")
+
+    console.print("\n[bold]This will NOT touch:[/bold]")
+    console.print("  any of your source code")
+    if plan.editable_source:
+        console.print(f"  your CodeOrbit checkout     [dim]{plan.editable_source}[/dim]")
+    if not plan.index:
+        console.print("  project .codeorbit/ indexes [dim](pass --index for this one)[/dim]")
+    console.print("  Ollama, or any model you pulled")
+
+    if dry_run:
+        console.print("\n[dim]--dry-run: nothing was removed[/dim]")
+        return
+
+    if not yes:
+        console.print()
+        if not typer.confirm("Remove CodeOrbit?"):
+            console.print("[yellow]Cancelled.[/yellow] Nothing was removed.")
+            raise typer.Exit(1)
+
+    console.print()
+    for line in uninstallmod.execute(plan):
+        console.print(f"  {line}")
+
+    console.print("\n[green]CodeOrbit removed.[/green]")
+    if plan.path_entry:
+        console.print("[dim]Open a new terminal for the PATH change to apply.[/dim]")
+    if not plan.index:
+        console.print("[dim]Project indexes were kept. Delete a .codeorbit/ folder "
+                      "to remove one.[/dim]")
+
+
 def main():
     app()
 
