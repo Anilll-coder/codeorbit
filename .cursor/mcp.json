@@ -1,11 +1,11 @@
 {
   "mcpServers": {
     "codeorbit": {
-      "command": "C:\\Users\\anilk\\AppData\\Local\\CodeOrbit\\Scripts\\codeorbit.exe",
+      "command": "C:**.exe",
       "args": [
         "mcp",
         "--path",
-        "C:\\Users\\anilk\\OneDrive\\Documents\\Desktop\\major_project\\codeorbit"
+        "C:**"
       ]
     }
   }
