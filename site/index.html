@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CodeOrbit: local-first code intelligence</title>
+  <meta name="description" content="CodeOrbit builds a structural knowledge graph of your repository with tree-sitter and answers questions about your code with a local LLM through Ollama. No API keys, no cloud, no telemetry." />
+
+  <meta property="og:title" content="CodeOrbit: local-first code intelligence" />
+  <meta property="og:description" content="A structural knowledge graph of your repo, answered by a model that runs on your machine. No API keys, nothing leaves your laptop." />
+  <meta property="og:type" content="website" />
+  <meta name="theme-color" content="#0a0b0d" />
+
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230a0b0d'/%3E%3Cellipse cx='16' cy='16' rx='12' ry='5.5' fill='none' stroke='%23e2a13f' stroke-width='2' transform='rotate(-22 16 16)'/%3E%3Ccircle cx='16' cy='16' r='3.4' fill='%23e2a13f'/%3E%3C/svg%3E" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <a class="sr-only" href="#main">Skip to content</a>
+  <div class="grain" aria-hidden="true"></div>
+
+  <!-- ============================================================ NAV -->
+  <header class="nav" id="nav">
+    <div class="nav-inner">
+      <a class="brand" href="#top" aria-label="CodeOrbit home">
+        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+          <ellipse cx="16" cy="16" rx="12" ry="5.6" fill="none" stroke="#e2a13f" stroke-width="2" transform="rotate(-22 16 16)"/>
+          <circle cx="16" cy="16" r="3.6" fill="#e2a13f"/>
+        </svg>
+        CodeOrbit
+      </a>
+
+      <nav class="nav-links" aria-label="Primary">
+        <a href="#story">How it works</a>
+        <a href="#architecture">Architecture</a>
+        <a href="#commands">Commands</a>
+        <a href="https://github.com/Anilll-coder/codeorbit#readme">Docs</a>
+      </nav>
+
+      <div class="nav-cta">
+        <a class="nav-gh" href="https://github.com/Anilll-coder/codeorbit" aria-label="CodeOrbit on GitHub" target="_blank" rel="noopener">
+          <svg class="icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+            <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+          </svg>
+        </a>
+        <a class="btn btn-primary btn-sm" href="#install">Install</a>
+        <button class="nav-mobile-toggle" id="menu-toggle" aria-label="Open menu" aria-expanded="false" aria-controls="mobile-menu">
+          <svg class="icon" id="menu-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true">
+            <line x1="3" y1="6" x2="17" y2="6"/>
+            <line x1="3" y1="10" x2="17" y2="10"/>
+            <line x1="3" y1="14" x2="17" y2="14"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <div class="mobile-menu" id="mobile-menu">
+    <a href="#story">How it works</a>
+    <a href="#architecture">Architecture</a>
+    <a href="#commands">Commands</a>
+    <a href="https://github.com/Anilll-coder/codeorbit#readme">Docs</a>
+    <a href="https://github.com/Anilll-coder/codeorbit" target="_blank" rel="noopener">GitHub</a>
+    <a class="btn btn-primary" href="#install">Install CodeOrbit</a>
+  </div>
+
+  <main id="main">
+
+    <!-- ============================================================ HERO -->
+    <section class="hero" id="top">
+      <div class="hero-inner">
+        <div class="hero-copy">
+          <h1>Code intelligence, entirely <em>local</em>.</h1>
+          <p class="sub">A structural graph of your repository, answered by a model that runs here. No API keys, nothing leaves your machine.</p>
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="#install">Install CodeOrbit</a>
+            <a class="btn btn-ghost" href="https://github.com/Anilll-coder/codeorbit" target="_blank" rel="noopener">
+              <svg class="icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+              </svg>
+              View on GitHub
+            </a>
+          </div>
+        </div>
+
+        <div class="hero-stage" id="hero-stage">
+          <canvas id="orbit-canvas" role="img" aria-label="Interactive rendering of a code call graph: nodes are symbols, lines are calls between them"></canvas>
+          <div class="hero-node-label" id="hero-node-label"></div>
+          <div class="hero-stage-tag">codeorbit viz · rendered in your browser</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================ INSTALL STRIP -->
+    <section class="install-strip" id="install">
+      <div class="install-strip-inner">
+        <div class="install-tabs" role="tablist" aria-label="Install command by platform">
+          <button class="install-tab is-active" role="tab" aria-selected="true" data-target="sh">macOS / Linux</button>
+          <button class="install-tab" role="tab" aria-selected="false" data-target="ps1">Windows</button>
+        </div>
+
+        <div class="install-code">
+          <span class="prompt">$</span>
+          <code id="install-cmd">curl -fsSL https://raw.githubusercontent.com/Anilll-coder/codeorbit/main/install.sh | sh</code>
+          <button class="copy-btn" id="copy-install" aria-label="Copy install command" type="button">
+            <svg class="icon" id="copy-icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="7" y="7" width="10" height="10" rx="2"/>
+              <path d="M4 13V5a2 2 0 012-2h8"/>
+            </svg>
+          </button>
+        </div>
+
+        <div class="install-meta">Python 3.10+ · Ollama for <code>ask</code></div>
+      </div>
+    </section>
+
+    <!-- ============================================================ STORY -->
+    <section class="section" id="story">
+      <div class="wrap">
+        <div class="story">
+          <div class="story-copy reveal">
+            <div class="eyebrow">The retrieval problem</div>
+            <h2>A question needs a neighborhood, not a pile of chunks.</h2>
+            <p>Naive RAG retrieves text that resembles the question. It has no notion of a symbol, so it cannot tell you who calls a function or what that function calls in return.</p>
+            <p><strong>CodeOrbit retrieves the subgraph the question actually lives in:</strong> the symbol, its source, its callers, and its callees. That neighborhood is what a person reading the code would need, and structure is the only thing that can hand it over.</p>
+
+            <div class="proof-row">
+              <div class="proof-item">
+                <div class="num">1,193</div>
+                <div class="lbl">symbols indexed</div>
+              </div>
+              <div class="proof-item">
+                <div class="num">5,381</div>
+                <div class="lbl">edges resolved</div>
+              </div>
+              <div class="proof-item">
+                <div class="num">61%</div>
+                <div class="lbl">call sites bound</div>
+              </div>
+            </div>
+            <div class="proof-note">Measured indexing rich, a 100-file, 38,615-line open-source project. The rest is calls that genuinely leave the project.</div>
+          </div>
+
+          <div class="compare reveal">
+            <div class="compare-panel">
+              <div class="compare-title">Naive RAG</div>
+              <div class="chunk-field" aria-hidden="true">
+                <div class="chunk" style="top:6%; left:4%; width:96px; transform:rotate(-3deg);">···</div>
+                <div class="chunk" style="top:2%; left:52%; width:78px; transform:rotate(2deg);">···</div>
+                <div class="chunk" style="top:34%; left:20%; width:110px; transform:rotate(1deg);">···</div>
+                <div class="chunk" style="top:30%; left:66%; width:84px; transform:rotate(-2deg);">···</div>
+                <div class="chunk" style="top:62%; left:2%; width:92px; transform:rotate(2.5deg);">···</div>
+                <div class="chunk" style="top:60%; left:56%; width:100px; transform:rotate(-1.5deg);">···</div>
+                <div class="chunk" style="top:82%; left:30%; width:88px; transform:rotate(1.5deg);">···</div>
+              </div>
+            </div>
+            <div class="compare-panel is-good">
+              <div class="compare-title">CodeOrbit</div>
+              <svg class="neighborhood" viewBox="0 0 220 190" aria-hidden="true">
+                <g stroke="rgba(226,161,63,0.45)" stroke-width="1.5">
+                  <line x1="110" y1="95" x2="30" y2="30"/>
+                  <line x1="110" y1="95" x2="182" y2="24"/>
+                  <line x1="110" y1="95" x2="196" y2="100"/>
+                  <line x1="110" y1="95" x2="170" y2="162"/>
+                  <line x1="110" y1="95" x2="56" y2="160"/>
+                  <line x1="110" y1="95" x2="20" y2="112"/>
+                </g>
+                <circle cx="30" cy="30" r="7" fill="#15171c" stroke="rgba(237,236,230,0.35)" stroke-width="1.5"/>
+                <circle cx="182" cy="24" r="7" fill="#15171c" stroke="rgba(237,236,230,0.35)" stroke-width="1.5"/>
+                <circle cx="196" cy="100" r="7" fill="#15171c" stroke="rgba(237,236,230,0.35)" stroke-width="1.5"/>
+                <circle cx="170" cy="162" r="7" fill="#15171c" stroke="rgba(237,236,230,0.35)" stroke-width="1.5"/>
+                <circle cx="56" cy="160" r="7" fill="#15171c" stroke="rgba(237,236,230,0.35)" stroke-width="1.5"/>
+                <circle cx="20" cy="112" r="7" fill="#15171c" stroke="rgba(237,236,230,0.35)" stroke-width="1.5"/>
+                <circle cx="110" cy="95" r="10" fill="#e2a13f"/>
+              </svg>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================ TERMINAL DEMO -->
+    <section class="section terminal-section" id="demo">
+      <div class="wrap">
+        <div class="section-head reveal" style="margin-left:auto;margin-right:auto;text-align:center;">
+          <h2>What running it actually looks like.</h2>
+          <p style="margin-left:auto;margin-right:auto;">A session against this repository: index once, then ask in plain English.</p>
+        </div>
+
+        <div class="terminal-window reveal" id="terminal">
+          <div class="terminal-titlebar">
+            <span class="tdot"></span><span class="tdot"></span><span class="tdot"></span>
+            <span class="terminal-label">zsh - codeorbit</span>
+          </div>
+          <div class="terminal-body" id="terminal-body" aria-live="polite"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================ ARCHITECTURE -->
+    <section class="section" id="architecture">
+      <div class="wrap">
+        <div class="section-head reveal">
+          <div class="eyebrow">How it's built</div>
+          <h2>Two passes, not one.</h2>
+          <p>A call can name something defined in a file tree-sitter hasn't reached yet, so nothing is resolved until every definition in the project is known.</p>
+        </div>
+
+        <div class="pipeline" id="pipeline">
+          <div class="pipeline-stage" data-i="0">
+            <div class="pipeline-node">1</div>
+            <h4>scanner</h4>
+            <p>Walks the repo, skips vendored and generated files, respects .gitignore.</p>
+          </div>
+          <div class="pipeline-stage" data-i="1">
+            <div class="pipeline-node">2</div>
+            <h4>extract</h4>
+            <p>Tree-sitter turns source into symbols, call sites, and imports.</p>
+          </div>
+          <div class="pipeline-stage" data-i="2">
+            <div class="pipeline-node">3</div>
+            <h4>indexer</h4>
+            <p>Writes nodes and pending calls into SQLite.</p>
+          </div>
+          <div class="pipeline-stage" data-i="3">
+            <div class="pipeline-node">4</div>
+            <h4>resolve</h4>
+            <p>Binds call sites to real definitions, ranked by confidence.</p>
+          </div>
+          <div class="pipeline-stage" data-i="4">
+            <div class="pipeline-node">5</div>
+            <h4>query</h4>
+            <p>Callers, callees, impact, and the subgraph a question lives in.</p>
+          </div>
+          <div class="pipeline-stage" data-i="5">
+            <div class="pipeline-node">6</div>
+            <h4>ollama</h4>
+            <p>Answers grounded in that subgraph. Nothing leaves the process.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================ COMMANDS -->
+    <section class="section" id="commands">
+      <div class="wrap">
+        <div class="section-head reveal">
+          <div class="eyebrow">The command surface</div>
+          <h2>One graph, six ways to use it.</h2>
+          <p>Every command reads the same index, so what search finds, review, audit, and fix already know.</p>
+        </div>
+
+        <div class="bento reveal">
+          <div class="bento-cell is-hero">
+            <h4>Ask</h4>
+            <p>Grounded in the call graph, not a guess. Every claim traces back to a symbol.</p>
+            <div class="bento-code">codeorbit ask "How does Console.print render output?"</div>
+          </div>
+          <div class="bento-cell">
+            <h4>Explore</h4>
+            <p>Search by name, trace impact, find what nothing calls.</p>
+            <div class="bento-code">codeorbit impact Segment --depth 2</div>
+          </div>
+          <div class="bento-cell">
+            <h4>Review &amp; audit</h4>
+            <p>Changed symbols ranked by blast radius, findings ranked by reach.</p>
+            <div class="bento-code">codeorbit review --base main</div>
+          </div>
+          <div class="bento-cell">
+            <h4>Fix</h4>
+            <p>Proposed fixes verified against syntax, symbol identity, and your tests.</p>
+            <div class="bento-code">codeorbit fix -s high --apply --test</div>
+          </div>
+          <div class="bento-cell is-graph">
+            <h4>Visualize</h4>
+            <p>An interactive graph in one HTML file. No server, no network.</p>
+            <div class="bento-code">codeorbit viz --focus Segment</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================ MANIFESTO -->
+    <section class="manifesto" id="local-first">
+      <div class="wrap reveal">
+        <h2>Nothing leaves the machine.</h2>
+        <p style="color:var(--text-secondary); font-size:16.5px; max-width:56ch; margin-bottom:36px;">Indexing runs on disk. Answers come from a model in Ollama, on this computer. The only network request this tool ever makes is the one you approve during install.</p>
+        <div class="manifesto-facts">
+          <div class="manifesto-fact">
+            <svg class="icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="4.5" y="9" width="11" height="8" rx="2"/>
+              <path d="M7 9V6a3 3 0 016 0v3"/>
+            </svg>
+            No API keys
+          </div>
+          <div class="manifesto-fact">
+            <svg class="icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M5.5 15a3.5 3.5 0 01-.6-6.95A4.5 4.5 0 0113.9 6.6 3.8 3.8 0 0115 14"/>
+              <line x1="3" y1="3" x2="17" y2="17"/>
+            </svg>
+            No cloud calls
+          </div>
+          <div class="manifesto-fact">
+            <svg class="icon" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M2 10s3-5.5 8-5.5 8 5.5 8 5.5-3 5.5-8 5.5-8-5.5-8-5.5z"/>
+              <circle cx="10" cy="10" r="2.2"/>
+              <line x1="3" y1="17" x2="17" y2="3"/>
+            </svg>
+            No telemetry
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================ FINAL CTA -->
+    <section class="final-cta">
+      <div class="wrap reveal">
+        <h2>Point it at a repository and see the graph.</h2>
+        <p>Install takes one command. Indexing a mid-sized project takes seconds.</p>
+        <div class="hero-actions">
+          <a class="btn btn-primary" href="#install">Install CodeOrbit</a>
+          <a class="btn btn-ghost" href="https://github.com/Anilll-coder/codeorbit" target="_blank" rel="noopener">
+            <svg class="icon" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+              <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+            </svg>
+            View on GitHub
+          </a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ============================================================ FOOTER -->
+  <footer class="footer">
+    <div class="wrap">
+      <div class="footer-top">
+        <div class="footer-brand">
+          <a class="brand" href="#top" aria-label="CodeOrbit home">
+            <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+              <ellipse cx="16" cy="16" rx="12" ry="5.6" fill="none" stroke="#e2a13f" stroke-width="2" transform="rotate(-22 16 16)"/>
+              <circle cx="16" cy="16" r="3.6" fill="#e2a13f"/>
+            </svg>
+            CodeOrbit
+          </a>
+          <p>A structural code graph, answered by a local model. Python and JavaScript, indexed with tree-sitter.</p>
+        </div>
+
+        <div class="footer-col">
+          <h5>Product</h5>
+          <ul>
+            <li><a href="#story">How it works</a></li>
+            <li><a href="#architecture">Architecture</a></li>
+            <li><a href="#commands">Commands</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-col">
+          <h5>Resources</h5>
+          <ul>
+            <li><a href="https://github.com/Anilll-coder/codeorbit#readme" target="_blank" rel="noopener">Docs</a></li>
+            <li><a href="https://github.com/Anilll-coder/codeorbit" target="_blank" rel="noopener">GitHub</a></li>
+            <li><a href="https://github.com/Anilll-coder/codeorbit/issues" target="_blank" rel="noopener">Report an issue</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-col">
+          <h5>Requirements</h5>
+          <ul>
+            <li><span class="plain">Python 3.10+</span></li>
+            <li><span class="plain">Ollama, for <code style="font-family:inherit;">ask</code></span></li>
+            <li><span class="plain">Python and JavaScript repos</span></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="footer-bottom">
+        <span>CodeOrbit. Open source on GitHub.</span>
+        <div class="footer-bottom-links">
+          <a href="https://github.com/Anilll-coder/codeorbit" target="_blank" rel="noopener">GitHub</a>
+          <a href="#top">Back to top</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
