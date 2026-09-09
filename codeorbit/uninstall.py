@@ -65,22 +65,47 @@ def _editable_source() -> Path | None:
     return root if (root / "pyproject.toml").exists() else None
 
 
-def _launchers() -> list[Path]:
-    """Shim scripts an installer may have dropped outside the venv."""
+def _points_at(launcher: Path, venv: Path) -> bool:
+    """Does this shim actually launch the venv we are removing?
+
+    Load-bearing. Both installers write a tiny shim containing the absolute path
+    of the interpreter it runs, and a machine can hold more than one install -
+    a throwaway one under a temp directory, a real one under LOCALAPPDATA. An
+    earlier version collected every shim in every known location and deleted
+    them all, so uninstalling one install broke the other. A shim is only ours
+    if it names our venv.
+    """
+    try:
+        text = launcher.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    needle = str(venv).replace("/", "\\").lower()
+    alt = str(venv).replace("\\", "/").lower()
+    body = text.lower()
+    return needle in body or alt in body
+
+
+def _launchers(venv: Path | None = None) -> list[Path]:
+    """Shim scripts that launch `venv`, wherever an installer put them."""
     found: list[Path] = []
     candidates = [
-        Path(os.environ.get("CODEORBIT_BIN", "")) if os.environ.get("CODEORBIT_BIN") else None,
+        Path(os.environ["CODEORBIT_BIN"]) if os.environ.get("CODEORBIT_BIN") else None,
         Path.home() / ".local" / "bin",
-        Path(os.environ.get("LOCALAPPDATA", "")) / "Programs" / "CodeOrbit" / "bin"
-        if os.environ.get("LOCALAPPDATA") else None,
+        (Path(os.environ["LOCALAPPDATA"]) / "Programs" / "CodeOrbit" / "bin"
+         if os.environ.get("LOCALAPPDATA") else None),
     ]
+    seen: set[Path] = set()
     for d in candidates:
         if not d or not d.is_dir():
             continue
         for name in ("codeorbit", "codeorbit.cmd", "codeorbit.exe"):
             p = d / name
-            if p.exists():
-                found.append(p)
+            if not p.exists() or p in seen:
+                continue
+            if venv is not None and not _points_at(p, venv):
+                continue        # belongs to a different install; leave it alone
+            seen.add(p)
+            found.append(p)
     return found
 
 
@@ -99,12 +124,11 @@ def build_plan(project: Path | None = None, with_index: bool = False) -> Plan:
 
     plan.venv = prefix
     plan.editable_source = _editable_source()
-    plan.launchers = _launchers()
+    plan.launchers = _launchers(prefix)
 
-    if os.name == "nt":
-        for p in plan.launchers:
-            plan.path_entry = str(p.parent)
-            break
+    if os.name == "nt" and plan.launchers:
+        # Only give up a PATH entry that one of OUR shims lived in.
+        plan.path_entry = str(plan.launchers[0].parent)
 
     if with_index and project is not None:
         idx = project / DB_DIRNAME
