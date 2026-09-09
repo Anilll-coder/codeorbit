@@ -71,3 +71,13 @@ CREATE INDEX IF NOT EXISTS idx_imports_file ON imports(file_id);
 CREATE VIRTUAL TABLE IF NOT EXISTS nodes_fts USING fts5(
   name, qname, docstring, content='nodes', content_rowid='id', tokenize='porter'
 );
+
+-- Vector embeddings for semantic symbol search. Optional: absent until
+-- `codeorbit embed` runs, and every read path degrades to keyword search
+-- when the table is empty.
+CREATE TABLE IF NOT EXISTS embeddings (
+  node_id INTEGER PRIMARY KEY REFERENCES nodes(id) ON DELETE CASCADE,
+  dim     INTEGER NOT NULL,
+  vec     BLOB NOT NULL,          -- float32 little-endian, `dim` values
+  model   TEXT NOT NULL
+);

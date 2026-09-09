@@ -41,17 +41,49 @@ def _pick(conn, name: str):
 
 
 @app.command()
-def index(path: str = typer.Argument(".", help="Project root to index")):
-    """Parse the project and build its graph."""
+def index(
+    path: str = typer.Argument(".", help="Project root to index"),
+    full: bool = typer.Option(False, "--full", help="Re-parse every file, ignoring hashes"),
+):
+    """Parse the project and build its graph (only changed files, unless --full)."""
     root = Path(path).resolve()
     console.print(f"Indexing [bold]{root}[/bold]")
     with console.status("parsing..."):
-        st = index_project(root)
-    console.print(
-        f"  parsed [bold]{st['files']}[/bold] files "
-        f"([bold]{st['loc']:,}[/bold] lines) -> "
-        f"[bold]{st['nodes']}[/bold] symbols"
-    )
+        st = index_project(root, full=full)
+
+    if not full and st["unchanged"] and not st["touched"]:
+        console.print(
+            f"  [green]up to date[/green] - {st['unchanged']} file(s) unchanged, nothing to parse"
+        )
+    else:
+        detail = []
+        if st["added"]:
+            detail.append(f"{st['added']} new")
+        if st["changed"]:
+            detail.append(f"{st['changed']} changed")
+        if st["removed"]:
+            detail.append(f"{st['removed']} removed")
+        if st["unchanged"]:
+            detail.append(f"{st['unchanged']} unchanged")
+        console.print(
+            f"  parsed [bold]{st['files']}[/bold] files "
+            f"([bold]{st['loc']:,}[/bold] lines) -> "
+            f"[bold]{st['nodes']}[/bold] symbols"
+            + (f"   [dim]({', '.join(detail)})[/dim]" if detail else "")
+        )
+
+    # Resolution is whole-graph: a call site binds against every definition in
+    # the project, so it cannot be done per-file. But if no file was touched,
+    # nothing it would compute has changed - skip it rather than redo it.
+    conn = db.connect(root)
+    have_edges = conn.execute("SELECT count(*) FROM edges").fetchone()[0]
+    conn.close()
+
+    if not full and st["touched"] == 0 and have_edges:
+        console.print(f"  [dim]graph unchanged: {have_edges} edges (resolve skipped)[/dim]")
+        console.print(f"[green]Done.[/green] Index at {db.db_path(root)}")
+        return
+
     with console.status("resolving references..."):
         rs = resolve_project(root)
     total = rs["exact"] + rs["heuristic"] + rs["unresolved"]
@@ -188,12 +220,15 @@ def ask(
                                    help="Cap the answer length (CPU generates ~1-2 tok/s)"),
     show_context: bool = typer.Option(False, "--show-context", help="Print what was retrieved"),
     no_llm: bool = typer.Option(False, "--no-llm", help="Retrieve only, skip the model"),
+    no_semantic: bool = typer.Option(False, "--no-semantic",
+                                     help="Keyword retrieval only (for A/B comparison)"),
 ):
     """Ask a question about the codebase, answered from the graph by a local model."""
     root, conn = _open(path)
 
     with console.status("retrieving from graph..."):
-        ctx, picks = ctxmod.build(root, conn, question, max_symbols=symbols)
+        ctx, picks = ctxmod.build(root, conn, question, max_symbols=symbols,
+                                  semantic=not no_semantic)
 
     if not picks:
         console.print("[yellow]Nothing in the graph matched that question.[/yellow]")
@@ -382,6 +417,41 @@ def audit(
         console.print(f"\n[red]{e}[/red]")
         raise typer.Exit(1)
     print()
+
+
+@app.command()
+def embed(
+    path: str = typer.Option(".", "--path", "-p"),
+    model: str = typer.Option(llm.EMBED_MODEL, "--model", "-m"),
+):
+    """Build semantic embeddings so `ask` can find code by meaning, not just names."""
+    from . import semantic as sem
+
+    root, conn = _open(path)
+
+    if not llm.available():
+        console.print("[red]Ollama is not running.[/red] Start it with: ollama serve")
+        raise typer.Exit(1)
+    have = llm.models()
+    if model not in have and f"{model}:latest" not in have:
+        console.print(f"[red]Model {model!r} not found.[/red] Try: ollama pull {model}")
+        raise typer.Exit(1)
+
+    todo = len(sem.pending(conn, model))
+    if not todo:
+        console.print(f"[green]Up to date[/green] - {sem.count(conn, model)} symbols embedded.")
+        return
+
+    console.print(f"Embedding [bold]{todo}[/bold] symbol(s) with [bold]{model}[/bold]")
+    with console.status("embedding...") as status:
+        def tick(done, total):
+            status.update(f"embedding... {done}/{total}")
+        st = sem.build(conn, root, model, progress=tick)
+
+    console.print(f"  [green]{st['embedded']}[/green] embedded"
+                  + (f", [red]{st['failed']}[/red] failed" if st["failed"] else ""))
+    console.print(f"  {st['total']} symbols now searchable by meaning")
+    conn.close()
 
 
 @app.command()

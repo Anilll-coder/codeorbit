@@ -58,28 +58,74 @@ def keywords(question: str) -> list[str]:
     return out[:8]
 
 
-def retrieve(conn, question: str, max_symbols: int = 6):
-    """Rank symbols by how well they match the question's identifiers."""
-    scored: dict[int, list] = {}
+RRF_K = 20          # rank offset; smaller means the top of each list counts more
+KEYWORD_WEIGHT = 1.0
+SEMANTIC_WEIGHT = 1.0
+
+
+def keyword_ranking(conn, question: str, limit: int = 12) -> list[int]:
+    """Node ids for the question's identifiers, best first."""
+    scored: dict[int, float] = {}
     for rank, kw in enumerate(keywords(question)):
         weight = 10 - rank
         for hit_rank, row in enumerate(query.search(conn, kw, limit=8)):
-            prev = scored.get(row["id"])
-            score = weight * 2 + max(0, 8 - hit_rank)
+            s = weight * 2 + max(0, 8 - hit_rank)
             if row["kind"] == "module":
-                score -= 4          # prefer real definitions over whole files
-            if prev is None:
-                scored[row["id"]] = [score, row]
-            else:
-                prev[0] += score
-    ordered = sorted(scored.values(), key=lambda p: -p[0])
-    return [row for _, row in ordered[:max_symbols]]
+                s -= 4              # prefer real definitions over whole files
+            scored[row["id"]] = scored.get(row["id"], 0) + s
+    return [nid for nid, _ in sorted(scored.items(), key=lambda p: -p[1])][:limit]
+
+
+def retrieve(conn, question: str, max_symbols: int = 6, semantic: bool = True):
+    """Rank symbols for a question by fusing an identifier search with a meaning search.
+
+    The two searches produce scores on scales that cannot be compared. Keyword
+    scores run 0-30 and are spiky; cosine similarities from nomic-embed-text sit
+    in a narrow 0.55-0.65 band, so adding a multiple of the similarity applies a
+    nearly constant offset that ranks nothing and merely lets the keyword scores
+    win. That was measured, not assumed: an additive blend returned the
+    keyword-only answer for every question tried.
+
+    Reciprocal Rank Fusion avoids the problem by discarding the scores and using
+    only each list's ORDER, which is the part that is actually meaningful:
+
+        score(d) = sum over lists of  weight / (K + rank(d))
+
+    A symbol that both lists rank highly beats one that only a single list
+    likes, a question naming a real identifier is still won by the keyword list,
+    and a question naming none ("where do we decide which files to skip") is
+    carried entirely by the semantic list instead of being drowned.
+    """
+    lists: list[tuple[list[int], float]] = [
+        (keyword_ranking(conn, question, max_symbols * 3), KEYWORD_WEIGHT)
+    ]
+
+    if semantic:
+        try:
+            from . import semantic as sem
+            if sem.available(conn):
+                hits = sem.search(conn, question, limit=max_symbols * 3)
+                lists.append(([nid for _, nid in hits], SEMANTIC_WEIGHT))
+        except Exception:
+            pass    # embeddings are an enhancement; never fail retrieval over them
+
+    fused: dict[int, float] = {}
+    for ids, weight in lists:
+        for rank, nid in enumerate(ids):
+            fused[nid] = fused.get(nid, 0.0) + weight / (RRF_K + rank + 1)
+
+    out = []
+    for nid, _ in sorted(fused.items(), key=lambda p: -p[1])[:max_symbols]:
+        row = query.get_node(conn, nid)
+        if row is not None:
+            out.append(row)
+    return out
 
 
 def build(root: Path, conn, question: str, max_symbols: int = 2,
-          body_lines: int = 55) -> tuple[str, list]:
+          body_lines: int = 55, semantic: bool = True) -> tuple[str, list]:
     """Return (context_text, symbols_used)."""
-    picks = retrieve(conn, question, max_symbols)
+    picks = retrieve(conn, question, max_symbols, semantic=semantic)
     if not picks:
         return "", []
 
