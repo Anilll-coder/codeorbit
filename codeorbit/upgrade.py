@@ -241,7 +241,13 @@ def git_pull(checkout: Path) -> tuple[bool, str]:
 
 def run(explicit: str | None = None, pull: bool = True) -> Outcome:
     before = version()
-    source, _how = resolve_source(explicit)
+    source, how = resolve_source(explicit)
+    # Only a source the caller chose is worth remembering. Persisting a fallback
+    # would let one broken marker become permanent: upgrade falls back to the
+    # public repo, records it, and every later upgrade then pulls from GitHub
+    # instead of the checkout the user actually installed from - quietly
+    # replacing their unpushed work.
+    worth_recording = explicit is not None or "recorded at install time" in how
 
     if not is_virtualenv():
         return Outcome(
@@ -283,7 +289,8 @@ def run(explicit: str | None = None, pull: bool = True) -> Outcome:
         tail = " | ".join(l.strip() for l in out.strip().splitlines()[-3:])
         return Outcome(False, before, before, source, tail[:400] or "pip failed")
 
-    record_source(source)
+    if worth_recording:
+        record_source(source)
 
     # The running process still holds the OLD version in memory, so ask a fresh
     # interpreter what actually landed rather than reporting our own stale value.

@@ -143,10 +143,20 @@ def _points_at(launcher: Path, venv: Path) -> bool:
         text = launcher.read_text(encoding="utf-8", errors="replace")
     except OSError:
         return False
-    needle = str(venv).replace("/", "\\").lower()
-    alt = str(venv).replace("\\", "/").lower()
-    body = text.lower()
-    return needle in body or alt in body
+    body = text.lower().replace("\\", "/")
+    venv_s = str(venv).lower().replace("\\", "/")
+
+    if venv_s in body:
+        return True
+
+    # install.sh runs under Git Bash and writes a POSIX path (/tmp/unitest/...)
+    # while sys.prefix is the Windows form (C:/Users/.../Temp/unitest). Those
+    # never compare equal, so a launcher written by install.sh was left behind
+    # by an uninstall started from a Windows Python. Fall back to matching the
+    # venv's own directory name followed by its bin directory, which both forms
+    # share.
+    name = venv.name.lower()
+    return f"/{name}/scripts/" in body or f"/{name}/bin/" in body
 
 
 def _launchers(venv: Path | None = None) -> list[Path]:
@@ -220,7 +230,11 @@ def _detached_rmtree(target: Path, wait_for_pid: int) -> None:
         fh.close()
         subprocess.Popen(
             ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", fh.name],
-            creationflags=0x00000008 | 0x00000200,   # DETACHED_PROCESS | NEW_PROCESS_GROUP
+            # CREATE_NO_WINDOW, not DETACHED_PROCESS: the latter gives the
+            # child no console, PowerShell then fails to initialise, and the
+            # scheduled removal silently never happens - the venv survived an
+            # uninstall that reported success.
+            creationflags=0x08000000 | 0x00000200,   # CREATE_NO_WINDOW | NEW_GROUP
             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
