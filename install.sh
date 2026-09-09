@@ -66,7 +66,15 @@ say "  $($PY --version 2>&1) ${DIM}($(command -v "$PY"))${N}"
 
 # ---------- source ----------------------------------------------------------
 SRC=''
-SELF_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+# Piped through `curl ... | sh` there is no script file: $0 is "sh" or "-", and
+# dirname would yield "." - which would make this treat whatever directory the
+# user happens to be standing in as a CodeOrbit checkout. Only trust $0 when it
+# actually names a file.
+if [ -f "$0" ]; then
+  SELF_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+else
+  SELF_DIR=""
+fi
 if [ -f "$SELF_DIR/pyproject.toml" ] && [ -d "$SELF_DIR/codeorbit" ]; then
   SRC="$SELF_DIR"
   step "Installing from this checkout"

@@ -105,7 +105,18 @@ if ((Invoke-Exe -Exe $py -Arguments @('-c', 'import venv')).Code -ne 0) {
 }
 
 # ---------- source ----------------------------------------------------------
-$selfDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+# Piped through `irm ... | iex` there is no script file on disk, so both
+# $PSScriptRoot and $MyInvocation.MyCommand.Path are null. Passing that null to
+# Split-Path throws "Cannot bind argument to parameter 'Path'", which is what
+# the documented one-liner used to do. A null $selfDir simply means "not run
+# from a checkout", and the clone path below handles it.
+$selfDir = if ($PSScriptRoot) {
+    $PSScriptRoot
+} elseif ($MyInvocation.MyCommand.Path) {
+    Split-Path -Parent $MyInvocation.MyCommand.Path
+} else {
+    $null
+}
 $tempSrc = $null
 if ($selfDir -and (Test-Path (Join-Path $selfDir 'pyproject.toml')) -and
     (Test-Path (Join-Path $selfDir 'codeorbit'))) {
@@ -120,7 +131,10 @@ if ($selfDir -and (Test-Path (Join-Path $selfDir 'pyproject.toml')) -and
     $src = $tempSrc
     Step 'Fetching source'
     Note "$Repo ($Ref)"
-    if ((Invoke-Exe -Exe 'git' -Arguments @('clone', '--depth', '1', '--branch', $Ref, $Repo, $src)).Code -ne 0) {
+    # --quiet: git writes clone progress to stderr, which PowerShell surfaces as
+    # NativeCommandError noise even on success.
+    if ((Invoke-Exe -Exe 'git' -Arguments @('clone', '--quiet', '--depth', '1',
+                                            '--branch', $Ref, $Repo, $src)).Code -ne 0) {
         Die "Could not clone $Repo (ref: $Ref)."
     }
 }
