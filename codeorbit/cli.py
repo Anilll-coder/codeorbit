@@ -789,32 +789,83 @@ def agent(
 def install_mcp(
     path: str = typer.Option(None, "--path", "-p", help=PATH_HELP),
     agent: str = typer.Option("claude", "--agent", "-a",
-                              help="claude, cursor, or print"),
+                              help="claude, cursor or windsurf"),
+    use_global: bool = typer.Option(False, "--global", "-g",
+                                    help="Write the user-wide config, not this project's"),
+    show: bool = typer.Option(False, "--print",
+                              help="Only print the config; change nothing"),
+    remove_it: bool = typer.Option(False, "--remove",
+                                   help="Take CodeOrbit back out of the config"),
 ):
-    """Print the MCP config to register CodeOrbit with an AI agent."""
+    """Register CodeOrbit with an AI agent by writing its MCP config."""
     import json
-    import shutil
+
+    from . import mcp_config
 
     root = Path(_resolve(path)).resolve()
-    exe = shutil.which("codeorbit") or str(Path(sys.executable).with_name("codeorbit"))
 
-    entry = {"command": exe, "args": ["mcp", "--path", str(root)]}
+    if agent not in mcp_config.TARGETS:
+        console.print(f"[red]Unknown agent {agent!r}.[/red] Choose one of: "
+                      + ", ".join(mcp_config.TARGETS))
+        raise typer.Exit(1)
+    target = mcp_config.TARGETS[agent]
 
-    if agent == "claude":
-        console.print("[bold]Claude Code[/bold] - run this once:\n")
-        console.print(f"  claude mcp add codeorbit -- {exe} mcp --path {root}\n")
-        console.print("[dim]or add to .mcp.json in your project:[/dim]")
-        blob = {"mcpServers": {"codeorbit": entry}}
-    elif agent == "cursor":
-        console.print("[bold]Cursor[/bold] - add to .cursor/mcp.json "
-                      "(or ~/.cursor/mcp.json for every project):\n")
-        blob = {"mcpServers": {"codeorbit": entry}}
-    else:
-        blob = {"mcpServers": {"codeorbit": entry}}
+    if show:
+        exe = mcp_config.find_executable()
+        console.print(f"[bold]{target.name}[/bold] - config for "
+                      f"{mcp_config.config_path(agent, root, use_global)}:\n")
+        print(json.dumps({"mcpServers": {"codeorbit": mcp_config.server_entry(root, exe)}},
+                         indent=2))
+        if agent == "claude":
+            console.print("\n[dim]or, as one command:[/dim]")
+            print(f"  claude mcp add codeorbit -- {exe} mcp --path {root}")
+        return
 
-    console.print(Syntax(json.dumps(blob, indent=2), "json", theme="ansi_dark"))
-    console.print("\n[dim]The project must be indexed first: "
-                  f"codeorbit index {root}[/dim]")
+    if remove_it:
+        result, err = mcp_config.remove(agent, root, use_global)
+        if err:
+            console.print(f"[red]{err}[/red]")
+            raise typer.Exit(1)
+        if result.action == "absent":
+            console.print(f"[yellow]CodeOrbit was not in[/yellow] {result.path}")
+            return
+        console.print(f"[green]Removed[/green] CodeOrbit from {result.path}")
+        if result.backup:
+            console.print(f"[dim]backup: {result.backup}[/dim]")
+        if result.others:
+            console.print(f"[dim]left untouched: {', '.join(result.others)}[/dim]")
+        console.print("[dim]Restart the agent for it to take effect.[/dim]")
+        return
+
+    if not db.db_path(root).exists():
+        console.print(f"[yellow]Note:[/yellow] {root} is not indexed yet. "
+                      "The tools will return guidance until you run:")
+        print(f"  codeorbit index {root}\n")
+
+    result, err = mcp_config.install(agent, root, use_global)
+    if err:
+        console.print(f"[red]{err}[/red]")
+        raise typer.Exit(1)
+
+    verb = {"created": "Wrote", "updated": "Updated",
+            "unchanged": "Already configured in"}[result.action]
+    console.print(f"[green]{verb}[/green] {result.path}")
+    console.print(f"[dim]{target.name} - {target.description}[/dim]")
+    if result.backup:
+        console.print(f"[dim]backup: {result.backup}[/dim]")
+    if result.others:
+        console.print(f"[dim]other servers left untouched: "
+                      f"{', '.join(result.others)}[/dim]")
+
+    if result.action != "unchanged":
+        console.print(f"\n[bold]Restart {target.name}[/bold] to pick it up.")
+    console.print("[dim]Then ask it something like: "
+                  '"use codeorbit to explain how X works"[/dim]')
+    console.print(
+        "\n[dim]What an agent retrieves is your source code. A cloud-backed "
+        "agent sends what it receives to its own provider; `codeorbit agent` "
+        "does not.[/dim]"
+    )
 
 
 @app.command()

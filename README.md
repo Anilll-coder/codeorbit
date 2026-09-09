@@ -366,14 +366,28 @@ does this touch?* Click any node to isolate it and list its neighbours;
 ## Using it from Claude Code, Cursor, or any MCP agent
 
 ```bash
-codeorbit install-mcp          # prints the config for your agent
+codeorbit install-mcp                  # writes the config for Claude Code
+codeorbit install-mcp -a cursor        # ...or Cursor, or windsurf
+codeorbit install-mcp --print          # show it, change nothing
+codeorbit install-mcp --remove         # take it back out
 ```
 
-For Claude Code that is one line:
+That writes the file the agent reads (`.mcp.json` for Claude Code,
+`.cursor/mcp.json` for Cursor) and then you restart the agent. It **merges** -
+other MCP servers already in the file are left exactly as they were, a backup is
+taken before the first write, running it twice changes nothing, and a file it
+cannot parse is refused rather than overwritten, because that file may hold your
+other servers.
 
-```bash
-claude mcp add codeorbit -- codeorbit mcp --path /your/project
-```
+The command it writes is an absolute path to a real executable. An agent spawns
+the server as a bare subprocess with no shell and no PATH lookup of its own, so
+a plain `codeorbit` resolves to nothing — and on Windows the entry point is
+`codeorbit.exe` while the installed launcher is `codeorbit.cmd`, neither of which
+a bare name finds.
+
+`--path` is baked into the config, so one entry serves one project. For several,
+add one entry per project under different names, or omit `--path` and pass
+`project_path` on each tool call.
 
 Seven tools are exposed: `explore` (the primary one), `search`, `node`,
 `impact`, `path`, `audit`, `overview`.

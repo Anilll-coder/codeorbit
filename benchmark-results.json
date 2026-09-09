@@ -1,0 +1,54 @@
+{
+  "baseline": {
+    "named": {
+      "hits": 2,
+      "total": 8,
+      "rate": 25.0,
+      "avg_chars": 5373,
+      "avg_ms": 236,
+      "misses": [
+        "What does Console.print do to collect its renderables?  (wanted console.Console._collect_renderables)",
+        "What does Console.get_style do?  (wanted console.Console.get_style)",
+        "How does render_lines produce output?  (wanted console.Console.render_lines)",
+        "What does Text.append do?  (wanted text.Text.append)",
+        "How does Table.add_row work?  (wanted table.Table.add_row)",
+        "How does Color.parse handle its input?  (wanted color.Color.parse)"
+      ]
+    },
+    "unnamed": {
+      "hits": 0,
+      "total": 4,
+      "rate": 0.0,
+      "avg_chars": 5283,
+      "avg_ms": 268,
+      "misses": [
+        "Where do we decide how wide the terminal is?  (wanted console.Console.width)",
+        "How does a piece of text get broken across several lines?  (wanted text.Text.wrap)",
+        "Where is the decision made about whether colour is supported?  (wanted console.Console.color_system)",
+        "How is a value turned into something printable?  (wanted protocol.rich_cast)"
+      ]
+    }
+  },
+  "codeorbit": {
+    "named": {
+      "hits": 8,
+      "total": 8,
+      "rate": 100.0,
+      "avg_chars": 5700,
+      "avg_ms": 221,
+      "misses": []
+    },
+    "unnamed": {
+      "hits": 1,
+      "total": 4,
+      "rate": 25.0,
+      "avg_chars": 5862,
+      "avg_ms": 194,
+      "misses": [
+        "Where do we decide how wide the terminal is?  (wanted console.Console.width)",
+        "Where is the decision made about whether colour is supported?  (wanted console.Console.color_system)",
+        "How is a value turned into something printable?  (wanted protocol.rich_cast)"
+      ]
+    }
+  }
+}
