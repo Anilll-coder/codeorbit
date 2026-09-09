@@ -186,6 +186,55 @@ Indexing [`rich`](https://github.com/Textualize/rich) (100 files, 38,615 lines):
 The unresolved remainder is almost entirely calls that genuinely leave the
 project (`append`, `len`, `Path`, library methods). Those correctly get no edge.
 
+### Does the graph actually retrieve better? An A/B
+
+Run it yourself: `python scripts/benchmark.py`
+
+**What is measured.** Whether an arm surfaces the code that answers a question.
+Each of 12 questions has a ground-truth symbol whose source actually contains
+the answer, verified against `rich` by hand before either arm ran. An arm either
+returned that symbol or it did not — no LLM judge, no rubric, no run-to-run
+variance. Answer quality would need a judge, and a judge running on a 3.8B model
+measures the judge.
+
+**The baseline is not a strawman.** "Without CodeOrbit" greps the question's
+identifiers across the repo and returns the matching regions ranked by hit count
+— what a developer, or a naive code-RAG, actually does. It gets the *same*
+6,000-character budget and the *same* keyword extraction as the graph arm, so
+the only thing under test is what each does after keyword matching.
+
+On `rich` (100 files, 38,615 lines):
+
+| question class | baseline | CodeOrbit |
+|---|---|---|
+| **names a real identifier** (8 questions) | 2/8 — **25%** | 8/8 — **100%** |
+| **names nothing in the code** (4 questions) | 0/4 — **0%** | 1/4 — **25%** |
+| **overall** (12) | 2/12 — **17%** | 9/12 — **75%** |
+
+Both arms return ~5.4–5.9k characters, so this is not one arm simply being given
+more room.
+
+**Why the baseline loses on questions that name a symbol.** It finds the *name*
+everywhere — every call site, every import, every mention in a docstring — and
+its budget fills with references before it reaches the one definition that
+answers the question. `Console.get_style` is referenced all over `rich`; grep
+ranks by hit count and never surfaces the definition. The graph goes to the
+definition first and brings its callers and callees along.
+
+**Where CodeOrbit is still weak, and this is the honest part.** On questions that
+name nothing in the code it scores 25%. Semantic search moves that from 0/4 to
+1/4 — real, but modest. It found *"how does a piece of text get broken across
+several lines"* → `Text.wrap`, and missed the other three, including
+`Console.width` for *"where do we decide how wide the terminal is"*. Embedding a
+symbol's name, signature, docstring and body still does not reliably bridge from
+a user's vocabulary to a maintainer's. That is the open problem here, not a
+solved one.
+
+The first run of this benchmark scored 0/4 on that class for CodeOrbit too —
+because `rich` had no embeddings and the semantic layer was silently inactive.
+Building them takes about 7 minutes for 1,093 symbols on this machine; `ask`
+works without them, just with keyword ranking only.
+
 ### Performance on constrained hardware
 
 Measured on 7.3 GB RAM with **no usable GPU** — `ollama ps` reports phi4-mini
