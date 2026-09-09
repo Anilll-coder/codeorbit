@@ -22,9 +22,29 @@ SEV_COLOR = {"high": "red", "medium": "yellow", "low": "dim"}
 app = typer.Typer(add_completion=False, help="Local code intelligence over a code graph.")
 console = Console()
 
+PATH_HELP = "Project to work on (default: the current directory)"
 
-def _open(path: str):
-    root = Path(path).resolve()
+# --path may be given once before the command (`codeorbit -p DIR audit`) or on
+# the command itself (`codeorbit audit -p DIR`). The per-command option wins.
+# Without the shared one, every command had to repeat it and the two commands
+# that took a positional path behaved differently from the rest.
+_shared: dict[str, str | None] = {"path": None}
+
+
+@app.callback()
+def _root(
+    path: str = typer.Option(None, "--path", "-p", help=PATH_HELP),
+):
+    """Local code intelligence over a code graph."""
+    _shared["path"] = path
+
+
+def _resolve(path: str | None) -> str:
+    return path or _shared["path"] or "."
+
+
+def _open(path: str | None):
+    root = Path(_resolve(path)).resolve()
     try:
         return root, query.open_graph(root)
     except FileNotFoundError as e:
@@ -42,11 +62,12 @@ def _pick(conn, name: str):
 
 @app.command()
 def index(
-    path: str = typer.Argument(".", help="Project root to index"),
+    path_arg: str = typer.Argument(None, metavar="[PATH]", help="Project root to index"),
+    path: str = typer.Option(None, "--path", "-p", help=PATH_HELP),
     full: bool = typer.Option(False, "--full", help="Re-parse every file, ignoring hashes"),
 ):
     """Parse the project and build its graph (only changed files, unless --full)."""
-    root = Path(path).resolve()
+    root = Path(_resolve(path or path_arg)).resolve()
     console.print(f"Indexing [bold]{root}[/bold]")
     with console.status("parsing..."):
         st = index_project(root, full=full)
@@ -98,9 +119,12 @@ def index(
 
 
 @app.command()
-def status(path: str = typer.Argument(".")):
+def status(
+    path_arg: str = typer.Argument(None, metavar="[PATH]"),
+    path: str = typer.Option(None, "--path", "-p", help=PATH_HELP),
+):
     """Show what the index contains."""
-    root, conn = _open(path)
+    root, conn = _open(path or path_arg)
     st = db.stats(conn)
     t = Table(show_header=False, box=None)
     t.add_row("project", str(root))
@@ -119,7 +143,7 @@ def status(path: str = typer.Argument(".")):
 
 
 @app.command()
-def search(term: str, path: str = typer.Option(".", "--path", "-p"), limit: int = 15):
+def search(term: str, path: str = typer.Option(None, "--path", "-p", help=PATH_HELP), limit: int = 15):
     """Find symbols by name."""
     root, conn = _open(path)
     rows = query.search(conn, term, limit)
@@ -133,7 +157,7 @@ def search(term: str, path: str = typer.Option(".", "--path", "-p"), limit: int 
 
 
 @app.command()
-def show(name: str, path: str = typer.Option(".", "--path", "-p")):
+def show(name: str, path: str = typer.Option(None, "--path", "-p", help=PATH_HELP)):
     """Show a symbol's source with its callers and callees."""
     root, conn = _open(path)
     row = _pick(conn, name)
@@ -160,7 +184,7 @@ def show(name: str, path: str = typer.Option(".", "--path", "-p")):
 
 
 @app.command()
-def callers(name: str, path: str = typer.Option(".", "--path", "-p")):
+def callers(name: str, path: str = typer.Option(None, "--path", "-p", help=PATH_HELP)):
     """Who calls this symbol."""
     root, conn = _open(path)
     row = _pick(conn, name)
@@ -171,7 +195,7 @@ def callers(name: str, path: str = typer.Option(".", "--path", "-p")):
 
 
 @app.command()
-def impact(name: str, path: str = typer.Option(".", "--path", "-p"), depth: int = 3):
+def impact(name: str, path: str = typer.Option(None, "--path", "-p", help=PATH_HELP), depth: int = 3):
     """Blast radius: everything that transitively reaches this symbol."""
     root, conn = _open(path)
     row = _pick(conn, name)
@@ -190,7 +214,7 @@ def impact(name: str, path: str = typer.Option(".", "--path", "-p"), depth: int 
 
 
 @app.command()
-def entry(path: str = typer.Option(".", "--path", "-p")):
+def entry(path: str = typer.Option(None, "--path", "-p", help=PATH_HELP)):
     """What the most code depends on - a place to start reading."""
     root, conn = _open(path)
     t = Table("fan-in", "symbol", "location")
@@ -200,7 +224,7 @@ def entry(path: str = typer.Option(".", "--path", "-p")):
 
 
 @app.command()
-def dead(path: str = typer.Option(".", "--path", "-p")):
+def dead(path: str = typer.Option(None, "--path", "-p", help=PATH_HELP)):
     """Definitions nothing in the project calls."""
     root, conn = _open(path)
     rows = query.dead_code(conn)
@@ -213,7 +237,7 @@ def dead(path: str = typer.Option(".", "--path", "-p")):
 @app.command()
 def ask(
     question: str,
-    path: str = typer.Option(".", "--path", "-p"),
+    path: str = typer.Option(None, "--path", "-p", help=PATH_HELP),
     model: str = typer.Option(llm.DEFAULT_MODEL, "--model", "-m"),
     symbols: int = typer.Option(2, "--symbols", "-n", help="How many symbols to retrieve"),
     max_tokens: int = typer.Option(320, "--max-tokens", "-t",
@@ -268,7 +292,7 @@ def ask(
 
 @app.command()
 def review(
-    path: str = typer.Option(".", "--path", "-p"),
+    path: str = typer.Option(None, "--path", "-p", help=PATH_HELP),
     base: str = typer.Option(None, "--base", "-b",
                              help="Review against this ref (e.g. main, HEAD~1)"),
     staged: bool = typer.Option(False, "--staged", help="Review staged changes only"),
@@ -344,7 +368,7 @@ def review(
 
 @app.command()
 def audit(
-    path: str = typer.Option(".", "--path", "-p"),
+    path: str = typer.Option(None, "--path", "-p", help=PATH_HELP),
     severity: str = typer.Option("low", "--severity", "-s",
                                  help="Minimum severity: high, medium or low"),
     include_tests: bool = typer.Option(False, "--include-tests"),
@@ -421,7 +445,7 @@ def audit(
 
 @app.command()
 def fix(
-    path: str = typer.Option(".", "--path", "-p"),
+    path: str = typer.Option(None, "--path", "-p", help=PATH_HELP),
     rule: str = typer.Option(None, "--rule", "-r", help="Only fix findings from this rule id"),
     severity: str = typer.Option("high", "--severity", "-s"),
     limit: int = typer.Option(3, "--limit", "-l", help="How many findings to attempt"),
@@ -522,7 +546,7 @@ def fix(
 
 @app.command()
 def embed(
-    path: str = typer.Option(".", "--path", "-p"),
+    path: str = typer.Option(None, "--path", "-p", help=PATH_HELP),
     model: str = typer.Option(llm.EMBED_MODEL, "--model", "-m"),
 ):
     """Build semantic embeddings so `ask` can find code by meaning, not just names."""
@@ -557,7 +581,7 @@ def embed(
 
 @app.command()
 def viz(
-    path: str = typer.Option(".", "--path", "-p"),
+    path: str = typer.Option(None, "--path", "-p", help=PATH_HELP),
     view: str = typer.Option("modules", "--view", "-v", help="modules or symbols"),
     focus: str = typer.Option(None, "--focus", "-f",
                               help="Centre the symbol view on this symbol"),
@@ -620,7 +644,7 @@ def viz(
 def why(
     source: str,
     target: str,
-    path: str = typer.Option(".", "--path", "-p"),
+    path: str = typer.Option(None, "--path", "-p", help=PATH_HELP),
     max_depth: int = typer.Option(8, "--depth", "-d"),
 ):
     """Show the call path from one symbol to another."""

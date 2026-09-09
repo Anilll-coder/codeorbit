@@ -98,7 +98,15 @@ codeorbit viz --focus Segment          # ...centred on one symbol
 codeorbit viz --format mermaid         # a diagram for a report
 ```
 
-Point any command at another project with `-p/--path`.
+Every command takes a project path, in whichever position reads better:
+
+```bash
+codeorbit -p ~/code/app audit      # before the command
+codeorbit audit -p ~/code/app      # after it
+codeorbit index ~/code/app         # index and status also take it positionally
+```
+
+With none given, it works on the current directory.
 
 ## Architecture
 
@@ -300,7 +308,7 @@ pip install -e ".[dev]"
 pytest
 ```
 
-60 tests, no mocks: each builds a small project on disk, indexes it, and asserts
+99 tests, no mocks: each builds a small project on disk, indexes it, and asserts
 against the real graph. Mocking the parser would only test the mock, and the
 fixer's tests never call the model - what has to hold is that everything
 *around* the model is safe regardless of what it returns.
