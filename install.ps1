@@ -162,7 +162,11 @@ try {
     # Record where this came from: pip does not keep the source of a
     # non-editable install, so `codeorbit upgrade` would otherwise have
     # to guess at the public repo even when installed from a checkout.
-    try { Set-Content -Path (Join-Path $InstallDir '.codeorbit-source') -Value $src -Encoding utf8 } catch {}
+    # WriteAllText, not Set-Content -Encoding utf8: PowerShell 5.1 writes a
+    # BOM, and a leading U+FEFF makes the recorded path fail to resolve, so
+    # `codeorbit upgrade` could not find its own source.
+    try { [System.IO.File]::WriteAllText(
+        (Join-Path $InstallDir '.codeorbit-source'), $src) } catch {}
 
     # ---------- launcher ----------------------------------------------------
     Step 'Putting codeorbit on your PATH'

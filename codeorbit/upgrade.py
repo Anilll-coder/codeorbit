@@ -56,11 +56,18 @@ def editable_source() -> Path | None:
 
 
 def recorded_source() -> str | None:
-    """What the installer wrote down, if anything."""
+    """What the installer wrote down, if anything.
+
+    Read as utf-8-sig, not utf-8. Windows PowerShell 5.1's Set-Content -Encoding
+    utf8 writes a BOM, and a leading \\ufeff makes the recorded path fail
+    exists() - so the git pull was skipped and pip was handed a path that could
+    not resolve. The marker is also written BOM-free now, but installs made
+    before that fix still have one.
+    """
     marker = install_root() / SOURCE_MARKER
     if marker.exists():
         try:
-            text = marker.read_text(encoding="utf-8").strip()
+            text = marker.read_text(encoding="utf-8-sig").strip().lstrip("﻿")
             return text or None
         except OSError:
             return None
