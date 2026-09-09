@@ -420,6 +420,107 @@ def audit(
 
 
 @app.command()
+def fix(
+    path: str = typer.Option(".", "--path", "-p"),
+    rule: str = typer.Option(None, "--rule", "-r", help="Only fix findings from this rule id"),
+    severity: str = typer.Option("high", "--severity", "-s"),
+    limit: int = typer.Option(3, "--limit", "-l", help="How many findings to attempt"),
+    apply_fixes: bool = typer.Option(False, "--apply",
+                                     help="Write verified fixes (default: preview only)"),
+    with_tests: bool = typer.Option(False, "--test",
+                                    help="Also run the test suite against each fix"),
+    model: str = typer.Option(llm.DEFAULT_MODEL, "--model", "-m"),
+    max_tokens: int = typer.Option(500, "--max-tokens", "-t"),
+):
+    """Generate fixes for audit findings, verify them, and optionally apply."""
+    from . import fixer, verify as verifymod
+
+    root, conn = _open(path)
+
+    if not llm.available():
+        console.print("[red]Ollama is not running.[/red] Start it with: ollama serve")
+        raise typer.Exit(1)
+
+    with console.status("scanning..."):
+        report = auditmod.audit_project(root, conn, min_severity=severity)
+
+    targets = [f for f in report.findings if f.symbol_id is not None]
+    if rule:
+        targets = [f for f in targets if f.rule.id == rule]
+    targets = targets[:limit]
+
+    if not targets:
+        console.print("[green]Nothing to fix[/green] at that severity.")
+        return
+
+    if with_tests:
+        with console.status("checking the test suite is green before we start..."):
+            base = verifymod.baseline_tests_pass(root)
+        if not base.ok:
+            console.print(
+                f"[red]Tests already fail before any change[/red] ({base.detail}).\n"
+                "Fix that first, or drop --test: otherwise every candidate looks rejected."
+            )
+            raise typer.Exit(1)
+        console.print(f"[dim]baseline tests: {base.detail or 'green'}[/dim]")
+
+    console.print(f"Attempting [bold]{len(targets)}[/bold] fix(es)"
+                  + ("  [dim](preview only; --apply writes)[/dim]" if not apply_fixes else ""))
+
+    applied = rejected = skipped = 0
+
+    for i, finding in enumerate(targets, 1):
+        console.print(
+            f"\n[bold]{i}/{len(targets)}[/bold] [{SEV_COLOR[finding.rule.severity]}]"
+            f"{finding.rule.severity}[/{SEV_COLOR[finding.rule.severity]}] "
+            f"{finding.rule.title}  [dim]{finding.path}:{finding.line}[/dim]"
+        )
+
+        with console.status("asking the model..."):
+            cand = fixer.propose(root, conn, finding, model=model, max_tokens=max_tokens)
+
+        if cand is None or cand.replacement is None:
+            reason = (cand.error if cand else "could not locate the symbol")
+            console.print(f"  [yellow]skipped[/yellow] - {reason}")
+            skipped += 1
+            continue
+
+        with console.status("verifying in a sandbox..."):
+            cand = fixer.verify_candidate(root, cand, with_tests)
+
+        for g in cand.verdict.gates:
+            mark = "[green]pass[/green]" if g.ok else "[red]FAIL[/red]"
+            extra = f" [dim]{g.detail}[/dim]" if g.detail else ""
+            console.print(f"  {g.name:<8} {mark}{extra}")
+
+        if not cand.verdict.ok:
+            console.print("  [red]rejected[/red] - not written")
+            rejected += 1
+            continue
+
+        diff = fixer.diff_lines(cand)
+        if diff:
+            console.print(Syntax("\n".join(diff), "diff", theme="ansi_dark"))
+
+        if apply_fixes:
+            target = fixer.apply(root, cand)
+            console.print(f"  [green]applied[/green] -> {target.name} "
+                          f"[dim](backup: {target.name}.orig)[/dim]")
+            applied += 1
+        else:
+            console.print("  [green]verified[/green] - rerun with --apply to write it")
+            applied += 1
+
+    console.print(
+        f"\n[bold]{applied}[/bold] verified"
+        + (f", [red]{rejected}[/red] rejected" if rejected else "")
+        + (f", [yellow]{skipped}[/yellow] skipped" if skipped else "")
+    )
+    if applied and apply_fixes:
+        console.print("[dim]re-run `codeorbit index` to refresh the graph[/dim]")
+
+
+@app.command()
 def embed(
     path: str = typer.Option(".", "--path", "-p"),
     model: str = typer.Option(llm.EMBED_MODEL, "--model", "-m"),
