@@ -556,6 +556,67 @@ def embed(
 
 
 @app.command()
+def viz(
+    path: str = typer.Option(".", "--path", "-p"),
+    view: str = typer.Option("modules", "--view", "-v", help="modules or symbols"),
+    focus: str = typer.Option(None, "--focus", "-f",
+                              help="Centre the symbol view on this symbol"),
+    depth: int = typer.Option(2, "--depth", "-d", help="Hops around --focus"),
+    out: str = typer.Option(None, "--out", "-o", help="Output file"),
+    fmt: str = typer.Option("html", "--format", help="html or mermaid"),
+    open_it: bool = typer.Option(True, "--open/--no-open", help="Open in a browser"),
+):
+    """Draw the graph as a self-contained HTML page (or a Mermaid diagram)."""
+    from . import viz as vizmod
+
+    root, conn = _open(path)
+
+    if view not in ("modules", "symbols"):
+        console.print("[red]--view must be 'modules' or 'symbols'[/red]")
+        raise typer.Exit(1)
+    if fmt not in ("html", "mermaid"):
+        console.print("[red]--format must be 'html' or 'mermaid'[/red]")
+        raise typer.Exit(1)
+
+    focus_id = None
+    if focus:
+        row = _pick(conn, focus)
+        focus_id = row["id"]
+        view = "symbols"
+
+    with console.status("building the graph..."):
+        data = (vizmod.module_graph(conn) if view == "modules"
+                else vizmod.symbol_graph(conn, focus_id, depth))
+
+    if not data["nodes"]:
+        console.print("[yellow]Nothing to draw[/yellow] - is the project indexed?")
+        raise typer.Exit(1)
+
+    if fmt == "mermaid":
+        text = vizmod.to_mermaid(data)
+        target = Path(out) if out else root / "codeorbit-graph.mmd"
+        target.write_text(text, encoding="utf-8")
+        console.print(f"[green]Wrote[/green] {target}  "
+                      f"[dim]({len(data['nodes'])} nodes)[/dim]")
+        return
+
+    title = f"CodeOrbit - {root.name}"
+    sub = (f"{len(data['nodes'])} modules, {len(data['edges'])} imports"
+           if view == "modules" else
+           f"{len(data['nodes'])} symbols, {len(data['edges'])} calls"
+           + (f" around {focus}" if focus else ""))
+
+    html = vizmod.render_html(data, title, sub)
+    target = Path(out) if out else root / "codeorbit-graph.html"
+    target.write_text(html, encoding="utf-8")
+    console.print(f"[green]Wrote[/green] {target}  [dim]({sub})[/dim]")
+
+    if open_it:
+        import webbrowser
+        webbrowser.open(target.resolve().as_uri())
+
+
+@app.command()
 def why(
     source: str,
     target: str,

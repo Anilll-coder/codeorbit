@@ -182,6 +182,29 @@ def test_extends_edge_exists(graph):
     assert n >= 1
 
 
+def test_name_match_does_not_cross_languages(tmp_path: Path):
+    """A JS import must not bind to a same-named Python symbol.
+
+    Found end-to-end: `import { load } from "./svc"` in a .js file resolved to
+    `svc.load` in a .py file purely on the name, and was reported as an EXACT
+    call edge. Static parsing cannot see a cross-language call, so a same-name
+    symbol in another language is a coincidence, not a target.
+    """
+    write(tmp_path, "svc.py", "def load(name):\n    return name\n")
+    write(tmp_path, "ui.js",
+          'import { load } from "./svc";\n'
+          "export function render() { return load(1); }\n")
+    index_project(tmp_path)
+    resolve_project(tmp_path)
+    conn = db.connect(tmp_path)
+
+    py_load = next(r for r in query.search(conn, "load") if r["path"].endswith(".py"))
+    js_callers = [c for c in query.callers(conn, py_load["id"])
+                  if c["path"].endswith(".js")]
+    conn.close()
+    assert not js_callers, "a JavaScript caller must not bind to a Python definition"
+
+
 def test_external_calls_get_no_edge(graph):
     """A call to something outside the project must not invent an edge."""
     _, conn = graph

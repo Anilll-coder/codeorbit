@@ -89,6 +89,13 @@ codeorbit audit -s high --explain      # high severity only, explained by the mo
 codeorbit why make_user normalize      # the call path between two symbols
 
 codeorbit embed                        # enable search by meaning (one time)
+
+codeorbit fix -s high                  # propose fixes, verified, preview only
+codeorbit fix -s high --apply --test   # ...write them, gated on the test suite
+
+codeorbit viz                          # interactive graph as a standalone HTML file
+codeorbit viz --focus Segment          # ...centred on one symbol
+codeorbit viz --format mermaid         # a diagram for a report
 ```
 
 Point any command at another project with `-p/--path`.
@@ -107,6 +114,9 @@ files
   -> rules.py        29 security / bug / quality patterns
   -> audit.py        findings, attributed to symbols and ranked by reach
   -> semantic.py     symbol embeddings, fused with keyword search by RRF
+  -> fixer.py        propose a fix for one symbol, splice it, never trust it
+  -> verify.py       the gates a fix must survive before it may touch a file
+  -> viz.py          self-contained interactive HTML, or Mermaid
   -> llm.py          Ollama, streaming, local only
   -> cli.py          the commands above
 ```
@@ -245,6 +255,44 @@ which files to skip" where it previously did not appear at all - and questions
 that do name an identifier still rank it first, so nothing regressed. Compare
 the two yourself with `ask --no-semantic`.
 
+## Fixing, without trusting the model
+
+A 3.8B model on CPU produces confident nonsense some of the time, so
+`codeorbit fix` never applies anything on the strength of the model's
+confidence. Each candidate is spliced into a **copy** of the project and put
+through gates, cheapest first:
+
+| gate | rejects |
+|---|---|
+| `syntax` | the edit does not parse (`ast.parse`, or `node --check`) |
+| `symbol` | the symbol we set out to fix no longer exists - the worst failure mode, a "fix" that deletes the function |
+| `tests` | the project's own suite goes red (opt-in, `--test`) |
+
+Only a candidate that passes every gate is even offered. Writing is opt-in
+(`--apply`) and always leaves a `.orig` backup. `apply()` itself re-checks the
+verdict and raises rather than write an unverified fix.
+
+The model is given the smallest job that can work - rewrite ONE symbol, return
+only that symbol - because asking a small model for a whole-file rewrite loses
+unrelated code. Three real failure modes are handled rather than rejected: a
+method returned flush-left is re-indented, imports the model prepends are
+hoisted to the file's import block instead of being spliced mid-file (and not
+duplicated if already present), and `--test` checks the suite is green *before*
+any change so a pre-existing failure is not blamed on the model.
+
+## Seeing the graph
+
+`codeorbit viz` writes one HTML file that embeds its data and its own force
+layout and makes **zero external requests** - no CDN, no fonts, no network. A
+viewer that needed an internet connection would contradict the whole premise;
+this one can be emailed or opened from a USB stick.
+
+Two views, because they answer different questions. `modules` is one node per
+file with import edges: *how is this project shaped?* `symbols` is functions and
+methods with call edges, optionally centred on one symbol via `--focus`: *what
+does this touch?* Click any node to isolate it and list its neighbours;
+`--format mermaid` emits a diagram to paste into a report instead.
+
 ## Tests
 
 ```bash
@@ -252,20 +300,32 @@ pip install -e ".[dev]"
 pytest
 ```
 
-26 tests, no mocks: each builds a small project on disk, indexes it, and asserts
-against the real graph. Mocking the parser would only test the mock. The suite
-found a real bug while being written - `nodes_fts` is an external-content FTS5
-table, so the `ON DELETE CASCADE` that removes a deleted file's symbols does not
-touch the search index, leaving deleted symbols searchable. Fixed with a delete
-trigger, and pinned by a test.
+59 tests, no mocks: each builds a small project on disk, indexes it, and asserts
+against the real graph. Mocking the parser would only test the mock, and the
+fixer's tests never call the model - what has to hold is that everything
+*around* the model is safe regardless of what it returns.
+
+Writing them found two real bugs, both now pinned by a test:
+
+- `nodes_fts` is an external-content FTS5 table, so the `ON DELETE CASCADE` that
+  removes a deleted file's symbols does not touch the search index - deleted
+  symbols stayed searchable forever. Fixed with a delete trigger.
+- `json.dumps` does not escape `<`, so a symbol named `</script>` closed the
+  script block in a generated viewer and everything after it parsed as HTML.
+  Every string on that page comes from the codebase being analysed, so that is
+  attacker-controlled input the moment you point this at a repository you did
+  not write. Now escaped to `<`.
 
 ## Status
 
-Working end to end: index → resolve → query → graph-grounded local answers, and
-graph-grounded review of a change.
+Complete and working end to end: index → resolve → query → graph-grounded local
+answers, review of a change, ranked auditing, verified fix generation, and an
+interactive graph viewer.
 
-Not built yet: standalone bug/security detection, automated fix generation with
-verification, and an interactive graph visualisation.
+Languages are Python and JavaScript. The known limits are honest ones: static
+parsing cannot follow dynamic dispatch (decorator-registered and dict-dispatched
+functions show up as uncalled), and answer latency is bounded by CPU generation
+speed rather than by anything the graph does.
 
 ## Prior art
 

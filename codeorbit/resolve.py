@@ -32,7 +32,8 @@ def resolve_project(root: Path) -> dict:
     conn.execute("UPDATE pending_calls SET resolved = 0")
 
     nodes = conn.execute(
-        "SELECT id, name, qname, kind, file_id FROM nodes WHERE kind != 'module'"
+        "SELECT n.id, n.name, n.qname, n.kind, n.file_id, f.lang AS lang "
+        "FROM nodes n JOIN files f ON f.id = n.file_id WHERE n.kind != 'module'"
     ).fetchall()
 
     by_name: dict[str, list] = defaultdict(list)
@@ -73,7 +74,8 @@ def resolve_project(root: Path) -> dict:
     counts = {"exact": 0, "heuristic": 0, "unresolved": 0, "extends": 0}
 
     pend = conn.execute(
-        "SELECT id, src, callee, recv, file_id, line FROM pending_calls"
+        "SELECT p.id, p.src, p.callee, p.recv, p.file_id, p.line, f.lang AS lang "
+        "FROM pending_calls p JOIN files f ON f.id = p.file_id"
     ).fetchall()
 
     for p in pend:
@@ -140,12 +142,18 @@ def _candidates(p, by_name, by_file_name, imports_by_file,
     imported = imports_by_file.get(fid, {})
     if name in imported:
         real = imported[name]
-        hits = by_name.get(real) or by_name.get(name) or []
+        pool = (by_name.get(real) or []) + (by_name.get(name) or [])
+        hits = [h for h in pool if h["lang"] == p["lang"]]
         if hits:
             return [hits[0]["id"]], "exact"
 
-    # 4 / 5. project-wide name match
-    hits = by_name.get(name) or []
+    # 4 / 5. project-wide name match, within the SAME language.
+    # Without the language filter a JS `import { load } from "./svc"` binds to a
+    # Python `svc.load` purely because the names match, and is reported as an
+    # exact call edge. Cross-language calls are not something static parsing can
+    # see, so a same-name symbol in another language is a coincidence, not a
+    # target.
+    hits = [h for h in (by_name.get(name) or []) if h["lang"] == p["lang"]]
     if len(hits) == 1:
         return [hits[0]["id"]], "heuristic"
     if hits:
