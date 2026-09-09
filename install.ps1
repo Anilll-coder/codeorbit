@@ -159,6 +159,11 @@ try {
     }
     Ok 'ok'
 
+    # Record where this came from: pip does not keep the source of a
+    # non-editable install, so `codeorbit upgrade` would otherwise have
+    # to guess at the public repo even when installed from a checkout.
+    try { Set-Content -Path (Join-Path $InstallDir '.codeorbit-source') -Value $src -Encoding utf8 } catch {}
+
     # ---------- launcher ----------------------------------------------------
     Step 'Putting codeorbit on your PATH'
     $target = Join-Path $InstallDir 'Scripts\codeorbit.exe'

@@ -31,9 +31,29 @@ PATH_HELP = "Project to work on (default: the current directory)"
 _shared: dict[str, str | None] = {"path": None}
 
 
+def _version_callback(value: bool):
+    """Print what is installed and where it runs from, then exit.
+
+    "Where from" is half the point: a stale install and a broken install look
+    identical without it.
+    """
+    if not value:
+        return
+    from . import upgrade as upgrademod
+
+    console.print(f"codeorbit {upgrademod.version()}")
+    console.print(f"[dim]running from {Path(sys.executable).parent}[/dim]")
+    src = upgrademod.editable_source() or upgrademod.recorded_source()
+    if src:
+        console.print(f"[dim]installed from {src}[/dim]")
+    raise typer.Exit()
+
+
 @app.callback()
 def _root(
     path: str = typer.Option(None, "--path", "-p", help=PATH_HELP),
+    version: bool = typer.Option(None, "--version", "-V", callback=_version_callback,
+                                 is_eager=True, help="Show the installed version"),
 ):
     """Local code intelligence over a code graph."""
     _shared["path"] = path
@@ -866,6 +886,62 @@ def install_mcp(
         "agent sends what it receives to its own provider; `codeorbit agent` "
         "does not.[/dim]"
     )
+
+
+@app.command()
+def upgrade(
+    source: str = typer.Option(None, "--from", "-f",
+                               help="Path or git URL to install from"),
+    no_pull: bool = typer.Option(False, "--no-pull",
+                                 help="Skip git pull on a local checkout"),
+    dry_run: bool = typer.Option(False, "--dry-run",
+                                 help="Show what would happen, change nothing"),
+):
+    """Upgrade this CodeOrbit install in place."""
+    from . import upgrade as upgrademod
+
+    current = upgrademod.version()
+    src, how = upgrademod.resolve_source(source)
+
+    console.print(f"installed: [bold]codeorbit {current}[/bold]")
+    console.print(f"[dim]from {Path(sys.executable).parent}[/dim]")
+    console.print(f"upgrade source: [bold]{src}[/bold]  [dim]({how})[/dim]")
+
+    if not upgrademod.is_virtualenv():
+        console.print(
+            "\n[red]Not in a virtualenv.[/red] Upgrading here would modify the "
+            "system Python.\n  pip install --upgrade codeorbit")
+        raise typer.Exit(1)
+
+    if dry_run:
+        console.print("\n[dim]--dry-run: nothing was changed[/dim]")
+        return
+
+    with console.status("upgrading..."):
+        outcome = upgrademod.run(source, pull=not no_pull)
+
+    if outcome.detail and outcome.ok:
+        console.print(f"[dim]{outcome.detail}[/dim]")
+
+    if not outcome.ok:
+        console.print(f"\n[red]Upgrade failed.[/red] {outcome.detail}")
+        raise typer.Exit(1)
+
+    if outcome.after == "pending":
+        console.print(
+            "\n[green]Upgrade started.[/green] Windows cannot replace "
+            "codeorbit.exe while it is\nthe program running, so the last step "
+            "runs once this command exits."
+        )
+        console.print(f"[dim]{outcome.detail}[/dim]")
+        console.print("[dim]Check it landed with:  codeorbit --version[/dim]")
+    elif outcome.changed:
+        console.print(f"\n[green]Upgraded[/green] {outcome.before} -> "
+                      f"[bold]{outcome.after}[/bold]")
+    else:
+        console.print(f"\n[green]Already current[/green] at {outcome.after}")
+        console.print("[dim]Reinstalled from source, so code changes since the "
+                      "last version bump are now live.[/dim]")
 
 
 @app.command()

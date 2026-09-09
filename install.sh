@@ -114,6 +114,11 @@ step "Installing CodeOrbit and its dependencies"
   $VPY -m pip install --upgrade '$SRC'"
 say "  ${G}ok${N}"
 
+# Record where this came from. pip does not keep the source of a
+# non-editable install, so `codeorbit upgrade` would otherwise have to
+# guess at the public repo even when installed from a local checkout.
+echo "$SRC" > "$HOME_DIR/.codeorbit-source" 2>/dev/null || true
+
 # ---------- launcher --------------------------------------------------------
 step "Putting codeorbit on your PATH"
 mkdir -p "$BIN_DIR" || die "Could not create $BIN_DIR"
