@@ -412,6 +412,11 @@ failure does not look like what it is:
   will not rewrite an entry that only *spells* its paths differently, precisely
   so re-running it does not cost you the approval.
 
+If a session still reports it as unavailable, `cursor-agent --approve-mcps`
+starts one with the gate off, which tells you whether approval was the problem.
+Treat it as a diagnostic rather than a fix: it approves **every** MCP server the
+project configures, not just CodeOrbit, and only for that run.
+
 Seven tools are exposed: `explore` (the primary one), `search`, `node`,
 `impact`, `path`, `audit`, `overview`.
 

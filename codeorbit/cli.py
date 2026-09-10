@@ -897,6 +897,15 @@ def install_mcp(
         console.print("[dim]  `cursor-agent mcp list` does not check approvals - "
                       "a server listed fine there can still be refused in a "
                       "session.[/dim]")
+        # The escape hatch, with the reason to prefer approving properly. It is
+        # a blanket switch: it turns the gate off for the whole run, for every
+        # server the project configures, not for CodeOrbit alone.
+        console.print("[yellow]  If a session still reports it as unavailable:"
+                      "[/yellow] [bold]cursor-agent --approve-mcps[/bold]")
+        console.print("[dim]  That approves EVERY MCP server this project "
+                      "configures, for that run - so use it to confirm the "
+                      "cause, then approve normally.[/dim]")
+        console.print()
 
     console.print("[dim]Then ask it something like: "
                   '"use codeorbit to explain how X works"[/dim]')
