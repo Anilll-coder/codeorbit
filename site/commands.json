@@ -1,0 +1,1074 @@
+{
+  "generated_by": "scripts/gen_commands.py",
+  "panels": [
+    "Build the graph",
+    "Explore",
+    "Ask questions",
+    "Review and fix",
+    "Connect an AI agent",
+    "Manage this install"
+  ],
+  "commands": [
+    {
+      "name": "agent",
+      "panel": "Ask questions",
+      "summary": "Let a local Ollama model drive the MCP tools to answer a question.",
+      "description": "",
+      "usage": "[OPTIONS] {question}",
+      "arguments": [
+        {
+          "kind": "argument",
+          "name": "question",
+          "help": "",
+          "required": true
+        }
+      ],
+      "options": [
+        {
+          "kind": "option",
+          "name": "--path, -p",
+          "help": "Project to work on (default: the current directory)",
+          "required": false,
+          "default": "",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--model, -m",
+          "help": "A tool-calling Ollama model",
+          "required": false,
+          "default": "",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--rounds, -r",
+          "help": "Max tool-calling rounds",
+          "required": false,
+          "default": "6",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--max-tokens, -t",
+          "help": "",
+          "required": false,
+          "default": "400",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--check",
+          "help": "Only report which local models can call tools",
+          "required": false,
+          "default": "",
+          "metavar": ""
+        }
+      ],
+      "examples": [
+        {
+          "cmd": "codeorbit agent \"is load safe to change?\"",
+          "note": "A local model drives the MCP tools itself, over several steps."
+        }
+      ]
+    },
+    {
+      "name": "ask",
+      "panel": "Ask questions",
+      "summary": "Ask a question about the codebase, answered from the graph by a local model.",
+      "description": "",
+      "usage": "[OPTIONS] {question}",
+      "arguments": [
+        {
+          "kind": "argument",
+          "name": "question",
+          "help": "",
+          "required": true
+        }
+      ],
+      "options": [
+        {
+          "kind": "option",
+          "name": "--path, -p",
+          "help": "Project to work on (default: the current directory)",
+          "required": false,
+          "default": "",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--model, -m",
+          "help": "",
+          "required": false,
+          "default": "phi4-mini",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--symbols, -n",
+          "help": "How many symbols to retrieve",
+          "required": false,
+          "default": "2",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--max-tokens, -t",
+          "help": "Cap the answer length (CPU generates ~1-2 tok/s)",
+          "required": false,
+          "default": "320",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--show-context",
+          "help": "Print what was retrieved",
+          "required": false,
+          "default": "",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--no-llm",
+          "help": "Retrieve only, skip the model",
+          "required": false,
+          "default": "",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--no-semantic",
+          "help": "Keyword retrieval only (for A/B comparison)",
+          "required": false,
+          "default": "",
+          "metavar": ""
+        }
+      ],
+      "examples": [
+        {
+          "cmd": "codeorbit ask \"How does Console.print render output?\"",
+          "note": "Answered by a local model, grounded in the graph."
+        },
+        {
+          "cmd": "codeorbit ask \"what calls load?\" --show-context",
+          "note": "See exactly what the model was given."
+        }
+      ]
+    },
+    {
+      "name": "audit",
+      "panel": "Review and fix",
+      "summary": "Find bugs and security issues, ranked by how much code they reach.",
+      "description": "",
+      "usage": "[OPTIONS]",
+      "arguments": [],
+      "options": [
+        {
+          "kind": "option",
+          "name": "--path, -p",
+          "help": "Project to work on (default: the current directory)",
+          "required": false,
+          "default": "",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--severity, -s",
+          "help": "Minimum severity: high, medium or low",
+          "required": false,
+          "default": "low",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--include-tests",
+          "help": "",
+          "required": false,
+          "default": "",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--limit, -l",
+          "help": "Findings to display",
+          "required": false,
+          "default": "25",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--explain",
+          "help": "Ask the local model which are real and how to fix them",
+          "required": false,
+          "default": "",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--model, -m",
+          "help": "",
+          "required": false,
+          "default": "phi4-mini",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--max-tokens, -t",
+          "help": "",
+          "required": false,
+          "default": "400",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--explain-count",
+          "help": "",
+          "required": false,
+          "default": "4",
+          "metavar": ""
+        }
+      ],
+      "examples": [
+        {
+          "cmd": "codeorbit audit",
+          "note": "Bugs and security issues, ranked by how much they reach."
+        },
+        {
+          "cmd": "codeorbit audit -s high --explain",
+          "note": "High severity only, explained by the model."
+        }
+      ]
+    },
+    {
+      "name": "callers",
+      "panel": "Explore",
+      "summary": "Who calls this symbol.",
+      "description": "",
+      "usage": "[OPTIONS] {name}",
+      "arguments": [
+        {
+          "kind": "argument",
+          "name": "name",
+          "help": "",
+          "required": true
+        }
+      ],
+      "options": [
+        {
+          "kind": "option",
+          "name": "--path, -p",
+          "help": "Project to work on (default: the current directory)",
+          "required": false,
+          "default": "",
+          "metavar": ""
+        }
+      ],
+      "examples": [
+        {
+          "cmd": "codeorbit callers render",
+          "note": "Who calls this."
+        }
+      ]
+    },
+    {
+      "name": "dead",
+      "panel": "Explore",
+      "summary": "Definitions nothing in the project calls.",
+      "description": "",
+      "usage": "[OPTIONS]",
+      "arguments": [],
+      "options": [
+        {
+          "kind": "option",
+          "name": "--path, -p",
+          "help": "Project to work on (default: the current directory)",
+          "required": false,
+          "default": "",
+          "metavar": ""
+        }
+      ],
+      "examples": [
+        {
+          "cmd": "codeorbit dead",
+          "note": "Definitions nothing in the project calls."
+        }
+      ]
+    },
+    {
+      "name": "embed",
+      "panel": "Build the graph",
+      "summary": "Build semantic embeddings so `ask` can find code by meaning, not just names.",
+      "description": "",
+      "usage": "[OPTIONS]",
+      "arguments": [],
+      "options": [
+        {
+          "kind": "option",
+          "name": "--path, -p",
+          "help": "Project to work on (default: the current directory)",
+          "required": false,
+          "default": "",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--model, -m",
+          "help": "",
+          "required": false,
+          "default": "nomic-embed-text",
+          "metavar": ""
+        }
+      ],
+      "examples": [
+        {
+          "cmd": "codeorbit embed",
+          "note": "One time. Lets `ask` find code by meaning, not just names."
+        }
+      ]
+    },
+    {
+      "name": "entry",
+      "panel": "Explore",
+      "summary": "What the most code depends on - a place to start reading.",
+      "description": "",
+      "usage": "[OPTIONS]",
+      "arguments": [],
+      "options": [
+        {
+          "kind": "option",
+          "name": "--path, -p",
+          "help": "Project to work on (default: the current directory)",
+          "required": false,
+          "default": "",
+          "metavar": ""
+        }
+      ],
+      "examples": [
+        {
+          "cmd": "codeorbit entry",
+          "note": "What the most code depends on: where to start reading."
+        }
+      ]
+    },
+    {
+      "name": "fix",
+      "panel": "Review and fix",
+      "summary": "Generate fixes for audit findings, verify them, and optionally apply.",
+      "description": "",
+      "usage": "[OPTIONS]",
+      "arguments": [],
+      "options": [
+        {
+          "kind": "option",
+          "name": "--path, -p",
+          "help": "Project to work on (default: the current directory)",
+          "required": false,
+          "default": "",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--rule, -r",
+          "help": "Only fix findings from this rule id",
+          "required": false,
+          "default": "",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--severity, -s",
+          "help": "",
+          "required": false,
+          "default": "high",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--limit, -l",
+          "help": "How many findings to attempt",
+          "required": false,
+          "default": "3",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--apply",
+          "help": "Write verified fixes (default: preview only)",
+          "required": false,
+          "default": "",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--test",
+          "help": "Also run the test suite against each fix",
+          "required": false,
+          "default": "",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--model, -m",
+          "help": "",
+          "required": false,
+          "default": "phi4-mini",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--max-tokens, -t",
+          "help": "",
+          "required": false,
+          "default": "500",
+          "metavar": ""
+        }
+      ],
+      "examples": [
+        {
+          "cmd": "codeorbit fix -s high",
+          "note": "Propose fixes. Preview only, nothing is written."
+        },
+        {
+          "cmd": "codeorbit fix -s high --apply --test",
+          "note": "Write them, gated on your test suite."
+        }
+      ]
+    },
+    {
+      "name": "impact",
+      "panel": "Explore",
+      "summary": "Blast radius: everything that transitively reaches this symbol.",
+      "description": "",
+      "usage": "[OPTIONS] {name}",
+      "arguments": [
+        {
+          "kind": "argument",
+          "name": "name",
+          "help": "",
+          "required": true
+        }
+      ],
+      "options": [
+        {
+          "kind": "option",
+          "name": "--path, -p",
+          "help": "Project to work on (default: the current directory)",
+          "required": false,
+          "default": "",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--depth",
+          "help": "",
+          "required": false,
+          "default": "3",
+          "metavar": ""
+        }
+      ],
+      "examples": [
+        {
+          "cmd": "codeorbit impact Segment",
+          "note": "Everything that transitively reaches this symbol."
+        },
+        {
+          "cmd": "codeorbit impact Segment --depth 2",
+          "note": "Stop at two hops."
+        }
+      ]
+    },
+    {
+      "name": "index",
+      "panel": "Build the graph",
+      "summary": "Parse the project and build its graph (only changed files, unless --full).",
+      "description": "",
+      "usage": "[OPTIONS] [PATH]",
+      "arguments": [
+        {
+          "kind": "argument",
+          "name": "[PATH]",
+          "help": "Project root to index",
+          "required": false
+        }
+      ],
+      "options": [
+        {
+          "kind": "option",
+          "name": "--path, -p",
+          "help": "Project to work on (default: the current directory)",
+          "required": false,
+          "default": "",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--full",
+          "help": "Re-parse every file, ignoring hashes",
+          "required": false,
+          "default": "",
+          "metavar": ""
+        }
+      ],
+      "examples": [
+        {
+          "cmd": "codeorbit index .",
+          "note": "Build the graph for the current project."
+        },
+        {
+          "cmd": "codeorbit index ~/code/app",
+          "note": "Index somewhere else."
+        },
+        {
+          "cmd": "codeorbit index --full",
+          "note": "Re-parse every file, ignoring the hash cache."
+        }
+      ]
+    },
+    {
+      "name": "install-mcp",
+      "panel": "Connect an AI agent",
+      "summary": "Register CodeOrbit with an AI agent by writing its MCP config.",
+      "description": "",
+      "usage": "[OPTIONS]",
+      "arguments": [],
+      "options": [
+        {
+          "kind": "option",
+          "name": "--path, -p",
+          "help": "Project to work on (default: the current directory)",
+          "required": false,
+          "default": "",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--agent, -a",
+          "help": "claude, cursor or windsurf",
+          "required": false,
+          "default": "claude",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--global, -g",
+          "help": "Write the user-wide config, not this project's",
+          "required": false,
+          "default": "",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--print",
+          "help": "Only print the config; change nothing",
+          "required": false,
+          "default": "",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--remove",
+          "help": "Take CodeOrbit back out of the config",
+          "required": false,
+          "default": "",
+          "metavar": ""
+        }
+      ],
+      "examples": [
+        {
+          "cmd": "codeorbit install-mcp",
+          "note": "Register with Claude Code."
+        },
+        {
+          "cmd": "codeorbit install-mcp -a cursor",
+          "note": "...or Cursor, or windsurf."
+        },
+        {
+          "cmd": "codeorbit install-mcp --print",
+          "note": "Show the config without writing it."
+        }
+      ]
+    },
+    {
+      "name": "mcp",
+      "panel": "Connect an AI agent",
+      "summary": "Serve the graph over MCP so Claude Code, Cursor and other agents can use it.",
+      "description": "",
+      "usage": "[OPTIONS]",
+      "arguments": [],
+      "options": [
+        {
+          "kind": "option",
+          "name": "--path, -p",
+          "help": "Project to work on (default: the current directory)",
+          "required": false,
+          "default": "",
+          "metavar": ""
+        }
+      ],
+      "examples": [
+        {
+          "cmd": "codeorbit mcp",
+          "note": "Serve the graph over MCP. Agents run this, you rarely do."
+        }
+      ]
+    },
+    {
+      "name": "review",
+      "panel": "Review and fix",
+      "summary": "Review the current change together with what the graph says it reaches.",
+      "description": "",
+      "usage": "[OPTIONS]",
+      "arguments": [],
+      "options": [
+        {
+          "kind": "option",
+          "name": "--path, -p",
+          "help": "Project to work on (default: the current directory)",
+          "required": false,
+          "default": "",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--base, -b",
+          "help": "Review against this ref (e.g. main, HEAD~1)",
+          "required": false,
+          "default": "",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--staged",
+          "help": "Review staged changes only",
+          "required": false,
+          "default": "",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--model, -m",
+          "help": "",
+          "required": false,
+          "default": "phi4-mini",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--symbols, -n",
+          "help": "Max changed symbols to review",
+          "required": false,
+          "default": "4",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--max-tokens, -t",
+          "help": "",
+          "required": false,
+          "default": "400",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--show-context",
+          "help": "",
+          "required": false,
+          "default": "",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--no-llm",
+          "help": "Show the blast radius, skip the model",
+          "required": false,
+          "default": "",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--pr",
+          "help": "Review this GitHub pull request instead",
+          "required": false,
+          "default": "",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--repo",
+          "help": "owner/name, when the PR is not in origin's repository",
+          "required": false,
+          "default": "",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--post",
+          "help": "Post the review to the PR (asks first)",
+          "required": false,
+          "default": "",
+          "metavar": ""
+        }
+      ],
+      "examples": [
+        {
+          "cmd": "codeorbit review",
+          "note": "Review your working tree with its blast radius."
+        },
+        {
+          "cmd": "codeorbit review --base main",
+          "note": "Review the branch against main."
+        },
+        {
+          "cmd": "codeorbit review --staged --no-llm",
+          "note": "Just the risk table, instantly."
+        },
+        {
+          "cmd": "codeorbit review --pr 42",
+          "note": "Review a GitHub PR against a graph of its own head."
+        },
+        {
+          "cmd": "codeorbit review --pr 42 --post",
+          "note": "...and offer to post it back. Asks first."
+        }
+      ]
+    },
+    {
+      "name": "search",
+      "panel": "Explore",
+      "summary": "Find symbols by name.",
+      "description": "",
+      "usage": "[OPTIONS] {term}",
+      "arguments": [
+        {
+          "kind": "argument",
+          "name": "term",
+          "help": "",
+          "required": true
+        }
+      ],
+      "options": [
+        {
+          "kind": "option",
+          "name": "--path, -p",
+          "help": "Project to work on (default: the current directory)",
+          "required": false,
+          "default": "",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--limit",
+          "help": "",
+          "required": false,
+          "default": "15",
+          "metavar": ""
+        }
+      ],
+      "examples": [
+        {
+          "cmd": "codeorbit search Console",
+          "note": "Find symbols whose name matches."
+        },
+        {
+          "cmd": "codeorbit search render --limit 30",
+          "note": "More results."
+        }
+      ]
+    },
+    {
+      "name": "show",
+      "panel": "Explore",
+      "summary": "Show a symbol's source with its callers and callees.",
+      "description": "",
+      "usage": "[OPTIONS] {name}",
+      "arguments": [
+        {
+          "kind": "argument",
+          "name": "name",
+          "help": "",
+          "required": true
+        }
+      ],
+      "options": [
+        {
+          "kind": "option",
+          "name": "--path, -p",
+          "help": "Project to work on (default: the current directory)",
+          "required": false,
+          "default": "",
+          "metavar": ""
+        }
+      ],
+      "examples": [
+        {
+          "cmd": "codeorbit show Console.print",
+          "note": "Source, callers and callees in one view."
+        }
+      ]
+    },
+    {
+      "name": "status",
+      "panel": "Build the graph",
+      "summary": "Show what the index contains.",
+      "description": "",
+      "usage": "[OPTIONS] [PATH]",
+      "arguments": [
+        {
+          "kind": "argument",
+          "name": "[PATH]",
+          "help": "",
+          "required": false
+        }
+      ],
+      "options": [
+        {
+          "kind": "option",
+          "name": "--path, -p",
+          "help": "Project to work on (default: the current directory)",
+          "required": false,
+          "default": "",
+          "metavar": ""
+        }
+      ],
+      "examples": [
+        {
+          "cmd": "codeorbit status",
+          "note": "What the index holds, and whether Ollama is up."
+        }
+      ]
+    },
+    {
+      "name": "uninstall",
+      "panel": "Manage this install",
+      "summary": "Remove CodeOrbit from this machine.",
+      "description": "",
+      "usage": "[OPTIONS]",
+      "arguments": [],
+      "options": [
+        {
+          "kind": "option",
+          "name": "--path, -p",
+          "help": "Project to work on (default: the current directory)",
+          "required": false,
+          "default": "",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--index",
+          "help": "Also delete this project's .codeorbit/ index",
+          "required": false,
+          "default": "",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--yes, -y",
+          "help": "Do not ask for confirmation",
+          "required": false,
+          "default": "",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--dry-run",
+          "help": "Show what would be removed",
+          "required": false,
+          "default": "",
+          "metavar": ""
+        }
+      ],
+      "examples": [
+        {
+          "cmd": "codeorbit uninstall --dry-run",
+          "note": "Show exactly what removal would touch."
+        },
+        {
+          "cmd": "codeorbit uninstall",
+          "note": "Remove it. Project indexes are kept."
+        }
+      ]
+    },
+    {
+      "name": "upgrade",
+      "panel": "Manage this install",
+      "summary": "Upgrade this CodeOrbit install in place.",
+      "description": "",
+      "usage": "[OPTIONS]",
+      "arguments": [],
+      "options": [
+        {
+          "kind": "option",
+          "name": "--from, -f",
+          "help": "Path or git URL to install from",
+          "required": false,
+          "default": "",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--no-pull",
+          "help": "Skip git pull on a local checkout",
+          "required": false,
+          "default": "",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--dry-run",
+          "help": "Show what would happen, change nothing",
+          "required": false,
+          "default": "",
+          "metavar": ""
+        }
+      ],
+      "examples": [
+        {
+          "cmd": "codeorbit upgrade",
+          "note": "Upgrade in place from wherever it was installed."
+        },
+        {
+          "cmd": "codeorbit upgrade --dry-run",
+          "note": "Show what would happen."
+        }
+      ]
+    },
+    {
+      "name": "viz",
+      "panel": "Explore",
+      "summary": "Explore the graph in a browser, served from this machine.",
+      "description": "With --out, writes the old self-contained page instead: one file, no\nserver, still works from a USB stick.",
+      "usage": "[OPTIONS]",
+      "arguments": [],
+      "options": [
+        {
+          "kind": "option",
+          "name": "--path, -p",
+          "help": "Project to work on (default: the current directory)",
+          "required": false,
+          "default": "",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--view, -v",
+          "help": "modules or symbols",
+          "required": false,
+          "default": "modules",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--focus, -f",
+          "help": "Centre the symbol view on this symbol",
+          "required": false,
+          "default": "",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--depth, -d",
+          "help": "Hops around --focus",
+          "required": false,
+          "default": "2",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--out, -o",
+          "help": "Write a standalone file instead of serving",
+          "required": false,
+          "default": "",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--format",
+          "help": "html or mermaid",
+          "required": false,
+          "default": "html",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--port",
+          "help": "Serve on this port instead of the default set",
+          "required": false,
+          "default": "",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--open, --no-open",
+          "help": "Open in a browser",
+          "required": false,
+          "default": "on",
+          "metavar": ""
+        }
+      ],
+      "examples": [
+        {
+          "cmd": "codeorbit viz",
+          "note": "Explore the graph in a browser, served from your machine."
+        },
+        {
+          "cmd": "codeorbit viz --focus Segment",
+          "note": "Open centred on one symbol."
+        },
+        {
+          "cmd": "codeorbit viz --out graph.html",
+          "note": "Write a standalone file instead of serving."
+        },
+        {
+          "cmd": "codeorbit viz --format mermaid",
+          "note": "A diagram to paste into a report."
+        }
+      ]
+    },
+    {
+      "name": "why",
+      "panel": "Explore",
+      "summary": "Show the call path from one symbol to another.",
+      "description": "",
+      "usage": "[OPTIONS] {source} {target}",
+      "arguments": [
+        {
+          "kind": "argument",
+          "name": "source",
+          "help": "",
+          "required": true
+        },
+        {
+          "kind": "argument",
+          "name": "target",
+          "help": "",
+          "required": true
+        }
+      ],
+      "options": [
+        {
+          "kind": "option",
+          "name": "--path, -p",
+          "help": "Project to work on (default: the current directory)",
+          "required": false,
+          "default": "",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--depth, -d",
+          "help": "",
+          "required": false,
+          "default": "8",
+          "metavar": ""
+        }
+      ],
+      "examples": [
+        {
+          "cmd": "codeorbit why make_user normalize",
+          "note": "The call path between two symbols."
+        }
+      ]
+    }
+  ]
+}

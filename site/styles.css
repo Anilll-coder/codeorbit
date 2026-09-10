@@ -1434,3 +1434,266 @@ p {
   outline-offset: 3px;
   border-radius: 4px;
 }
+
+/* ============================================================ USAGE EXPLORER
+   The generated command reference. Uses the same tokens as the rest of the
+   page, so it rethemes with everything else; the code surfaces stay on the
+   fixed --fx-* chrome like the other terminal-ish blocks. */
+
+.usage-grid {
+  display: grid;
+  grid-template-columns: minmax(230px, 290px) minmax(0, 1fr);
+  gap: 28px;
+  align-items: start;
+}
+
+.usage-rail {
+  position: sticky;
+  top: 92px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--bg-raised);
+  padding: 14px;
+  max-height: calc(100vh - 130px);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.usage-search input {
+  width: 100%;
+  padding: 9px 11px;
+  font: inherit;
+  font-size: 0.86rem;
+  color: var(--text-primary);
+  background: var(--bg-well);
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+}
+
+.usage-search input::placeholder { color: var(--text-tertiary); }
+
+.usage-search input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+  border-color: transparent;
+}
+
+.usage-count {
+  margin: 9px 2px 4px;
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
+}
+
+.usage-list { overflow-y: auto; margin: 0 -4px; padding: 0 4px; min-height: 0; }
+
+.cmd-group {
+  margin: 14px 0 6px;
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.cmd-group:first-child { margin-top: 4px; }
+
+.cmd-items { list-style: none; margin: 0; padding: 0; }
+
+.cmd-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  padding: 6px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 130ms ease;
+}
+
+.cmd-item:hover { background: var(--hover-tint); }
+
+.cmd-item[aria-pressed="true"] {
+  background: var(--accent-soft);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.cmd-item-name {
+  display: block;
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  color: var(--text-primary);
+}
+
+.cmd-item[aria-pressed="true"] .cmd-item-name { color: var(--accent-strong); }
+
+.cmd-item-sum {
+  display: block;
+  font-size: 0.74rem;
+  line-height: 1.35;
+  color: var(--text-tertiary);
+  margin-top: 1px;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.cmd-none { color: var(--text-tertiary); font-size: 0.85rem; padding: 8px 4px; }
+
+/* ------------------------------------------------------------------ detail */
+
+.usage-detail {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--bg-raised);
+  padding: 24px 26px 28px;
+  min-width: 0;
+}
+
+.cmd-head { border-bottom: 1px solid var(--border); padding-bottom: 14px; margin-bottom: 16px; }
+
+.cmd-title {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 1.24rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+}
+
+.cmd-summary { margin: 6px 0 0; color: var(--text-secondary); font-size: 0.95rem; }
+
+.cmd-synopsis {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: var(--fx-bg-well, var(--bg-well));
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 13px;
+  margin-bottom: 16px;
+  overflow-x: auto;
+}
+
+.cmd-synopsis-label {
+  font-size: 0.64rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+  flex: none;
+}
+
+.cmd-synopsis code {
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  color: var(--accent-strong);
+  white-space: nowrap;
+}
+
+.cmd-desc { color: var(--text-secondary); font-size: 0.9rem; line-height: 1.6; margin: 0 0 10px; }
+
+.cmd-sub {
+  margin: 22px 0 9px;
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.cmd-example { margin-bottom: 10px; }
+
+.cmd-example-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: var(--bg-well);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 9px 9px 9px 13px;
+  overflow-x: auto;
+}
+
+.cmd-example-line code {
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  color: var(--text-primary);
+  white-space: nowrap;
+  flex: 1;
+}
+
+.cmd-copy {
+  appearance: none;
+  flex: none;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.7rem;
+  padding: 4px 9px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: color 130ms ease, border-color 130ms ease;
+}
+
+.cmd-copy:hover { color: var(--accent-strong); border-color: var(--accent-line); }
+.cmd-copy:active { transform: translateY(1px); }
+
+.cmd-example-note {
+  margin: 5px 0 0 2px;
+  font-size: 0.78rem;
+  color: var(--text-tertiary);
+  line-height: 1.45;
+}
+
+.cmd-table-wrap { overflow-x: auto; }
+
+.cmd-table { width: 100%; border-collapse: collapse; font-size: 0.83rem; }
+
+.cmd-table td {
+  padding: 7px 10px 7px 0;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.cmd-table tr:last-child td { border-bottom: 0; }
+
+.cmd-table-name { white-space: nowrap; width: 1%; }
+
+.cmd-table-name code {
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  color: var(--text-primary);
+}
+
+.cmd-req,
+.cmd-default {
+  display: inline-block;
+  margin-left: 8px;
+  font-family: var(--mono);
+  font-size: 0.66rem;
+  color: var(--text-tertiary);
+}
+
+.cmd-req { color: var(--accent-dim); }
+
+@media (max-width: 860px) {
+  .usage-grid { grid-template-columns: 1fr; }
+  .usage-rail { position: static; max-height: none; }
+  .usage-list { max-height: 320px; }
+  .usage-detail { padding: 18px 16px 22px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cmd-item, .cmd-copy { transition: none; }
+}

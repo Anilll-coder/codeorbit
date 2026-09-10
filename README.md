@@ -132,6 +132,11 @@ codeorbit index ~/code/app         # index and status also take it positionally
 
 With none given, it works on the current directory.
 
+`codeorbit` with no arguments prints the help, and the help is grouped: **Build
+the graph**, **Explore**, **Ask questions**, **Review and fix**, **Connect an AI
+agent**, **Manage this install**. Twenty commands in one flat alphabetical list
+told you nothing about where to start.
+
 ## Architecture
 
 ```
@@ -159,7 +164,23 @@ files
   -> cli.py          the commands above
 ```
 
-`site/` is the project page, deployed to [GitHub Pages](https://anilll-coder.github.io/codeorbit/) by `.github/workflows/static.yml` on every push to `main`.
+`site/` is the project page, deployed to
+[GitHub Pages](https://anilll-coder.github.io/codeorbit/) by
+`.github/workflows/static.yml` on every push to `main`. It carries an
+[interactive command reference](https://anilll-coder.github.io/codeorbit/#usage):
+filter by command or by flag, click one, and read its options and copyable
+examples.
+
+That reference is **generated from the CLI**, not written by hand:
+
+```bash
+python scripts/gen_commands.py          # rewrite site/commands.json
+python scripts/gen_commands.py --check  # fail if it is stale
+```
+
+A test asserts the committed file matches the live command objects, so adding a
+command or renaming a flag without regenerating fails the suite rather than
+quietly shipping documentation that is wrong.
 
 **Two passes, not one.** Pass 1 records every call site as *pending*, because a
 call can name something defined in a file that has not been parsed yet. Pass 2

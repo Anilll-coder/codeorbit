@@ -19,7 +19,27 @@ from .resolve import resolve_project
 
 SEV_COLOR = {"high": "red", "medium": "yellow", "low": "dim"}
 
-app = typer.Typer(add_completion=False, help="Local code intelligence over a code graph.")
+EPILOG = """[bold]Start here[/bold]
+  codeorbit index .                      build the graph for this project
+  codeorbit ask "how does X work?"       ask the local model about it
+
+[bold]Then[/bold]
+  codeorbit viz                          explore it in a browser
+  codeorbit review                       review your change with its blast radius
+  codeorbit install-mcp                  hand the graph to Claude Code or Cursor
+
+[dim]Every command takes a project path: codeorbit -p ~/code/app audit
+Full documentation: https://anilll-coder.github.io/codeorbit/[/dim]"""
+
+app = typer.Typer(
+    add_completion=False,
+    rich_markup_mode="rich",
+    # A bare `codeorbit` used to print a usage error. For a tool with twenty
+    # commands, the help IS the answer to "what do I type".
+    no_args_is_help=True,
+    help="Local code intelligence over a code graph.",
+    epilog=EPILOG,
+)
 console = Console()
 
 PATH_HELP = "Project to work on (default: the current directory)"
@@ -80,7 +100,7 @@ def _pick(conn, name: str):
     return hits[0]
 
 
-@app.command()
+@app.command(rich_help_panel="Build the graph")
 def index(
     path_arg: str = typer.Argument(None, metavar="[PATH]", help="Project root to index"),
     path: str = typer.Option(None, "--path", "-p", help=PATH_HELP),
@@ -138,7 +158,7 @@ def index(
     console.print(f"[green]Done.[/green] Index at {db.db_path(root)}")
 
 
-@app.command()
+@app.command(rich_help_panel="Build the graph")
 def status(
     path_arg: str = typer.Argument(None, metavar="[PATH]"),
     path: str = typer.Option(None, "--path", "-p", help=PATH_HELP),
@@ -162,7 +182,7 @@ def status(
     console.print(Panel(t, title="CodeOrbit"))
 
 
-@app.command()
+@app.command(rich_help_panel="Explore")
 def search(term: str, path: str = typer.Option(None, "--path", "-p", help=PATH_HELP), limit: int = 15):
     """Find symbols by name."""
     root, conn = _open(path)
@@ -176,7 +196,7 @@ def search(term: str, path: str = typer.Option(None, "--path", "-p", help=PATH_H
     console.print(t)
 
 
-@app.command()
+@app.command(rich_help_panel="Explore")
 def show(name: str, path: str = typer.Option(None, "--path", "-p", help=PATH_HELP)):
     """Show a symbol's source with its callers and callees."""
     root, conn = _open(path)
@@ -203,7 +223,7 @@ def show(name: str, path: str = typer.Option(None, "--path", "-p", help=PATH_HEL
         console.print(Syntax(body, row["lang"], theme="ansi_dark", word_wrap=False))
 
 
-@app.command()
+@app.command(rich_help_panel="Explore")
 def callers(name: str, path: str = typer.Option(None, "--path", "-p", help=PATH_HELP)):
     """Who calls this symbol."""
     root, conn = _open(path)
@@ -214,7 +234,7 @@ def callers(name: str, path: str = typer.Option(None, "--path", "-p", help=PATH_
         console.print(f"  {c['qname']}  [dim]{c['path']}:{c['call_line']}[/dim]")
 
 
-@app.command()
+@app.command(rich_help_panel="Explore")
 def impact(name: str, path: str = typer.Option(None, "--path", "-p", help=PATH_HELP), depth: int = 3):
     """Blast radius: everything that transitively reaches this symbol."""
     root, conn = _open(path)
@@ -233,7 +253,7 @@ def impact(name: str, path: str = typer.Option(None, "--path", "-p", help=PATH_H
             console.print(f"  {t['qname']}  [dim]{t['path']}[/dim]")
 
 
-@app.command()
+@app.command(rich_help_panel="Explore")
 def entry(path: str = typer.Option(None, "--path", "-p", help=PATH_HELP)):
     """What the most code depends on - a place to start reading."""
     root, conn = _open(path)
@@ -243,7 +263,7 @@ def entry(path: str = typer.Option(None, "--path", "-p", help=PATH_HELP)):
     console.print(t)
 
 
-@app.command()
+@app.command(rich_help_panel="Explore")
 def dead(path: str = typer.Option(None, "--path", "-p", help=PATH_HELP)):
     """Definitions nothing in the project calls."""
     root, conn = _open(path)
@@ -254,7 +274,7 @@ def dead(path: str = typer.Option(None, "--path", "-p", help=PATH_HELP)):
         console.print(f"  {r['qname']}  [dim]{r['path']}:{r['start_line']} ({span} lines)[/dim]")
 
 
-@app.command()
+@app.command(rich_help_panel="Ask questions")
 def ask(
     question: str,
     path: str = typer.Option(None, "--path", "-p", help=PATH_HELP),
@@ -310,7 +330,7 @@ def ask(
     print()
 
 
-@app.command()
+@app.command(rich_help_panel="Review and fix")
 def review(
     path: str = typer.Option(None, "--path", "-p", help=PATH_HELP),
     base: str = typer.Option(None, "--base", "-b",
@@ -511,7 +531,7 @@ def _review_pr(root: Path, number: int, repo_slug: str, model: str,
     console.print(f"[green]Posted[/green] {url}")
 
 
-@app.command()
+@app.command(rich_help_panel="Review and fix")
 def audit(
     path: str = typer.Option(None, "--path", "-p", help=PATH_HELP),
     severity: str = typer.Option("low", "--severity", "-s",
@@ -588,7 +608,7 @@ def audit(
     print()
 
 
-@app.command()
+@app.command(rich_help_panel="Review and fix")
 def fix(
     path: str = typer.Option(None, "--path", "-p", help=PATH_HELP),
     rule: str = typer.Option(None, "--rule", "-r", help="Only fix findings from this rule id"),
@@ -689,7 +709,7 @@ def fix(
         console.print("[dim]re-run `codeorbit index` to refresh the graph[/dim]")
 
 
-@app.command()
+@app.command(rich_help_panel="Build the graph")
 def embed(
     path: str = typer.Option(None, "--path", "-p", help=PATH_HELP),
     model: str = typer.Option(llm.EMBED_MODEL, "--model", "-m"),
@@ -755,7 +775,7 @@ def _viz_serve(root: Path, view: str, focus: str, port: int, open_it: bool) -> N
     console.print("[dim]Stopped.[/dim]")
 
 
-@app.command()
+@app.command(rich_help_panel="Explore")
 def viz(
     path: str = typer.Option(None, "--path", "-p", help=PATH_HELP),
     view: str = typer.Option("modules", "--view", "-v", help="modules or symbols"),
@@ -829,7 +849,7 @@ def viz(
         webbrowser.open(target.resolve().as_uri())
 
 
-@app.command()
+@app.command(rich_help_panel="Explore")
 def why(
     source: str,
     target: str,
@@ -858,7 +878,7 @@ def why(
         console.print(f"{arrow}{row['qname']}{at}")
 
 
-@app.command()
+@app.command(rich_help_panel="Connect an AI agent")
 def mcp(
     path: str = typer.Option(None, "--path", "-p", help=PATH_HELP),
 ):
@@ -881,7 +901,7 @@ def mcp(
         pass
 
 
-@app.command()
+@app.command(rich_help_panel="Ask questions")
 def agent(
     question: str,
     path: str = typer.Option(None, "--path", "-p", help=PATH_HELP),
@@ -974,7 +994,7 @@ def agent(
                           + ", ".join(s.tool for s in result.steps) + "[/dim]")
 
 
-@app.command("install-mcp")
+@app.command("install-mcp", rich_help_panel="Connect an AI agent")
 def install_mcp(
     path: str = typer.Option(None, "--path", "-p", help=PATH_HELP),
     agent: str = typer.Option("claude", "--agent", "-a",
@@ -1085,7 +1105,7 @@ def install_mcp(
     )
 
 
-@app.command()
+@app.command(rich_help_panel="Manage this install")
 def upgrade(
     source: str = typer.Option(None, "--from", "-f",
                                help="Path or git URL to install from"),
@@ -1143,7 +1163,7 @@ def upgrade(
                       "last version bump are now live.[/dim]")
 
 
-@app.command()
+@app.command(rich_help_panel="Manage this install")
 def uninstall(
     path: str = typer.Option(None, "--path", "-p", help=PATH_HELP),
     with_index: bool = typer.Option(False, "--index",

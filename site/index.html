@@ -50,6 +50,7 @@
         <a href="#story">How it works</a>
         <a href="#architecture">Architecture</a>
         <a href="#commands">Commands</a>
+        <a href="#usage">Usage</a>
         <a href="https://github.com/Anilll-coder/codeorbit#readme">Docs</a>
       </nav>
 
@@ -310,6 +311,33 @@
       </div>
     </section>
 
+    <!-- ================================================ USAGE EXPLORER -->
+    <!-- Populated from commands.json, generated from the CLI itself by
+         scripts/gen_commands.py. Hidden until that load succeeds. -->
+    <section class="section usage-section" id="usage" hidden>
+      <div class="wrap">
+        <div class="section-head reveal">
+          <div class="eyebrow">Reference</div>
+          <h2>Every command, and what it does.</h2>
+          <p>Read straight out of the CLI, so the flags here are the flags you have.</p>
+        </div>
+
+        <div class="usage-grid reveal">
+          <aside class="usage-rail">
+            <label class="usage-search">
+              <span class="sr-only">Filter commands</span>
+              <input id="cmd-filter" type="search" autocomplete="off" spellcheck="false"
+                     placeholder="Filter commands and flags">
+            </label>
+            <p class="usage-count" id="cmd-count" aria-live="polite"></p>
+            <nav id="cmd-list" class="usage-list" aria-label="Commands"></nav>
+          </aside>
+
+          <article class="usage-detail" id="cmd-detail" aria-live="polite"></article>
+        </div>
+      </div>
+    </section>
+
     <!-- ============================================================ MANIFESTO -->
     <section class="manifesto" id="local-first">
       <div class="wrap reveal">
@@ -415,5 +443,6 @@
   </footer>
 
   <script src="app.js"></script>
+  <script src="commands.js"></script>
 </body>
 </html>
