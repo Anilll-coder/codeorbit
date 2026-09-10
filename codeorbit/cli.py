@@ -321,8 +321,29 @@ def review(
     max_tokens: int = typer.Option(400, "--max-tokens", "-t"),
     show_context: bool = typer.Option(False, "--show-context"),
     no_llm: bool = typer.Option(False, "--no-llm", help="Show the blast radius, skip the model"),
+    pr: int = typer.Option(None, "--pr", help="Review this GitHub pull request instead"),
+    repo: str = typer.Option(None, "--repo",
+                             help="owner/name, when the PR is not in origin's repository"),
+    post: bool = typer.Option(False, "--post",
+                              help="Post the review to the PR (asks first)"),
 ):
     """Review the current change together with what the graph says it reaches."""
+    # A pull request never uses this project's index: it is reviewed against a
+    # graph built from its own head, so resolve the path without opening the
+    # local database, which may not even exist yet.
+    if pr:
+        if staged or base:
+            console.print("[red]--pr cannot be combined with --staged or --base.[/red] "
+                          "A pull request already says what it is against.")
+            raise typer.Exit(1)
+        return _review_pr(Path(_resolve(path)).resolve(), pr, repo, model,
+                          symbols, max_tokens, show_context, no_llm, post)
+
+    if post:
+        console.print("[red]--post only applies to --pr.[/red] "
+                      "There is nowhere to post a review of a local change.")
+        raise typer.Exit(1)
+
     root, conn = _open(path)
 
     if not reviewmod.is_repo(root):
@@ -384,6 +405,110 @@ def review(
         console.print(f"\n[red]{e}[/red]")
         raise typer.Exit(1)
     print()
+
+
+def _review_pr(root: Path, number: int, repo_slug: str, model: str,
+               symbols: int, max_tokens: int, show_context: bool,
+               no_llm: bool, post: bool) -> None:
+    """Review a GitHub pull request against a graph of its own head."""
+    from . import github as ghmod
+    from . import pr as prmod
+
+    if not reviewmod.is_repo(root):
+        console.print(f"[red]{root} is not a git repository.[/red] "
+                      "Reviewing a PR needs one, to check its head out.")
+        raise typer.Exit(1)
+
+    try:
+        with console.status("reading the pull request...") as st:
+            data = prmod.prepare(root, number, repo_slug, symbols,
+                                 progress=st.update)
+    except (ghmod.GitHubError, prmod.PRError) as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+
+    pr, s = data.pr, data.summary
+    console.print(
+        f"[bold]{data.repo.slug}#{pr.number}[/bold]  {pr.title}\n"
+        f"[dim]by {pr.author}  |  {pr.base_ref} <- {pr.head_ref} "
+        f"@ {pr.head_sha[:12]}"
+        + ("  |  DRAFT" if pr.draft else "") + "[/dim]"
+    )
+    console.print(
+        f"[bold]{s['files']}[/bold] file(s) changed  "
+        f"[green]+{s['added']}[/green] [red]-{s['removed']}[/red]  |  "
+        f"[bold]{s['symbols']}[/bold] symbol(s) touched"
+    )
+
+    if data.changed:
+        t = Table("symbol", "blast", "callers", "tests",
+                  title="what this PR reaches")
+        for cs in data.changed:
+            t.add_row(cs.row["qname"], str(cs.blast), str(len(cs.callers)),
+                      str(len(cs.tests)) if cs.tests else "[red]none[/red]")
+        console.print(t)
+
+    if s["unindexed"]:
+        console.print(
+            "[yellow]not in the index[/yellow] (nothing known about what they "
+            "reach): " + ", ".join(s["unindexed"][:6]))
+
+    if show_context:
+        console.print(Panel(data.prompt[:6000], title="review context"))
+    if no_llm:
+        return
+
+    if not llm.available():
+        console.print("[red]Ollama is not running.[/red] Start it with: ollama serve")
+        raise typer.Exit(1)
+
+    console.print()
+    pieces: list[str] = []
+    try:
+        for piece in llm.stream(data.prompt, model=model, system=data.system,
+                                num_predict=max_tokens):
+            pieces.append(piece)
+            sys.stdout.write(piece)
+            sys.stdout.flush()
+    except llm.OllamaError as e:
+        console.print(f"\n[red]{e}[/red]")
+        raise typer.Exit(1)
+    print()
+
+    if not post:
+        return
+
+    text = "".join(pieces).strip()
+    if not text:
+        console.print("[yellow]The model returned nothing. Not posting.[/yellow]")
+        return
+
+    # Posting is public, attributed to the token's owner, and notifies everyone
+    # watching the PR. It gets an explicit yes, every time, and the URL is
+    # printed first so it is obvious which pull request is about to be written
+    # to. Nothing about a review being requested implies consent to publish it.
+    body = prmod.comment_body(text, pr, s)
+    console.print()
+    console.print(
+        f"[bold]About to post this review[/bold] to "
+        f"https://github.com/{data.repo.slug}/pull/{pr.number}")
+    console.print("[dim]It will be public, attributed to your GitHub account, "
+                  "and will notify everyone watching the PR.[/dim]")
+    if not typer.confirm("Post it?"):
+        console.print("[yellow]Not posted.[/yellow]")
+        return
+
+    tok = ghmod.token()
+    if not tok:
+        console.print(f"[red]{ghmod.NO_TOKEN}[/red]")
+        raise typer.Exit(1)
+    try:
+        url = ghmod.post_review(data.repo, pr.number, tok, body,
+                                commit_sha=pr.head_sha)
+    except ghmod.GitHubError as e:
+        console.print(f"[red]Could not post: {e}[/red]")
+        raise typer.Exit(1)
+    console.print(f"[green]Posted[/green] {url}")
 
 
 @app.command()

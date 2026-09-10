@@ -8,3 +8,4 @@ build/
 dist/
 .cursor/
 .claude/
+benchmark-results.json

@@ -97,8 +97,21 @@ done
   Install it from https://python.org and re-run this script."
 say "  $($PY --version 2>&1) ${DIM}($(command -v "$PY"))${N}"
 
-"$PY" -c 'import venv' 2>/dev/null || die "Python is missing the venv module.
-  On Debian/Ubuntu: sudo apt install python3-venv"
+# `import venv` is NOT a sufficient check. Debian and Ubuntu ship the venv
+# module with core Python but split `ensurepip` into python3-venv, so this
+# import succeeds on a machine where creating a virtualenv then fails with
+# "ensurepip is not available" - which is exactly the failure this check exists
+# to prevent. Test what is actually missing.
+if ! "$PY" -c 'import venv, ensurepip' 2>/dev/null; then
+  # Name the versioned package: on Debian `apt install python3-venv` installs
+  # the one for the distro's default python3, which is not necessarily the
+  # interpreter found above.
+  PYVER=$("$PY" -c 'import sys; print("%d.%d" % sys.version_info[:2])' 2>/dev/null || echo 3)
+  die "Python can create no virtualenv here: the venv module is incomplete.
+  On Debian/Ubuntu:  sudo apt install python${PYVER}-venv
+  On Fedora/RHEL:    sudo dnf install python3-virtualenv
+  Then re-run this script (without sudo)."
+fi
 
 # ---------- source ----------------------------------------------------------
 SRC=''
@@ -134,10 +147,39 @@ fi
 # ---------- venv ------------------------------------------------------------
 step "Creating isolated environment"
 say "  $HOME_DIR"
+
+# A directory is not an install. A venv creation that failed part way through
+# leaves one behind, and treating that as "existing, upgrading" made every
+# later run skip creation and fail further down, with no way to recover short
+# of deleting it by hand. So check that the thing actually works, and rebuild
+# it if it does not.
+venv_is_usable() {
+  for p in "$1/bin/python" "$1/Scripts/python.exe"; do
+    if [ -x "$p" ] && "$p" -c 'import pip' >/dev/null 2>&1; then
+      return 0
+    fi
+  done
+  return 1
+}
+
 if [ -d "$HOME_DIR" ]; then
-  say "  ${DIM}existing install found - upgrading${N}"
-else
-  "$PY" -m venv "$HOME_DIR" || die "Could not create a virtualenv at $HOME_DIR"
+  if venv_is_usable "$HOME_DIR"; then
+    say "  ${DIM}existing install found - upgrading${N}"
+  else
+    warn "The environment at $HOME_DIR is incomplete. Rebuilding it."
+    rm -rf "$HOME_DIR"
+  fi
+fi
+
+if [ ! -d "$HOME_DIR" ]; then
+  # Clean up on failure too, so a retry starts from nothing rather than from
+  # the wreckage of this attempt.
+  if ! "$PY" -m venv "$HOME_DIR"; then
+    rm -rf "$HOME_DIR"
+    die "Could not create a virtualenv at $HOME_DIR.
+  The error above says why. If it mentions ensurepip, install your
+  distribution's venv package and re-run."
+  fi
 fi
 
 if [ -x "$HOME_DIR/bin/python" ]; then
@@ -152,9 +194,22 @@ step "Installing CodeOrbit and its dependencies"
 # Deliberately NOT upgrading pip: the venv ships a working one, and an
 # upgrade pulled a release that breaks console-script generation on
 # Windows badly enough that pip could not reinstall itself.
-"$VPY" -m pip install --upgrade "$SRC" >/dev/null 2>&1 \
-  || die "Installation failed. Re-run with:
-  $VPY -m pip install --upgrade '$SRC'"
+# Keep the output instead of discarding it. Sending pip's errors to /dev/null
+# and printing "re-run this by hand to see why" makes the user reproduce a
+# two-minute install to read one line, and when the source was a temp clone
+# that command no longer works at all - the directory is gone by then.
+# mktemp, not a fixed name in /tmp: a predictable path in a world-writable
+# directory can be pre-created as a symlink by another user on the machine,
+# and this redirect would then truncate whatever it points at.
+PIP_LOG=$(mktemp 2>/dev/null || mktemp -t codeorbit-install) || PIP_LOG="$HOME_DIR/install.log"
+if ! "$VPY" -m pip install --upgrade "$SRC" >"$PIP_LOG" 2>&1; then
+  say ""
+  say "${R}pip failed. The last lines of its output:${N}"
+  tail -n 15 "$PIP_LOG" 2>/dev/null | sed 's/^/  /'
+  say ""
+  die "Installation failed. Full log: $PIP_LOG"
+fi
+rm -f "$PIP_LOG"
 say "  ${G}ok${N}"
 
 # Record where this came from. pip does not keep the source of a

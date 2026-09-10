@@ -141,9 +141,21 @@ def symbols_for(conn, path: str, ranges: list[tuple[int, int]]) -> list:
 def collect(root: Path, conn, base: str | None, staged: bool,
             max_symbols: int = 6) -> tuple[str, list[ChangedSymbol], dict]:
     """Return (diff_text, changed symbols with graph context, summary)."""
-    diff = diff_text(root, base, staged)
+    return collect_from_diff(root, conn, diff_text(root, base, staged),
+                             max_symbols)
+
+
+def collect_from_diff(root: Path, conn, diff: str,
+                      max_symbols: int = 6) -> tuple[str, list[ChangedSymbol], dict]:
+    """The same walk, over a diff from anywhere.
+
+    Split out from `collect` so a pull request can be reviewed by exactly the
+    path a local change is: the diff is the only thing that differs, and the
+    graph work after it must not fork into a second implementation that drifts.
+    """
     if not diff.strip():
-        return "", [], {"files": 0, "added": 0, "removed": 0, "unindexed": []}
+        return "", [], {"files": 0, "added": 0, "removed": 0, "symbols": 0,
+                        "unindexed": []}
 
     ranges = changed_ranges(diff)
     stats = diff_stats(diff)
@@ -195,8 +207,14 @@ SYSTEM = (
 
 def build_prompt(root: Path, diff: str, changed: list[ChangedSymbol],
                  summary: dict, body_lines: int = 40,
-                 max_diff_chars: int = 6000) -> str:
-    parts = [
+                 max_diff_chars: int = 6000, intent: str | None = None) -> str:
+    parts = []
+    if intent:
+        # Whatever the author says the change is for, quoted for the model as
+        # claims rather than facts. See pr.py: on a pull request this text is
+        # written by a stranger.
+        parts += [intent, ""]
+    parts += [
         "## Change summary",
         f"{summary['files']} file(s), +{summary['added']} -{summary['removed']} lines",
         "",

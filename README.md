@@ -1,5 +1,7 @@
 # CodeOrbit
 
+**[anilll-coder.github.io/codeorbit](https://anilll-coder.github.io/codeorbit/)**
+
 Local-first code intelligence. It parses a repository with tree-sitter, builds a
 structural knowledge graph of its symbols and their relationships in SQLite, and
 answers questions about the code using a **local** LLM through Ollama.
@@ -95,6 +97,8 @@ codeorbit ask "How does Console.print render output?"
 codeorbit review                       # review your change with its blast radius
 codeorbit review --base main           # ...against a branch
 codeorbit review --staged --no-llm     # just the risk table, no model
+codeorbit review --pr 42               # review a GitHub PR against its own head
+codeorbit review --pr 42 --post        # ...and offer to post it back
 
 codeorbit audit                        # bugs and security issues, ranked by reach
 codeorbit audit -s high --explain      # high severity only, explained by the model
@@ -139,6 +143,8 @@ files
   -> query.py        callers / callees / impact / search / source
   -> context.py      question -> relevant subgraph -> grounded prompt
   -> review.py       diff -> changed symbols -> blast radius -> review prompt
+  -> github.py       the GitHub API, read a PR and post one comment
+  -> pr.py           a PR reviewed against a graph of its own head
   -> rules.py        29 security / bug / quality patterns
   -> audit.py        findings, attributed to symbols and ranked by reach
   -> semantic.py     symbol embeddings, fused with keyword search by RRF
@@ -152,6 +158,8 @@ files
   -> llm.py          Ollama, streaming, local only
   -> cli.py          the commands above
 ```
+
+`site/` is the project page, deployed to [GitHub Pages](https://anilll-coder.github.io/codeorbit/) by `.github/workflows/static.yml` on every push to `main`.
 
 **Two passes, not one.** Pass 1 records every call site as *pending*, because a
 call can name something defined in a file that has not been parsed yet. Pass 2
@@ -291,6 +299,45 @@ ordered by what they reach rather than by how many lines moved, and changed file
 that are not indexed are named rather than silently skipped.
 
 `--no-llm` prints the risk table alone, which is instant.
+
+### Reviewing a pull request
+
+```bash
+codeorbit review --pr 42                 # review PR #42, print it here
+codeorbit review --pr 42 --repo o/n      # ...when it is not in origin's repo
+codeorbit review --pr 42 --no-llm        # just the risk table
+codeorbit review --pr 42 --post          # ...and offer to post it (asks first)
+```
+
+**The PR is reviewed against a graph of its own head, not of your checkout.**
+This is the part that makes the difference between a useful review and a
+confident wrong one. If your index is built from `main` and the PR moves a
+function, every caller and blast-radius number describes code the PR has already
+changed. So `--pr` fetches `pull/N/head`, checks it out into a throwaway git
+worktree, indexes *that*, reviews against it, and removes it - including when
+the review fails. Your own checkout is never touched, never re-indexed, and
+never left on another branch.
+
+Needs a token in `GITHUB_TOKEN` or `GH_TOKEN` (or `gh auth login`, which it will
+read from). Read access is enough unless you use `--post`.
+
+**A pull request is untrusted input.** Its title, description and existing
+comments are written by whoever opened it, and they go into a prompt. They are
+fenced with a per-run nonce so the text cannot close its own block and start
+issuing instructions, they are labelled as claims rather than evidence, and the
+system prompt tells the model to report any attempt to direct the review rather
+than obey it. That reduces the risk; it does not remove it. Read what it posts.
+
+**`--post` is the one thing here that writes to the world.** It is off by
+default, it asks before every post, it prints the PR URL first, and it always
+posts `event=COMMENT` - never `APPROVE` or `REQUEST_CHANGES`. An automated
+approval can satisfy branch protection, and a 3.8B local model's opinion must
+never be able to do that.
+
+Note the honesty about the network: `--pr` reads the GitHub API, so unlike the
+rest of CodeOrbit it does call out. What it sends is a PR number and a token.
+What comes back - your diff and your source - stays local unless you use a
+cloud-backed model, and `--post` publishes whatever the model wrote.
 
 ## Finding problems, ranked by what they reach
 
