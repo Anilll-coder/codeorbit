@@ -123,11 +123,59 @@ def test_agent_refuses_a_model_that_cannot_call_tools(monkeypatch, tmp_path):
     assert "ollama pull" in r.output or "already installed" in r.output
 
 
-def test_agent_reports_when_ollama_is_down(monkeypatch, tmp_path):
+def test_a_stopped_ollama_is_started_rather_than_reported(monkeypatch, tmp_path):
+    """Telling someone to open another terminal and run a daemon is a step they
+    were always going to take. Take it for them."""
+    started = {"called": False}
+
+    def fake_start(timeout=25.0):
+        started["called"] = True
+        return True
+
     monkeypatch.setattr(cli.llm, "available", lambda: False)
+    monkeypatch.setattr(cli.llm, "installed", lambda: True)
+    monkeypatch.setattr(cli.llm, "start_server", fake_start)
+    monkeypatch.setattr(agent, "installed_models", lambda: [])
+    r = runner.invoke(cli.app, ["agent", "q", "-p", str(tmp_path)])
+    assert started["called"], "it should have tried to start Ollama"
+    assert "started Ollama" in r.output
+
+
+def test_a_missing_ollama_says_how_to_install_it(monkeypatch, tmp_path):
+    monkeypatch.setattr(cli.llm, "available", lambda: False)
+    monkeypatch.setattr(cli.llm, "installed", lambda: False)
+    # Must not try to spawn something that is not there.
+    monkeypatch.setattr(cli.llm, "start_server",
+                        lambda *a, **k: pytest.fail("should not spawn"))
     r = runner.invoke(cli.app, ["agent", "q", "-p", str(tmp_path)])
     assert r.exit_code == 1
-    assert "ollama" in r.output.lower()
+    assert "ollama.com" in r.output
+
+
+def test_an_ollama_that_will_not_start_says_so(monkeypatch, tmp_path):
+    monkeypatch.setattr(cli.llm, "available", lambda: False)
+    monkeypatch.setattr(cli.llm, "installed", lambda: True)
+    monkeypatch.setattr(cli.llm, "start_server", lambda *a, **k: False)
+    r = runner.invoke(cli.app, ["agent", "q", "-p", str(tmp_path)])
+    assert r.exit_code == 1
+    assert "ollama serve" in r.output
+
+
+def test_start_server_does_not_spawn_when_ollama_is_absent(monkeypatch):
+    import subprocess
+    monkeypatch.setattr(cli.llm, "available", lambda: False)
+    monkeypatch.setattr(cli.llm, "installed", lambda: False)
+    monkeypatch.setattr(subprocess, "Popen",
+                        lambda *a, **k: pytest.fail("should not spawn"))
+    assert cli.llm.start_server(timeout=0.1) is False
+
+
+def test_start_server_is_a_no_op_when_already_up(monkeypatch):
+    import subprocess
+    monkeypatch.setattr(cli.llm, "available", lambda: True)
+    monkeypatch.setattr(subprocess, "Popen",
+                        lambda *a, **k: pytest.fail("already running"))
+    assert cli.llm.start_server(timeout=0.1) is True
 
 
 def test_agent_reports_when_no_capable_model_is_installed(monkeypatch, tmp_path):
@@ -148,3 +196,143 @@ def test_check_lists_each_model_and_skips_embedders(monkeypatch, tmp_path):
     assert r.exit_code == 0
     assert "llama3.2" in r.output
     assert "nomic-embed" not in r.output, "embedding models cannot chat; skip them"
+
+
+# ------------------------------------------------- a path is not a question
+
+@pytest.mark.parametrize("arg", [".", "..", "codeorbit", "tests"])
+def test_a_directory_argument_is_read_as_a_path(arg):
+    assert cli._looks_like_a_path(arg) is True
+
+
+@pytest.mark.parametrize("arg", [
+    "what are important symbols in this project?",
+    "how does load work",
+    "Console.print",
+    "is load safe to change?",
+    "nonexistent_directory_xyz",
+])
+def test_a_question_is_never_read_as_a_path(arg):
+    assert cli._looks_like_a_path(arg) is False
+
+
+def test_agent_dot_opens_a_session_instead_of_asking_about_a_dot(monkeypatch, tmp_path):
+    """`codeorbit agent .` used to spend a round having the model reply that it
+    was ready and waiting for a question."""
+    seen = {}
+
+    async def fake_session(agentmod, root, model, rounds, max_tokens):
+        seen["root"] = root
+        seen["interactive"] = True
+
+    async def fake_once(*a, **k):
+        seen["interactive"] = False
+
+    monkeypatch.setattr(cli.llm, "available", lambda: True)
+    monkeypatch.setattr(agent, "installed_models", lambda: ["llama3.2:3b"])
+    monkeypatch.setattr(agent, "supports_tools", lambda m, **k: (True, ""))
+    monkeypatch.setattr(cli, "_agent_session", fake_session)
+    monkeypatch.setattr(cli, "_agent_once", fake_once)
+
+    r = runner.invoke(cli.app, ["agent", ".", "-p", str(tmp_path)])
+    assert r.exit_code == 0, r.output
+    assert seen.get("interactive") is True
+
+
+def test_a_real_question_still_runs_once(monkeypatch, tmp_path):
+    seen = {}
+
+    async def fake_once(agentmod, root, question, model, rounds, max_tokens):
+        seen["question"] = question
+
+    monkeypatch.setattr(cli.llm, "available", lambda: True)
+    monkeypatch.setattr(agent, "installed_models", lambda: ["llama3.2:3b"])
+    monkeypatch.setattr(agent, "supports_tools", lambda m, **k: (True, ""))
+    monkeypatch.setattr(cli, "_agent_once", fake_once)
+
+    r = runner.invoke(cli.app, ["agent", "how does load work", "-p", str(tmp_path)])
+    assert r.exit_code == 0, r.output
+    assert seen.get("question") == "how does load work"
+
+
+# --------------------------------------------------------- context budget
+
+def test_prune_drops_the_oldest_tool_results_first():
+    msgs = [
+        {"role": "system", "content": "S"},
+        {"role": "user", "content": "Q"},
+        {"role": "tool", "content": "A" * 8000},
+        {"role": "tool", "content": "B" * 8000},
+        {"role": "tool", "content": "C" * 8000},
+    ]
+    out = agent.prune(msgs, budget=14000)
+    assert out[0]["content"] == "S", "the system prompt is never dropped"
+    assert out[1]["content"] == "Q", "the question is never dropped"
+    assert out[-1]["content"].startswith("C"), "the newest result is kept"
+    assert "dropped" in out[2]["content"]
+    total = sum(len(m["content"]) for m in out)
+    assert total < 14000
+
+
+def test_prune_leaves_a_small_conversation_alone():
+    msgs = [{"role": "system", "content": "S"}, {"role": "user", "content": "Q"}]
+    assert agent.prune(msgs) == msgs
+
+
+def test_history_keeps_prose_and_forgets_tool_output():
+    h = agent.remember([], "q1", "a" * 5000)
+    assert len(h) == 2
+    assert len(h[1]["content"]) == agent.HISTORY_ANSWER_CHARS
+    assert all(m["role"] in ("user", "assistant") for m in h)
+
+
+def test_history_is_capped_so_a_long_session_does_not_slow_down():
+    h = []
+    for i in range(12):
+        h = agent.remember(h, f"q{i}", f"a{i}")
+    assert len(h) == agent.HISTORY_TURNS * 2
+    assert h[0]["content"] == "q9", "the oldest turns fall off"
+
+
+def test_tool_results_are_clipped_before_the_model_sees_them():
+    assert agent.MAX_TOOL_CHARS < 3000, (
+        "a single overview can be thousands of characters, and on a CPU model "
+        "every one of them costs time twice")
+
+
+# ---------------------------------------------------------- truncation
+
+def test_a_severed_answer_is_flagged(monkeypatch):
+    """An answer that stops mid-word must not read as a finished one."""
+    import requests
+
+    class R:
+        status_code = 200
+        @staticmethod
+        def json():
+            return {"message": {"content": "the answer is cut off here and"},
+                    "done_reason": "length"}
+
+    monkeypatch.setattr(requests, "post", lambda *a, **k: R())
+    msg = agent._chat("m", [], [], 8192, 700)
+    assert msg["_truncated"] is True
+
+
+def test_a_complete_answer_is_not_flagged(monkeypatch):
+    import requests
+
+    class R:
+        status_code = 200
+        @staticmethod
+        def json():
+            return {"message": {"content": "done."}, "done_reason": "stop"}
+
+    monkeypatch.setattr(requests, "post", lambda *a, **k: R())
+    assert agent._chat("m", [], [], 8192, 700)["_truncated"] is False
+
+
+def test_the_system_prompt_asks_for_brevity():
+    """The transcript that prompted this listed fourteen symbols and then ran
+    out of tokens partway through the fifteenth."""
+    assert "BE BRIEF" in agent.SYSTEM
+    assert "6 sentences" in agent.SYSTEM

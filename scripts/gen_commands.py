@@ -73,8 +73,14 @@ EXAMPLES: dict[str, list[tuple[str, str]]] = {
          "See exactly what the model was given."),
     ],
     "agent": [
+        ("codeorbit agent",
+         "Start a session. Ask, read, ask again; Ollama is started for you."),
+        ("codeorbit agent .",
+         "The same, on this directory. A path is not treated as a question."),
         ('codeorbit agent "is load safe to change?"',
-         "A local model drives the MCP tools itself, over several steps."),
+         "One question, one answer. The model drives the tools itself."),
+        ("codeorbit agent --check",
+         "Which of your local models can actually call tools."),
     ],
     "review": [
         ("codeorbit review", "Review your working tree with its blast radius."),

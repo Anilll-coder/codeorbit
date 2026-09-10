@@ -116,7 +116,8 @@ codeorbit viz --format mermaid         # a diagram for a report
 
 codeorbit mcp                          # serve the graph over MCP to any agent
 codeorbit install-mcp                  # print the config to register it
-codeorbit agent "is load safe to change?"   # a local model drives those tools
+codeorbit agent                            # a session with a local model
+codeorbit agent "is load safe to change?"   # ...or one question, one answer
 
 codeorbit uninstall --dry-run          # see exactly what removal would touch
 codeorbit uninstall                    # remove CodeOrbit (indexes are kept)
@@ -559,9 +560,38 @@ No cloud agent needed - `codeorbit agent` lets an Ollama model call the same MCP
 tools, over the same protocol an external agent uses:
 
 ```bash
+codeorbit agent                               # a session: ask, read, ask again
+codeorbit agent .                             # the same, on this directory
+codeorbit agent "what does resolve_project do and what calls it?"   # one shot
 codeorbit agent --check                       # which local models can call tools
-codeorbit agent "what does resolve_project do and what calls it?"
 ```
+
+With no question it opens an interactive session: one question at a time, each
+answered against the graph, with the previous couple of exchanges carried
+forward so "what calls it?" resolves against what you just asked about. `/help`
+lists the commands, `/clear` forgets the conversation, `/exit` or Ctrl-D leaves.
+
+A path is not a question. `codeorbit agent .` opens a session on that directory
+rather than spending a round having the model reply that it is ready and waiting.
+
+**Ollama is started for you.** If it is installed but not running, the agent
+starts it in the background and carries on, because "open another terminal and
+run a daemon" is a step you were always going to take. If it is not installed at
+all, it says where to get it instead of trying.
+
+Two things keep the session fast and the answers readable, and both were
+learned from a transcript that listed fourteen symbols and then stopped
+mid-word:
+
+- **The context is bounded.** One MCP server is held open for the whole session
+  rather than respawned per question; tool results are clipped before the model
+  sees them; the oldest ones are dropped when the conversation outgrows its
+  budget; and between questions only the prose of previous turns is carried,
+  never their tool output. Without that, every question is slower than the last.
+- **The answer is bounded too.** The model is told to name the two or three
+  things that matter rather than read a tool result back, and when it does hit
+  the token limit the answer is labelled as cut off rather than simply ending
+  mid-sentence. `--max-tokens` raises the ceiling.
 
 **Tool calling is a property of the model's chat template, not of Ollama**, and a
 model without one does not fail loudly - it invents a plausible result and states

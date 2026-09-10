@@ -12,15 +12,15 @@
     {
       "name": "agent",
       "panel": "Ask questions",
-      "summary": "Let a local Ollama model drive the MCP tools to answer a question.",
+      "summary": "Ask a local model about this project. Omit the question for a session.",
       "description": "",
-      "usage": "[OPTIONS] {question}",
+      "usage": "[OPTIONS] [question]",
       "arguments": [
         {
           "kind": "argument",
           "name": "question",
-          "help": "",
-          "required": true
+          "help": "A question. Omit it to start an interactive session.",
+          "required": false
         }
       ],
       "options": [
@@ -53,7 +53,7 @@
           "name": "--max-tokens, -t",
           "help": "",
           "required": false,
-          "default": "400",
+          "default": "700",
           "metavar": ""
         },
         {
@@ -67,8 +67,20 @@
       ],
       "examples": [
         {
+          "cmd": "codeorbit agent",
+          "note": "Start a session. Ask, read, ask again; Ollama is started for you."
+        },
+        {
+          "cmd": "codeorbit agent .",
+          "note": "The same, on this directory. A path is not treated as a question."
+        },
+        {
           "cmd": "codeorbit agent \"is load safe to change?\"",
-          "note": "A local model drives the MCP tools itself, over several steps."
+          "note": "One question, one answer. The model drives the tools itself."
+        },
+        {
+          "cmd": "codeorbit agent --check",
+          "note": "Which of your local models can actually call tools."
         }
       ]
     },

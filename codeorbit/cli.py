@@ -79,8 +79,29 @@ def _root(
     _shared["path"] = path
 
 
+from .llm import OllamaError as OllamaErrorType  # noqa: E402
+
+
 def _resolve(path: str | None) -> str:
     return path or _shared["path"] or "."
+
+
+def _looks_like_a_path(text: str) -> bool:
+    """Is this argument a directory rather than a question?
+
+    Narrow on purpose. "." and ".." and an existing directory are paths; a
+    sentence is not, even one that happens to contain a slash. A question is
+    never a bare token that resolves to a directory on disk.
+    """
+    text = text.strip()
+    if not text or " " in text or "?" in text:
+        return False
+    if text in (".", ".."):
+        return True
+    try:
+        return Path(text).expanduser().is_dir()
+    except OSError:
+        return False
 
 
 def _open(path: str | None):
@@ -903,25 +924,46 @@ def mcp(
 
 @app.command(rich_help_panel="Ask questions")
 def agent(
-    question: str,
+    question: str = typer.Argument(
+        None, help="A question. Omit it to start an interactive session."),
     path: str = typer.Option(None, "--path", "-p", help=PATH_HELP),
     model: str = typer.Option(None, "--model", "-m",
                               help="A tool-calling Ollama model"),
     rounds: int = typer.Option(6, "--rounds", "-r", help="Max tool-calling rounds"),
-    max_tokens: int = typer.Option(400, "--max-tokens", "-t"),
+    max_tokens: int = typer.Option(700, "--max-tokens", "-t"),
     check: bool = typer.Option(False, "--check",
                                help="Only report which local models can call tools"),
 ):
-    """Let a local Ollama model drive the MCP tools to answer a question."""
+    """Ask a local model about this project. Omit the question for a session."""
     import asyncio
 
     from . import agent as agentmod
 
     root = Path(_resolve(path)).resolve()
 
+    # A path is not a question. `codeorbit agent .` is someone asking to work on
+    # this directory, and answering "." wastes a round on a CPU model replying
+    # that it is ready. Treat it as the session request it obviously is.
+    if question is not None and _looks_like_a_path(question):
+        root = Path(_resolve(path or question)).resolve()
+        # Say it. A bare word can be both a directory and something you wanted
+        # to ask about, and silently picking one is how a tool feels haunted.
+        if question not in (".", ".."):
+            console.print(f"[dim]Reading {question!r} as a project path, not a "
+                          f"question. To ask about it: codeorbit agent "
+                          f'"what is {question}?"[/dim]')
+        question = None
+
     if not llm.available():
-        console.print("[red]Ollama is not running.[/red] Start it with: ollama serve")
-        raise typer.Exit(1)
+        if not llm.installed():
+            console.print(f"[red]{llm.NOT_INSTALLED}[/red]")
+            raise typer.Exit(1)
+        with console.status("starting Ollama..."):
+            started = llm.start_server()
+        if not started:
+            console.print(f"[red]{llm.WOULD_NOT_START}[/red]")
+            raise typer.Exit(1)
+        console.print("[dim]started Ollama[/dim]")
 
     if check:
         console.print("Probing local models for tool-calling support...\n")
@@ -964,34 +1006,132 @@ def agent(
             console.print(f"  [dim]{reply[:180]}[/dim]\n")
         console.print("Use one of these instead:\n")
         console.print(agentmod.suggest_model())
-        console.print(f"\n[dim]Or ask without an agent loop: "
-                      f'codeorbit ask "{question}"[/dim]')
+        console.print('\n[dim]Or ask without an agent loop: '
+                      'codeorbit ask "your question"[/dim]')
         raise typer.Exit(1)
 
-    console.print(f"[dim]{model} driving the MCP tools (max {rounds} rounds)[/dim]\n")
+    if question:
+        console.print(f"[dim]{model} driving the MCP tools "
+                      f"(max {rounds} rounds)[/dim]\n")
+        asyncio.run(_agent_once(agentmod, root, question, model, rounds, max_tokens))
+        return
 
-    def show(step):
-        args = ", ".join(f"{k}={v!r}" for k, v in step.args.items() if v is not None)
-        console.print(f"  [cyan]{step.tool}[/cyan]({args[:90]}) "
-                      f"[dim]-> {len(step.result):,} chars[/dim]")
+    asyncio.run(_agent_session(agentmod, root, model, rounds, max_tokens))
 
-    try:
-        result = asyncio.run(agentmod.run(
-            root, question, model, max_rounds=rounds,
-            num_predict=max_tokens, on_step=show))
-    except OSError as e:
-        console.print(f"[red]Could not run the agent: {e}[/red]")
-        raise typer.Exit(1)
 
+def _agent_step(step) -> None:
+    args = ", ".join(f"{k}={v!r}" for k, v in step.args.items() if v is not None)
+    console.print(f"  [cyan]{step.tool}[/cyan]({args[:90]}) "
+                  f"[dim]-> {len(step.result):,} chars[/dim]")
+
+
+def _agent_answer(result, model: str) -> None:
     console.print()
     if result.answer:
-        console.print(Panel(result.answer, title=f"{model} - {result.rounds} round(s), "
-                                                 f"{len(result.steps)} tool call(s)"))
+        body = result.answer
+        if result.truncated:
+            # Say it, rather than letting an answer stop mid-word and read as
+            # if that was all the model had.
+            body += "\n\n[yellow](cut off at the token limit - "
+            body += "ask again with --max-tokens for more)[/yellow]"
+        console.print(Panel(body, title=f"{model} - {result.rounds} round(s), "
+                                        f"{len(result.steps)} tool call(s)"))
     else:
         console.print(f"[yellow]No answer.[/yellow] {result.stopped}")
         if result.steps:
             console.print("[dim]It did call: "
                           + ", ".join(s.tool for s in result.steps) + "[/dim]")
+
+
+async def _agent_once(agentmod, root: Path, question: str, model: str,
+                      rounds: int, max_tokens: int) -> None:
+    try:
+        result = await agentmod.run(root, question, model, max_rounds=rounds,
+                                    num_predict=max_tokens, on_step=_agent_step)
+    except OSError as e:
+        console.print(f"[red]Could not run the agent: {e}[/red]")
+        raise typer.Exit(1)
+    _agent_answer(result, model)
+
+
+AGENT_HELP = """[bold]Commands[/bold]
+  /clear    forget the conversation so far
+  /rounds N change the tool-call budget
+  /help     this
+  /exit     leave (Ctrl-D also works)"""
+
+
+async def _agent_session(agentmod, root: Path, model: str, rounds: int,
+                         max_tokens: int) -> None:
+    """One question at a time, against one MCP server held open throughout.
+
+    The server is started once here rather than per question: on the machines
+    this targets, spawning it and shaking hands is most of the wait before the
+    first token.
+    """
+    console.print(f"[bold]{model}[/bold] on [bold]{root.name}[/bold] "
+                  f"[dim]- ask about this codebase. /help for commands, "
+                  f"/exit to leave.[/dim]\n")
+
+    history: list[dict] = []
+    try:
+        async with agentmod.session_for(root) as (session, tools):
+            while True:
+                try:
+                    question = console.input("[bold cyan]>[/bold cyan] ").strip()
+                except (EOFError, KeyboardInterrupt):
+                    console.print("\n[dim]bye[/dim]")
+                    return
+
+                if not question:
+                    continue
+                low = question.lower()
+                if low in ("/exit", "/quit", "exit", "quit", ":q"):
+                    console.print("[dim]bye[/dim]")
+                    return
+                if low == "/help":
+                    console.print(AGENT_HELP)
+                    continue
+                if low == "/clear":
+                    history = []
+                    console.print("[dim]conversation cleared[/dim]")
+                    continue
+                if low.startswith("/rounds"):
+                    parts = question.split()
+                    if len(parts) == 2 and parts[1].isdigit():
+                        rounds = max(1, min(int(parts[1]), 20))
+                        console.print(f"[dim]tool-call budget: {rounds} rounds[/dim]")
+                    else:
+                        console.print("[dim]usage: /rounds 6[/dim]")
+                    continue
+                if question.startswith("/"):
+                    console.print(f"[dim]unknown command {question.split()[0]}. "
+                                  "/help for the list.[/dim]")
+                    continue
+
+                # The tool trace starts on its own line, not appended to the
+                # line the user just typed into.
+                console.print()
+                try:
+                    result = await agentmod.ask_once(
+                        session, tools, question, model, history=history,
+                        max_rounds=rounds, num_predict=max_tokens,
+                        on_step=_agent_step)
+                except KeyboardInterrupt:
+                    # Abandon this question, keep the session and its server.
+                    console.print("\n[yellow]cancelled[/yellow]")
+                    continue
+                except OllamaErrorType as e:
+                    console.print(f"[red]{e}[/red]")
+                    continue
+
+                _agent_answer(result, model)
+                console.print()
+                if result.answer:
+                    history = agentmod.remember(history, question, result.answer)
+    except OSError as e:
+        console.print(f"[red]Could not start the graph server: {e}[/red]")
+        raise typer.Exit(1)
 
 
 @app.command("install-mcp", rich_help_panel="Connect an AI agent")
