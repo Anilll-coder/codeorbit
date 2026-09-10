@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "codeorbit": {
+      "command": "C:\\Users\\AppData\\Local\\CodeOrbit\\Scripts\\codeorbit.exe",
+      "args": [
+        "mcp",
+        "--path",
+        "C:\\Users\\Desktop\\major_project\\codeorbit"
+      ]
+    }
+  }
+}
