@@ -8,6 +8,8 @@ would pass or fail based on which models the machine happens to hold.
 """
 from __future__ import annotations
 
+import re
+
 import pytest
 from typer.testing import CliRunner
 
@@ -336,3 +338,127 @@ def test_the_system_prompt_asks_for_brevity():
     out of tokens partway through the fifteenth."""
     assert "BE BRIEF" in agent.SYSTEM
     assert "6 sentences" in agent.SYSTEM
+
+
+# ------------------------------------------------------ progress indicator
+
+def test_the_spinner_ticks_while_the_model_is_busy(monkeypatch):
+    """A CPU model takes tens of seconds per round. A terminal that prints
+    nothing for that long is indistinguishable from one that has hung."""
+    import asyncio
+
+    updates = []
+
+    class FakeStatus:
+        def update(self, text):
+            updates.append(str(text))
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    monkeypatch.setattr(cli.console, "status", lambda *a, **k: FakeStatus())
+
+    async def work(on_status):
+        await asyncio.sleep(0.5)
+        on_status("reading the graph: codeorbit_explore")
+        await asyncio.sleep(0.7)
+        return "answer"
+
+    result = asyncio.run(cli._with_progress(work))
+
+    assert result == "answer"
+    assert len(updates) >= 2, f"the ticker did not tick: {updates}"
+    # It reports the phase it is in, not a generic spinner.
+    assert any("reading the graph" in u for u in updates), updates
+    assert any("thinking" in u for u in updates), updates
+    # And an elapsed counter, which is what separates "slow" from "broken".
+    assert any(re.search(r"\d+s", u) for u in updates), updates
+
+
+def test_the_ticker_is_cancelled_when_the_question_finishes(monkeypatch):
+    """A leaked ticker would keep drawing over the answer."""
+    import asyncio
+
+    class FakeStatus:
+        def update(self, text):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    monkeypatch.setattr(cli.console, "status", lambda *a, **k: FakeStatus())
+
+    async def main():
+        async def work(on_status):
+            await asyncio.sleep(0.1)
+            return 1
+
+        before = len(asyncio.all_tasks())
+        await cli._with_progress(work)
+        await asyncio.sleep(0.1)
+        return before, len(asyncio.all_tasks())
+
+    before, after = asyncio.run(main())
+    assert after <= before, "the progress ticker outlived the question"
+
+
+def test_the_ticker_does_not_swallow_an_error(monkeypatch):
+    import asyncio
+
+    class FakeStatus:
+        def update(self, text):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+    monkeypatch.setattr(cli.console, "status", lambda *a, **k: FakeStatus())
+
+    async def boom(on_status):
+        raise ValueError("from the model")
+
+    with pytest.raises(ValueError, match="from the model"):
+        asyncio.run(cli._with_progress(boom))
+
+
+def test_ask_once_reports_each_phase():
+    """The status text has to come from the loop; the CLI cannot know whether
+    it is waiting on the model or on a tool."""
+    import asyncio
+
+    seen = []
+
+    class FakeSession:
+        async def call_tool(self, name, args):
+            class R:
+                content = []
+            return R()
+
+    replies = [
+        {"tool_calls": [{"function": {"name": "codeorbit_explore", "arguments": {}}}]},
+        {"content": "done", "_truncated": False},
+    ]
+
+    def fake_chat(*a, **k):
+        return replies.pop(0)
+
+    import codeorbit.agent as agentmod
+    real = agentmod._chat
+    agentmod._chat = fake_chat
+    try:
+        asyncio.run(agentmod.ask_once(
+            FakeSession(), [], "q", "m", on_status=seen.append))
+    finally:
+        agentmod._chat = real
+
+    assert "thinking" in seen[0]
+    assert any("codeorbit_explore" in s for s in seen), seen

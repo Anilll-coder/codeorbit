@@ -593,6 +593,12 @@ mid-word:
   the token limit the answer is labelled as cut off rather than simply ending
   mid-sentence. `--max-tokens` raises the ceiling.
 
+While it works you get a spinner that says what it is waiting on - `thinking`,
+or `reading the graph: codeorbit_explore` - with the seconds counted next to it.
+A round on a CPU model is tens of seconds, and a terminal that prints nothing
+for that long is indistinguishable from one that has hung; the elapsed counter
+is what separates "slow" from "broken".
+
 **Tool calling is a property of the model's chat template, not of Ollama**, and a
 model without one does not fail loudly - it invents a plausible result and states
 it as fact. Measured on this machine:

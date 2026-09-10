@@ -18,6 +18,7 @@ cannot call tools is refused rather than trusted.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
@@ -234,8 +235,17 @@ def prune(messages: list[dict], budget: int = MAX_CONTEXT_CHARS) -> list[dict]:
 async def ask_once(session, tools, question: str, model: str, *,
                    history: list[dict] | None = None,
                    max_rounds: int = MAX_ROUNDS, num_ctx: int = 8192,
-                   num_predict: int = 700, on_step=None) -> Run:
-    """Answer one question on an already-open session."""
+                   num_predict: int = 700, on_step=None, on_status=None) -> Run:
+    """Answer one question on an already-open session.
+
+    `on_status(text)` is called whenever the wait changes character. On a CPU
+    model a single round is tens of seconds, and a caller that cannot say which
+    of them it is in can only offer an undifferentiated spinner.
+    """
+    def say(text):
+        if on_status:
+            on_status(text)
+
     out = Run()
     messages = [{"role": "system", "content": SYSTEM}]
     messages += history or []
@@ -243,7 +253,12 @@ async def ask_once(session, tools, question: str, model: str, *,
 
     for rnd in range(1, max_rounds + 1):
         out.rounds = rnd
-        msg = _chat(model, prune(messages), tools, num_ctx, num_predict)
+        say(f"thinking (round {rnd}/{max_rounds})" if rnd > 1 else "thinking")
+        # Off the event loop: _chat blocks on an HTTP request that can take a
+        # minute, and while it does, nothing else in this loop can run - not a
+        # progress ticker, and not the MCP session's own stream handling.
+        msg = await asyncio.to_thread(
+            _chat, model, prune(messages), tools, num_ctx, num_predict)
         calls = msg.get("tool_calls") or []
 
         if not calls:
@@ -270,6 +285,7 @@ async def ask_once(session, tools, question: str, model: str, *,
                     args = {}
 
             step = Step(tool=name, args=args)
+            say(f"reading the graph: {name}")
             try:
                 res = await session.call_tool(name, args)
                 step.result = "\n".join(
@@ -313,7 +329,7 @@ def remember(history: list[dict], question: str, answer: str) -> list[dict]:
 
 async def run(root: Path, question: str, model: str, *,
               max_rounds: int = MAX_ROUNDS, num_ctx: int = 8192,
-              num_predict: int = 700, on_step=None) -> Run:
+              num_predict: int = 700, on_step=None, on_status=None) -> Run:
     """Drive the MCP tools with `model` until it answers one question.
 
     Connects as a real MCP client over stdio, exactly as an external agent
@@ -322,4 +338,5 @@ async def run(root: Path, question: str, model: str, *,
     async with session_for(root) as (session, tools):
         return await ask_once(session, tools, question, model,
                               max_rounds=max_rounds, num_ctx=num_ctx,
-                              num_predict=num_predict, on_step=on_step)
+                              num_predict=num_predict, on_step=on_step,
+                              on_status=on_status)

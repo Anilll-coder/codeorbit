@@ -1,6 +1,8 @@
 """CodeOrbit CLI - local-first code intelligence with a local LLM."""
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import sys
 from pathlib import Path
 
@@ -935,8 +937,6 @@ def agent(
                                help="Only report which local models can call tools"),
 ):
     """Ask a local model about this project. Omit the question for a session."""
-    import asyncio
-
     from . import agent as agentmod
 
     root = Path(_resolve(path)).resolve()
@@ -1025,6 +1025,42 @@ def _agent_step(step) -> None:
                   f"[dim]-> {len(step.result):,} chars[/dim]")
 
 
+async def _with_progress(coro_fn):
+    """Run one agent question under a spinner that says what it is waiting on.
+
+    A local model on CPU takes tens of seconds per round, and a terminal that
+    prints nothing in that time is indistinguishable from one that has hung.
+    The elapsed counter matters as much as the spinner: it is the difference
+    between "this is slow" and "this is broken".
+
+    `coro_fn(on_status)` gets a callback to report the current phase.
+    """
+    import time
+
+    phase = {"text": "thinking"}
+    started = time.monotonic()
+
+    with console.status("[dim]thinking[/dim]", spinner="dots") as status:
+        async def tick():
+            while True:
+                await asyncio.sleep(0.4)
+                secs = int(time.monotonic() - started)
+                status.update(f"[dim]{phase['text']}  {secs}s[/dim]")
+
+        def on_status(text: str) -> None:
+            phase["text"] = text
+
+        ticker = asyncio.create_task(tick())
+        try:
+            return await coro_fn(on_status)
+        finally:
+            ticker.cancel()
+            # The task is cancelled, not awaited to completion: it never
+            # finishes on its own.
+            with contextlib.suppress(asyncio.CancelledError):
+                await ticker
+
+
 def _agent_answer(result, model: str) -> None:
     console.print()
     if result.answer:
@@ -1046,8 +1082,11 @@ def _agent_answer(result, model: str) -> None:
 async def _agent_once(agentmod, root: Path, question: str, model: str,
                       rounds: int, max_tokens: int) -> None:
     try:
-        result = await agentmod.run(root, question, model, max_rounds=rounds,
-                                    num_predict=max_tokens, on_step=_agent_step)
+        result = await _with_progress(
+            lambda on_status: agentmod.run(
+                root, question, model, max_rounds=rounds,
+                num_predict=max_tokens, on_step=_agent_step,
+                on_status=on_status))
     except OSError as e:
         console.print(f"[red]Could not run the agent: {e}[/red]")
         raise typer.Exit(1)
@@ -1113,10 +1152,11 @@ async def _agent_session(agentmod, root: Path, model: str, rounds: int,
                 # line the user just typed into.
                 console.print()
                 try:
-                    result = await agentmod.ask_once(
-                        session, tools, question, model, history=history,
-                        max_rounds=rounds, num_predict=max_tokens,
-                        on_step=_agent_step)
+                    result = await _with_progress(
+                        lambda on_status: agentmod.ask_once(
+                            session, tools, question, model, history=history,
+                            max_rounds=rounds, num_predict=max_tokens,
+                            on_step=_agent_step, on_status=on_status))
                 except KeyboardInterrupt:
                     # Abandon this question, keep the session and its server.
                     console.print("\n[yellow]cancelled[/yellow]")
