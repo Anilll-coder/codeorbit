@@ -44,6 +44,13 @@ system Python, adds a `codeorbit` launcher to your PATH, and offers to pull the
 Ollama model. Re-running upgrades in place; `--uninstall` / `-Uninstall` removes
 it and leaves your project indexes alone.
 
+Putting it on PATH means editing your user PATH in the registry on Windows, and
+appending one fenced `export PATH=...` block to your shell rc file (`.bashrc`,
+`.zshrc`, `.profile`, or fish's `config.fish`) elsewhere. **Open a new terminal
+afterwards**, or `. ~/.bashrc` — the shell that ran the installer does not see
+the change. Pass `CODEORBIT_NO_PATH=1` to skip that edit and manage PATH
+yourself.
+
 Needs Python 3.10+, and [Ollama](https://ollama.com) for `codeorbit ask`.
 
 <details>
@@ -54,6 +61,7 @@ Needs Python 3.10+, and [Ollama](https://ollama.com) for `codeorbit ask`.
 | `CODEORBIT_HOME` | `-InstallDir` | where the virtualenv lives |
 | `CODEORBIT_BIN` | `-BinDir` | where the launcher goes |
 | `CODEORBIT_NO_MODEL=1` | `-NoModel` | skip the model download |
+| `CODEORBIT_NO_PATH=1` | — | do not edit shell rc files to extend PATH |
 | `CODEORBIT_REF` | `-Ref` | branch or tag to install |
 
 </details>
