@@ -1,6 +1,7 @@
 {
   "mcpServers": {
     "codeorbit": {
+      "type": "stdio",
       "command": "C:\\Users\\anilk\\AppData\\Local\\CodeOrbit\\Scripts\\codeorbit.exe",
       "args": [
         "mcp",

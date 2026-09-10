@@ -397,6 +397,21 @@ a bare name finds.
 add one entry per project under different names, or omit `--path` and pass
 `project_path` on each tool call.
 
+**Cursor needs one more step: approval.** Its agent refuses to load an MCP
+server the user has not approved, and keys that approval to a hash of the exact
+config entry. Start `cursor-agent` in the project and approve `codeorbit` when
+it asks, or run `/mcp`. Two things about this are worth knowing, because the
+failure does not look like what it is:
+
+- `cursor-agent mcp list` does **not** check approvals. A server that lists
+  fine there, tools and all, can still be refused inside a session with
+  `MCP server "codeorbit" has not been approved`. Listing is not connecting.
+- Anything that rewrites the entry — a reinstall to a new location, a change to
+  `--path` — changes the hash and revokes the approval. Cursor asks again;
+  until you answer, sessions report the server as unavailable. `install-mcp`
+  will not rewrite an entry that only *spells* its paths differently, precisely
+  so re-running it does not cost you the approval.
+
 Seven tools are exposed: `explore` (the primary one), `search`, `node`,
 `impact`, `path`, `audit`, `overview`.
 

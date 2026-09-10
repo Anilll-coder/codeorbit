@@ -17,6 +17,7 @@ bare name finds.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import sys
 from dataclasses import dataclass
@@ -122,6 +123,57 @@ def server_entry(root: Path, exe: str | None = None) -> dict:
     }
 
 
+def _same_path(a: object, b: object) -> bool:
+    """Do two path strings name the same file, allowing for spelling?"""
+    if not isinstance(a, str) or not isinstance(b, str):
+        return a == b
+    try:
+        # normcase folds case AND turns / into \ on Windows; it is a no-op
+        # elsewhere, where paths really are case-sensitive.
+        return (os.path.normcase(os.path.normpath(a))
+                == os.path.normcase(os.path.normpath(b)))
+    except (TypeError, ValueError):
+        return a == b
+
+
+def entry_equivalent(existing: object, wanted: dict) -> bool:
+    """True when `existing` already launches exactly the server `wanted` does.
+
+    Compared by meaning, not by spelling, and this matters more than it looks.
+    The same install produces different strings on different runs - `c:\\proj`
+    vs `C:\\Proj`, forward slashes vs back - and rewriting the entry over a
+    cosmetic difference is not free:
+
+      Cursor's agent gates every MCP server behind an approval keyed to
+      `sha256({path: <project root>, server: <this exact object>})`. Rewriting
+      the entry changes that hash, which silently revokes the approval the user
+      already gave. The next session then refuses to load the server, while
+      `cursor-agent mcp list` - which does not check approvals - still shows it
+      and lists its tools. That split is the whole bug: it reads as a broken
+      connection and is really a withdrawn consent.
+
+    So a rewrite has a cost, and is worth paying only for a real change. A
+    changed `type`, a different executable, or different arguments all still
+    count as real. A dead `command` does too - an install that moved must be
+    repaired even though that costs an approval.
+    """
+    if not isinstance(existing, dict):
+        return False
+    if existing.get("type") != wanted.get("type"):
+        return False
+
+    cmd = existing.get("command")
+    if not _same_path(cmd, wanted.get("command")):
+        return False
+    if not isinstance(cmd, str) or not Path(cmd).exists():
+        return False
+
+    old_args, new_args = existing.get("args"), wanted.get("args")
+    if not isinstance(old_args, list) or len(old_args) != len(new_args):
+        return False
+    return all(o == n or _same_path(o, n) for o, n in zip(old_args, new_args))
+
+
 def config_path(agent: str, root: Path, use_global: bool = False) -> Path:
     target = TARGETS[agent]
     if use_global:
@@ -169,7 +221,8 @@ def install(agent: str, root: Path, use_global: bool = False,
     entry = server_entry(root, exe)
     others = sorted(k for k in servers if k != SERVER_KEY)
 
-    if servers.get(SERVER_KEY) == entry:
+    current = servers.get(SERVER_KEY)
+    if current == entry or entry_equivalent(current, entry):
         return Result(path, "unchanged", None, others), None
 
     action = "updated" if SERVER_KEY in servers else "created"

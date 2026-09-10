@@ -879,6 +879,25 @@ def install_mcp(
 
     if result.action != "unchanged":
         console.print(f"\n[bold]Restart {target.name}[/bold] to pick it up.")
+
+    if agent == "cursor":
+        # Writing the config is only half of it. Cursor's agent will not load a
+        # server the user has not approved, and it keys that approval to a hash
+        # of this exact entry - so it must be approved once, and again after
+        # anything changes it. Worth saying out loud because the failure looks
+        # like a broken connection: `cursor-agent mcp list` does not check
+        # approvals, so the server lists there, with its tools, while every
+        # session refuses it with "has not been approved".
+        console.print("\n[bold]Cursor also needs you to approve it.[/bold]")
+        console.print("  Start cursor-agent in this project and approve "
+                      "[bold]codeorbit[/bold] when it asks, or run [bold]/mcp[/bold].")
+        console.print("[dim]  The approval covers this exact entry. Re-running "
+                      "install-mcp after a move or upgrade rewrites it, and "
+                      "Cursor will ask again.[/dim]")
+        console.print("[dim]  `cursor-agent mcp list` does not check approvals - "
+                      "a server listed fine there can still be refused in a "
+                      "session.[/dim]")
+
     console.print("[dim]Then ask it something like: "
                   '"use codeorbit to explain how X works"[/dim]')
     console.print(
