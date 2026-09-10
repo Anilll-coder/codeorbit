@@ -23,12 +23,12 @@ MAX_NODES = 400          # beyond this a force layout is a hairball, not a pictu
 
 # ------------------------------------------------------------------ data
 
-def module_graph(conn) -> dict:
+def module_graph(conn, limit: int = MAX_NODES) -> dict:
     nodes = conn.execute(
         "SELECT n.id, n.qname, f.path AS path, f.loc AS loc, f.lang AS lang "
         "FROM nodes n JOIN files f ON f.id = n.file_id "
         "WHERE n.kind = 'module' ORDER BY f.loc DESC LIMIT ?",
-        (MAX_NODES,),
+        (limit,),
     ).fetchall()
     keep = {r["id"] for r in nodes}
 
@@ -64,7 +64,8 @@ def module_graph(conn) -> dict:
     return {"view": "modules", "nodes": out_nodes, "edges": edges}
 
 
-def symbol_graph(conn, focus_id: int | None = None, depth: int = 2) -> dict:
+def symbol_graph(conn, focus_id: int | None = None, depth: int = 2,
+                 limit: int = MAX_NODES) -> dict:
     """Functions and methods; the whole project, or a neighbourhood of `focus`."""
     if focus_id is None:
         rows = conn.execute(
@@ -73,7 +74,7 @@ def symbol_graph(conn, focus_id: int | None = None, depth: int = 2) -> dict:
             "FROM nodes n JOIN files f ON f.id = n.file_id "
             "WHERE n.kind IN ('function','method','class') "
             "ORDER BY fan_in DESC LIMIT ?",
-            (MAX_NODES,),
+            (limit,),
         ).fetchall()
         keep = {r["id"] for r in rows}
     else:
@@ -89,9 +90,9 @@ def symbol_graph(conn, focus_id: int | None = None, depth: int = 2) -> dict:
             nxt -= keep
             keep |= nxt
             frontier = nxt
-            if len(keep) > MAX_NODES:
+            if len(keep) > limit:
                 break
-        keep = set(list(keep)[:MAX_NODES])
+        keep = set(list(keep)[:limit])
         marks = ",".join("?" * len(keep))
         rows = conn.execute(
             f"SELECT n.id, n.name, n.qname, n.kind, f.path AS path, f.lang AS lang, "

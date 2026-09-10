@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CodeOrbit</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><circle cx='8' cy='8' r='3' fill='%234c9aff'/><circle cx='8' cy='8' r='6.4' fill='none' stroke='%234c9aff' stroke-opacity='.45'/></svg>">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<div id="app">
+
+  <header>
+    <div class="brand">
+      <b id="project">CodeOrbit</b>
+      <span class="root" id="root" title=""></span>
+    </div>
+
+    <div class="seg" role="group" aria-label="View">
+      <button id="v-modules" aria-pressed="true">Modules</button>
+      <button id="v-symbols" aria-pressed="false">Symbols</button>
+    </div>
+
+    <div class="spacer"></div>
+
+    <div class="search">
+      <input id="q" type="search" placeholder="Find a symbol or file"
+             autocomplete="off" spellcheck="false" aria-label="Search the graph">
+      <div class="results" id="results" role="listbox"></div>
+    </div>
+
+    <button class="icon-btn" id="theme" title="Switch theme">Theme</button>
+  </header>
+
+  <!-- Everything in the rail is built from what the index actually contains,
+       so a single-language project does not render an empty legend. -->
+  <nav class="rail" aria-label="Filters">
+    <section>
+      <h2>Project</h2>
+      <div class="stats" id="stats"></div>
+    </section>
+    <section id="sec-lang" hidden>
+      <h2>Languages</h2>
+      <div class="filters" id="langs"></div>
+    </section>
+    <section id="sec-kind" hidden>
+      <h2>Kinds</h2>
+      <div class="filters" id="kinds"></div>
+    </section>
+    <section id="sec-dir" hidden>
+      <h2>Directories</h2>
+      <div class="filters" id="dirs"></div>
+    </section>
+    <section>
+      <h2>Density</h2>
+      <div class="range">
+        <div class="lbl"><span>Min connections</span><span class="num" id="degv">0</span></div>
+        <input id="deg" type="range" min="0" max="12" step="1" value="0"
+               aria-label="Hide nodes with fewer connections than">
+      </div>
+    </section>
+  </nav>
+
+  <main class="stage">
+    <canvas id="canvas"></canvas>
+
+    <div class="overlay" id="overlay">
+      <div class="skeleton">
+        <div class="dots"><i></i><i></i><i></i><i></i><i></i></div>
+        <p id="overlay-msg">Reading the graph</p>
+      </div>
+    </div>
+
+    <div class="hud" id="hud"></div>
+
+    <div class="zoomers">
+      <button class="icon-btn" id="zin" title="Zoom in" aria-label="Zoom in">+</button>
+      <button class="icon-btn" id="zout" title="Zoom out" aria-label="Zoom out">-</button>
+      <button class="icon-btn" id="zfit" title="Fit to view">Fit</button>
+    </div>
+
+    <div class="tip" id="tip" hidden></div>
+  </main>
+
+  <aside class="panel" id="panel">
+    <p class="empty">Click a node to see what calls it, what it calls, and its
+      source. Drag to pan, scroll to zoom.</p>
+  </aside>
+
+</div>
+<script src="/app.js" type="module"></script>
+</body>
+</html>

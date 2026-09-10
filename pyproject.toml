@@ -32,7 +32,7 @@ build-backend = "setuptools.build_meta"
 packages = ["codeorbit", "codeorbit.extract"]
 
 [tool.setuptools.package-data]
-codeorbit = ["schema.sql"]
+codeorbit = ["schema.sql", "web/*.html", "web/*.css", "web/*.js"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

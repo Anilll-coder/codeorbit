@@ -105,8 +105,9 @@ codeorbit embed                        # enable search by meaning (one time)
 codeorbit fix -s high                  # propose fixes, verified, preview only
 codeorbit fix -s high --apply --test   # ...write them, gated on the test suite
 
-codeorbit viz                          # interactive graph as a standalone HTML file
+codeorbit viz                          # explore the graph in a browser, served locally
 codeorbit viz --focus Segment          # ...centred on one symbol
+codeorbit viz --out graph.html         # a standalone file instead of a server
 codeorbit viz --format mermaid         # a diagram for a report
 
 codeorbit mcp                          # serve the graph over MCP to any agent
@@ -143,7 +144,9 @@ files
   -> semantic.py     symbol embeddings, fused with keyword search by RRF
   -> fixer.py        propose a fix for one symbol, splice it, never trust it
   -> verify.py       the gates a fix must survive before it may touch a file
-  -> viz.py          self-contained interactive HTML, or Mermaid
+  -> viz.py          graph data, self-contained HTML, or Mermaid
+  -> server.py       local HTTP server for the explorer
+  -> web/            the explorer itself: canvas renderer + layout worker
   -> mcp_server.py   the graph as MCP tools, for Claude Code / Cursor / etc
   -> agent.py        a local Ollama model driving those same tools
   -> llm.py          Ollama, streaming, local only
@@ -360,16 +363,51 @@ any change so a pre-existing failure is not blamed on the model.
 
 ## Seeing the graph
 
-`codeorbit viz` writes one HTML file that embeds its data and its own force
-layout and makes **zero external requests** - no CDN, no fonts, no network. A
-viewer that needed an internet connection would contradict the whole premise;
-this one can be emailed or opened from a USB stick.
+`codeorbit viz` starts a small server on 127.0.0.1 and opens the graph in your
+browser. It takes the first free port from a short list (7373 upward), so the
+URL stays the same across restarts and an open tab survives a reload. Ctrl-C
+stops it.
+
+It binds to loopback and nothing else, deliberately. The index holds your source
+and the detail panel serves it verbatim, so nothing on your network should be
+able to reach it.
+
+A server rather than a file because a file has to decide everything up front.
+Every node, edge and function body has to be inlined before the browser opens,
+which caps how much of a repository the page can hold and rules out the
+interesting operations: search the whole index, open a neighbourhood, read a
+body. Those are now requests, and the page ships only what you are looking at.
 
 Two views, because they answer different questions. `modules` is one node per
 file with import edges: *how is this project shaped?* `symbols` is functions and
 methods with call edges, optionally centred on one symbol via `--focus`: *what
-does this touch?* Click any node to isolate it and list its neighbours;
-`--format mermaid` emits a diagram to paste into a report instead.
+does this touch?* Click a node to dim everything that is not adjacent to it and
+read its callers, callees and source. The left rail is built from what your
+index actually contains: a single-language project gets no language legend, and
+the directory and kind filters list your directories and your kinds.
+
+**Still zero external requests** - no CDN, no fonts, no npm. That constraint is
+the whole premise, and it is why the layout and the renderer are written here
+rather than pulled from a package.
+
+Drawing is on a canvas, and the three things that decide whether a large graph
+is usable are handled explicitly: layout runs in a Web Worker using Barnes-Hut
+approximation, so a tick is `O(n log n)` rather than `O(n^2)` and never competes
+with the frame; nothing outside the viewport is drawn; and detail drops out as
+you zoom away, with labels capped and edges fading out entirely below a
+threshold where they carry no information. Hit testing goes through a uniform
+grid rather than scanning every node on every mouse move.
+
+Two escape hatches from the server:
+
+```bash
+codeorbit viz --out graph.html      # the old self-contained file, still one file
+codeorbit viz --format mermaid      # a diagram to paste into a report
+codeorbit viz --port 9000           # a specific port, an error if it is taken
+```
+
+The standalone file is still the right tool for sending someone a picture of a
+codebase. The server is the tool for exploring one.
 
 ## Using it from Claude Code, Cursor, or any MCP agent
 

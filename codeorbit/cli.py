@@ -599,6 +599,37 @@ def embed(
     conn.close()
 
 
+def _viz_serve(root: Path, view: str, focus: str, port: int, open_it: bool) -> None:
+    """Run the explorer until the user stops it."""
+    from . import server as servermod
+
+    if view not in ("modules", "symbols"):
+        console.print("[red]--view must be 'modules' or 'symbols'[/red]")
+        raise typer.Exit(1)
+
+    def ready(url: str) -> None:
+        target = url
+        if focus:
+            target = f"{url}?view=symbols&focus={focus}"
+        elif view == "symbols":
+            target = f"{url}?view=symbols"
+        console.print(f"[green]CodeOrbit[/green] is serving {root.name} at "
+                      f"[bold]{target}[/bold]")
+        console.print("[dim]Bound to 127.0.0.1 only - nothing else on your "
+                      "network can reach it.[/dim]")
+        console.print("[dim]Ctrl-C to stop.[/dim]")
+        if open_it:
+            import webbrowser
+            webbrowser.open(target)
+
+    try:
+        servermod.serve(root, port, on_ready=ready)
+    except OSError as e:
+        console.print(f"[red]{e}[/red]")
+        raise typer.Exit(1)
+    console.print("[dim]Stopped.[/dim]")
+
+
 @app.command()
 def viz(
     path: str = typer.Option(None, "--path", "-p", help=PATH_HELP),
@@ -606,14 +637,27 @@ def viz(
     focus: str = typer.Option(None, "--focus", "-f",
                               help="Centre the symbol view on this symbol"),
     depth: int = typer.Option(2, "--depth", "-d", help="Hops around --focus"),
-    out: str = typer.Option(None, "--out", "-o", help="Output file"),
+    out: str = typer.Option(None, "--out", "-o",
+                            help="Write a standalone file instead of serving"),
     fmt: str = typer.Option("html", "--format", help="html or mermaid"),
+    port: int = typer.Option(None, "--port", help="Serve on this port instead of the default set"),
     open_it: bool = typer.Option(True, "--open/--no-open", help="Open in a browser"),
 ):
-    """Draw the graph as a self-contained HTML page (or a Mermaid diagram)."""
+    """Explore the graph in a browser, served from this machine.
+
+    With --out, writes the old self-contained page instead: one file, no
+    server, still works from a USB stick.
+    """
     from . import viz as vizmod
 
     root, conn = _open(path)
+
+    # The server is the default because it can answer questions a static file
+    # cannot: search the whole index, open a neighbourhood, read a body. The
+    # file is still what you want when the graph has to travel.
+    if fmt == "html" and not out:
+        conn.close()
+        return _viz_serve(root, view, focus, port, open_it)
 
     if view not in ("modules", "symbols"):
         console.print("[red]--view must be 'modules' or 'symbols'[/red]")
