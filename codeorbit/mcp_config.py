@@ -107,7 +107,16 @@ def _target_of_cmd_shim(shim: Path) -> Path | None:
 
 
 def server_entry(root: Path, exe: str | None = None) -> dict:
+    """The config block an agent needs to launch this server.
+
+    `type: "stdio"` is stated explicitly rather than left to be inferred.
+    Claude Code infers it from the presence of `command`, but Cursor's agent
+    discriminates on the field: without it, it treated the entry as a remote
+    server, initialised an OAuth provider for it, and never spawned the process
+    at all - reporting only "not connected" with no underlying error.
+    """
     return {
+        "type": "stdio",
         "command": exe or find_executable(),
         "args": ["mcp", "--path", str(root)],
     }

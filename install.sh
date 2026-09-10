@@ -15,6 +15,7 @@
 #   CODEORBIT_REPO=URL   source to clone when not run from a checkout
 #   CODEORBIT_REF=REF    branch/tag to install     (default: main)
 #   CODEORBIT_NO_MODEL=1 skip pulling the Ollama model
+#   CODEORBIT_NO_PATH=1  do not edit shell rc files to extend PATH
 
 set -eu
 
@@ -24,6 +25,11 @@ REPO="${CODEORBIT_REPO:-https://github.com/Anilll-coder/codeorbit.git}"
 REF="${CODEORBIT_REF:-main}"
 MODEL="phi4-mini"
 MIN_PY_MINOR=10
+
+# Fences around the block this installer appends to a shell rc file, so it
+# can recognise its own work on an upgrade and take it back out on uninstall.
+MARK_BEGIN='# >>> codeorbit >>>'
+MARK_END='# <<< codeorbit <<<'
 
 # ---------- output ----------------------------------------------------------
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
@@ -38,11 +44,41 @@ step() { printf '%s==>%s %s\n' "$B" "$N" "$*"; }
 warn() { printf '%s warn%s %s\n' "$Y" "$N" "$*" >&2; }
 die()  { printf '%serror%s %s\n' "$R" "$N" "$*" >&2; exit 1; }
 
+# ---------- shell rc files --------------------------------------------------
+# Every file this installer might have written a PATH block into. Used only
+# by --uninstall; the install path picks exactly one.
+rc_candidates() {
+  printf '%s\n' \
+    "$HOME/.bashrc" \
+    "$HOME/.bash_profile" \
+    "$HOME/.zshrc" \
+    "${ZDOTDIR:-$HOME}/.zshrc" \
+    "$HOME/.profile" \
+    "$HOME/.config/fish/config.fish"
+}
+
+# Delete our fenced block, leaving the rest of the file alone. Written as
+# tmp + copy-back rather than `sed -i` because that flag takes a different
+# argument on BSD/macOS than it does on GNU.
+strip_path_block() {
+  _f="$1"
+  [ -f "$_f" ] || return 0
+  grep -Fq "$MARK_BEGIN" "$_f" 2>/dev/null || return 0
+  _tmp="$_f.codeorbit.$$"
+  if sed "/^$MARK_BEGIN\$/,/^$MARK_END\$/d" "$_f" > "$_tmp" 2>/dev/null; then
+    if cat "$_tmp" > "$_f" 2>/dev/null; then
+      say "  removed PATH entry from $_f"
+    fi
+  fi
+  rm -f "$_tmp"
+}
+
 # ---------- uninstall -------------------------------------------------------
 if [ "${1:-}" = "--uninstall" ]; then
   step "Removing CodeOrbit"
   [ -d "$HOME_DIR" ] && rm -rf "$HOME_DIR" && say "  removed $HOME_DIR"
   [ -f "$BIN_DIR/codeorbit" ] && rm -f "$BIN_DIR/codeorbit" && say "  removed $BIN_DIR/codeorbit"
+  rc_candidates | sort -u | while IFS= read -r f; do strip_path_block "$f"; done
   say "${G}Done.${N} Per-project .codeorbit/ indexes were left alone."
   exit 0
 fi
@@ -113,7 +149,9 @@ else
 fi
 
 step "Installing CodeOrbit and its dependencies"
-"$VPY" -m pip install --upgrade pip >/dev/null 2>&1 || true
+# Deliberately NOT upgrading pip: the venv ships a working one, and an
+# upgrade pulled a release that breaks console-script generation on
+# Windows badly enough that pip could not reinstall itself.
 "$VPY" -m pip install --upgrade "$SRC" >/dev/null 2>&1 \
   || die "Installation failed. Re-run with:
   $VPY -m pip install --upgrade '$SRC'"
@@ -144,9 +182,59 @@ chmod +x "$BIN_DIR/codeorbit"
 say "  $BIN_DIR/codeorbit"
 
 case ":${PATH}:" in
-  *":$BIN_DIR:"*) ON_PATH=1 ;;
-  *) ON_PATH=0 ;;
+  *":$BIN_DIR:"*)  ON_PATH=1 ;;
+  *":$BIN_DIR/:"*) ON_PATH=1 ;;
+  *)               ON_PATH=0 ;;
 esac
+
+# Actually put BIN_DIR on PATH, the way install.ps1 edits the user PATH on
+# Windows. Printing advice was not enough: the install reported success and
+# then every command was "codeorbit: command not found". The Debian/Ubuntu
+# snippet that adds ~/.local/bin runs from ~/.profile at *login* and only if
+# the directory already exists - neither holds right after a fresh install.
+PATH_FILE=''
+if [ "$ON_PATH" = "0" ] && [ "${CODEORBIT_NO_PATH:-}" != "1" ]; then
+  PATH_LINE="export PATH=\"$BIN_DIR:\$PATH\""
+  case "$(basename -- "${SHELL:-sh}")" in
+    zsh)
+      PATH_FILE="${ZDOTDIR:-$HOME}/.zshrc"
+      ;;
+    fish)
+      PATH_FILE="$HOME/.config/fish/config.fish"
+      PATH_LINE="set -gx PATH $BIN_DIR \$PATH"
+      ;;
+    bash)
+      # macOS Terminal starts bash as a *login* shell, which reads
+      # .bash_profile and never .bashrc unless that file sources it.
+      if [ "$(uname -s 2>/dev/null || echo)" = "Darwin" ] && [ -f "$HOME/.bash_profile" ]; then
+        PATH_FILE="$HOME/.bash_profile"
+      else
+        PATH_FILE="$HOME/.bashrc"
+      fi
+      ;;
+    *)
+      PATH_FILE="$HOME/.profile"
+      ;;
+  esac
+
+  if [ -f "$PATH_FILE" ] && grep -Fq "$MARK_BEGIN" "$PATH_FILE" 2>/dev/null; then
+    # Ours already, from an earlier run. Appending a second block would stack
+    # another copy of BIN_DIR onto PATH on every upgrade.
+    say "  already configured in $PATH_FILE"
+    PATH_FILE=''
+  elif mkdir -p "$(dirname -- "$PATH_FILE")" 2>/dev/null &&
+       printf '\n%s\n%s\n%s\n' "$MARK_BEGIN" "$PATH_LINE" "$MARK_END" >> "$PATH_FILE" 2>/dev/null; then
+    say "  added to PATH in $PATH_FILE"
+  else
+    warn "Could not write $PATH_FILE - you will have to add $BIN_DIR to PATH yourself."
+    PATH_FILE=''
+  fi
+fi
+
+# Also for the remainder of this script, so the version check below and
+# anything else that shells out can find the launcher.
+PATH="$BIN_DIR:$PATH"
+export PATH
 
 # ---------- ollama ----------------------------------------------------------
 step "Checking Ollama (needed for 'codeorbit ask')"
@@ -171,11 +259,16 @@ say "${G}CodeOrbit ${VERSION} installed.${N}"
 say ""
 
 if [ "$ON_PATH" = "0" ]; then
-  warn "$BIN_DIR is not on your PATH."
-  say ""
-  say "  Add it with one of:"
-  say "    ${DIM}echo 'export PATH=\"$BIN_DIR:\$PATH\"' >> ~/.bashrc && . ~/.bashrc${N}"
-  say "    ${DIM}echo 'export PATH=\"$BIN_DIR:\$PATH\"' >> ~/.zshrc  && . ~/.zshrc${N}"
+  if [ -n "$PATH_FILE" ]; then
+    warn "PATH was updated - open a NEW terminal before using codeorbit, or
+       bring it into this one with:  . $PATH_FILE"
+  else
+    warn "$BIN_DIR is not on your PATH."
+    say ""
+    say "  Add it with one of:"
+    say "    ${DIM}echo 'export PATH=\"$BIN_DIR:\$PATH\"' >> ~/.bashrc && . ~/.bashrc${N}"
+    say "    ${DIM}echo 'export PATH=\"$BIN_DIR:\$PATH\"' >> ~/.zshrc  && . ~/.zshrc${N}"
+  fi
   say ""
 fi
 

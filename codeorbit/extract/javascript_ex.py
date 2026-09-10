@@ -47,7 +47,12 @@ def extract(tree, src: bytes, module_qname: str) -> Extraction:
                 walk(child, q, False)
                 continue
 
-            if t in ("class_declaration", "class"):
+            # abstract_class_declaration only occurs in TypeScript, which reuses
+            # this walker. Handling it here rather than in the TS extractor is
+            # what keeps a method's qualified name right: without it the walker
+            # descends into the class as an unknown node and every method lands
+            # at module scope instead of on its class.
+            if t in ("class_declaration", "class", "abstract_class_declaration"):
                 nm_node = child.child_by_field_name("name")
                 nm = text(nm_node, src) if nm_node else "(anonymous)"
                 q = scope + "." + nm
@@ -57,10 +62,21 @@ def extract(tree, src: bytes, module_qname: str) -> Extraction:
                     out.base_types.append((q, text(sup, src).rsplit(".", 1)[-1]))
                 else:
                     for c in child.named_children:
-                        if c.type == "class_heritage":
-                            base = text(c, src).replace("extends", "").strip()
-                            if base:
-                                out.base_types.append((q, base.split("(")[0].rsplit(".", 1)[-1]))
+                        if c.type != "class_heritage":
+                            continue
+                        # Take only the extends part. `class A extends B
+                        # implements C` has both under one heritage node, and
+                        # stripping just the word "extends" from its text left
+                        # "B implements C" recorded as a single base name.
+                        raw = text(c, src)
+                        for clause in c.named_children:
+                            if clause.type == "extends_clause":
+                                raw = text(clause, src)
+                                break
+                        base = raw.replace("extends", "").split("implements")[0]
+                        base = base.split("(")[0].split("<")[0].strip()
+                        if base:
+                            out.base_types.append((q, base.rsplit(".", 1)[-1]))
                 walk(child, q, True)
                 continue
 

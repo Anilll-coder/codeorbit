@@ -975,6 +975,8 @@ def uninstall(
         console.print(f"  the launcher                [dim]{p}[/dim]")
     if plan.path_entry:
         console.print(f"  a PATH entry                [dim]{plan.path_entry}[/dim]")
+    for rc in plan.rc_files:
+        console.print(f"  its PATH line in            [dim]{rc}[/dim]")
     if plan.index:
         console.print(f"  this project's index        [dim]{plan.index}[/dim]")
     if plan.temp_files:
@@ -1006,7 +1008,7 @@ def uninstall(
         console.print(f"  {line}")
 
     console.print("\n[green]CodeOrbit removed.[/green]")
-    if plan.path_entry:
+    if plan.path_entry or plan.rc_files:
         console.print("[dim]Open a new terminal for the PATH change to apply.[/dim]")
     if not plan.index:
         console.print("[dim]Project indexes were kept. Delete a .codeorbit/ folder "

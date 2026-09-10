@@ -27,6 +27,12 @@ from pathlib import Path
 
 from .db import DB_DIRNAME
 
+# The fences install.sh writes around the line it appends to a shell rc file.
+# Must stay byte-identical to the ones in that script - they are how each side
+# recognises the other's work.
+RC_MARK_BEGIN = "# >>> codeorbit >>>"
+RC_MARK_END = "# <<< codeorbit <<<"
+
 
 @dataclass
 class Plan:
@@ -34,6 +40,7 @@ class Plan:
     launchers: list[Path] = field(default_factory=list)
     index: Path | None = None
     path_entry: str | None = None          # Windows user PATH entry to unset
+    rc_files: list[Path] = field(default_factory=list)   # POSIX rc files to edit
     refusal: str | None = None             # set when uninstall must not proceed
     editable_source: Path | None = None    # a checkout we must NOT delete
     temp_files: list[Path] = field(default_factory=list)
@@ -42,7 +49,7 @@ class Plan:
     @property
     def anything(self) -> bool:
         return bool(self.venv or self.launchers or self.index or self.path_entry
-                    or self.temp_files or self.mcp_configs)
+                    or self.rc_files or self.temp_files or self.mcp_configs)
 
 
 def temp_artifacts() -> list[Path]:
@@ -183,6 +190,91 @@ def _launchers(venv: Path | None = None) -> list[Path]:
     return found
 
 
+def _rc_candidates() -> list[Path]:
+    """Shell rc files install.sh may have appended a PATH line to."""
+    home = Path.home()
+    zdotdir = os.environ.get("ZDOTDIR")
+    paths = [
+        home / ".bashrc",
+        home / ".bash_profile",
+        home / ".zshrc",
+        Path(zdotdir) / ".zshrc" if zdotdir else home / ".zshrc",
+        home / ".profile",
+        home / ".config" / "fish" / "config.fish",
+    ]
+    seen: set[Path] = set()
+    out: list[Path] = []
+    for p in paths:
+        if p in seen:
+            continue
+        seen.add(p)
+        out.append(p)
+    return out
+
+
+def rc_files_with_block() -> list[Path]:
+    """The rc files that actually carry our fenced block right now."""
+    found: list[Path] = []
+    for p in _rc_candidates():
+        try:
+            if p.is_file() and RC_MARK_BEGIN in p.read_text(encoding="utf-8", errors="replace"):
+                found.append(p)
+        except OSError:
+            continue
+    return found
+
+
+def strip_rc_block(path: Path) -> bool:
+    """Delete our fenced block from `path`. Returns True if anything changed.
+
+    Line-based and fence-anchored on purpose: this is someone's shell rc, and
+    the only lines it may touch are the ones the installer put there. Anything
+    it did not write - including a hand-edited PATH line outside the fences -
+    is left exactly as found.
+    """
+    try:
+        original = path.read_text(encoding="utf-8")
+    except OSError:
+        return False
+
+    lines = original.splitlines(keepends=True)
+    kept: list[str] = []
+    inside = False
+    changed = False
+    for line in lines:
+        stripped = line.strip()
+        if not inside and stripped == RC_MARK_BEGIN:
+            inside = True
+            changed = True
+            # install.sh writes a blank line before the fence; take it back so
+            # repeated install/uninstall cycles do not grow the file.
+            if kept and not kept[-1].strip():
+                kept.pop()
+            continue
+        if inside:
+            if stripped == RC_MARK_END:
+                inside = False
+            continue
+        kept.append(line)
+
+    if not changed:
+        return False
+    # An unterminated block means the file was edited by hand between the
+    # fences. Refuse rather than swallow the rest of the file.
+    if inside:
+        return False
+
+    try:
+        shutil.copy2(path, path.with_suffix(path.suffix + ".bak"))
+    except OSError:
+        pass
+    try:
+        path.write_text("".join(kept), encoding="utf-8")
+    except OSError:
+        return False
+    return True
+
+
 def build_plan(project: Path | None = None, with_index: bool = False) -> Plan:
     plan = Plan()
     prefix = Path(sys.prefix).resolve()
@@ -203,6 +295,12 @@ def build_plan(project: Path | None = None, with_index: bool = False) -> Plan:
     if os.name == "nt" and plan.launchers:
         # Only give up a PATH entry that one of OUR shims lived in.
         plan.path_entry = str(plan.launchers[0].parent)
+    elif os.name != "nt":
+        # The POSIX installer has no registry to edit, so it appends a fenced
+        # block to a shell rc file instead. Scanned by content, not guessed
+        # from the launcher: the user may have moved to a different shell
+        # since installing.
+        plan.rc_files = rc_files_with_block()
 
     if with_index and project is not None:
         idx = project / DB_DIRNAME
@@ -326,6 +424,12 @@ def execute(plan: Plan) -> list[str]:
 
     if plan.path_entry and remove_from_windows_path(plan.path_entry):
         done.append(f"removed {plan.path_entry} from your user PATH")
+
+    for rc in plan.rc_files:
+        if strip_rc_block(rc):
+            done.append(f"removed the PATH line from {rc}")
+        else:
+            done.append(f"could not clean {rc} - remove the codeorbit block by hand")
 
     if plan.venv is not None:
         running_from_venv = Path(sys.executable).resolve().is_relative_to(plan.venv)

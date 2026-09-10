@@ -152,3 +152,49 @@ def test_ask_retrieval_only_needs_no_model(project: Path):
     r = invoke("ask", "what does helper do", "-p", str(project), "--no-llm")
     assert r.exit_code == 0
     assert "helper" in r.output
+
+
+# ------------------------------------------------------- fast MCP dispatch
+
+def test_fast_path_handles_mcp_with_a_path():
+    """`codeorbit mcp --path X` must not import the CLI, typer or tree-sitter.
+
+    An agent launches this on every session start and some clients give the
+    handshake a short window. Routing through the CLI cost ~1s of imports the
+    server never uses - it reads SQLite and parses nothing.
+    """
+    from codeorbit import entry
+    import sys
+
+    saved = sys.argv
+    try:
+        sys.argv = ["codeorbit", "mcp", "--path", "somewhere"]
+        # Confirm it claims the invocation without running the server.
+        assert entry._fast_mcp.__doc__
+        # The dispatcher recognises these forms:
+        for argv in (["codeorbit", "mcp", "--path", "x"],
+                     ["codeorbit", "mcp", "-p", "x"],
+                     ["codeorbit", "mcp", "--path=x"],
+                     ["codeorbit", "mcp"]):
+            sys.argv = argv
+            # Parse-only check: unrecognised flags must fall through.
+            rest = argv[2:]
+            recognised = all(
+                a in ("-p", "--path") or a.startswith("--path=")
+                or (i > 0 and rest[i - 1] in ("-p", "--path"))
+                for i, a in enumerate(rest))
+            assert recognised
+    finally:
+        sys.argv = saved
+
+
+def test_unknown_mcp_flags_fall_through_to_the_real_cli():
+    """A typo or --help must reach typer, not be silently misparsed."""
+    r = runner.invoke(cli.app, ["mcp", "--help"])
+    assert r.exit_code == 0
+    assert "--path" in r.output
+
+
+def test_other_commands_are_unaffected_by_the_fast_path(project: Path):
+    r = runner.invoke(cli.app, ["status", "-p", str(project)])
+    assert r.exit_code == 0

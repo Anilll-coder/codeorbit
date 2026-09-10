@@ -157,7 +157,11 @@ try {
     if (-not (Test-Path $vpy)) { Die "The virtualenv at $InstallDir looks broken. Delete it and re-run." }
 
     Step 'Installing CodeOrbit and its dependencies'
-    Invoke-Exe -Exe $vpy -Arguments @('-m', 'pip', 'install', '--upgrade', 'pip') | Out-Null
+    # Deliberately NOT upgrading pip. The venv ships a pip that works;
+    # upgrading it pulled a release whose distlib raises
+    # "Resource name escapes package: 'w64-arm.exe'" when generating
+    # console scripts on Windows, leaving an install that could not even
+    # repair itself. An installer must not break the tool it installs.
     $pipRes = Invoke-Exe -Exe $vpy -Arguments @('-m', 'pip', 'install', '--upgrade', $src)
     if ($pipRes.Code -ne 0) {
         Die "Installation failed. Re-run this to see why:`n  & '$vpy' -m pip install --upgrade '$src'"

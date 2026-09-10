@@ -9,6 +9,8 @@ LANG_BY_SUFFIX = {
     ".py": "python",
     ".js": "javascript", ".jsx": "javascript",
     ".mjs": "javascript", ".cjs": "javascript",
+    ".ts": "typescript", ".mts": "typescript", ".cts": "typescript",
+    ".tsx": "tsx",
 }
 
 # Directories that are never source code worth graphing.
