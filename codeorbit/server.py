@@ -272,13 +272,21 @@ def bind(preferred: int | None = None) -> ThreadingHTTPServer:
 
 
 def serve(root: Path, port: int | None = None, on_ready=None) -> None:
-    """Run until interrupted. `on_ready` is called with the URL once bound."""
+    """Run until interrupted. `on_ready` is called with the URL once bound.
+
+    `on_ready` runs on its own thread rather than inline. It is the callback
+    that launches a browser, and anything it does slowly - or, on some systems,
+    forever - would otherwise happen *before* `serve_forever`, leaving the
+    browser it just opened knocking on a socket that is bound but not yet being
+    answered. Off the serving path, the worst a slow opener can cost is its own
+    thread.
+    """
     httpd = bind(port)
     Handler.state = _State(root)
     url = f"http://127.0.0.1:{httpd.server_address[1]}/"
 
     if on_ready:
-        on_ready(url)
+        threading.Thread(target=on_ready, args=(url,), daemon=True).start()
 
     try:
         httpd.serve_forever()

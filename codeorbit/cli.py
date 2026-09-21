@@ -123,6 +123,55 @@ def _pick(conn, name: str):
     return hits[0]
 
 
+def _report_skipped(st: dict) -> None:
+    """Name the languages in this tree that no installed grammar can read.
+
+    An index that quietly produced nothing was the worst outcome of the old
+    nine-suffix registry: a Kotlin or Go project reported "0 files" and gave no
+    reason, and the obvious conclusion was that the tool was broken. Saying
+    which languages were skipped, and what would fix it, costs one line.
+    """
+    from . import langs as langsmod
+
+    missing = st.get("skipped") or []
+    if not missing:
+        return
+    named = ", ".join(f"{lang} ({n})" for lang, n in missing[:6])
+    console.print(f"  [yellow]skipped[/yellow] [dim]{named}"
+                  f"{' and more' if len(missing) > 6 else ''}"
+                  " - no grammar installed[/dim]")
+    if not langsmod.summary()["pack"]:
+        console.print("  [dim]pip install tree-sitter-language-pack adds "
+                      "grammars for ~370 languages.[/dim]")
+
+
+@app.command(rich_help_panel="Build the graph")
+def langs(
+    verbose: bool = typer.Option(False, "--verbose", "-v",
+                                 help="List every language, not just a summary"),
+):
+    """Which languages and file types this installation can read."""
+    from .langs import summary
+
+    s = summary()
+    console.print(f"[bold]{s['count']}[/bold] languages, "
+                  f"[bold]{len(s['suffixes'])}[/bold] file extensions")
+    console.print("[dim]single-file components (script block is parsed): "
+                  + ", ".join(s["embedded"]) + "[/dim]")
+    if not s["pack"]:
+        console.print("\n[yellow]Only the three built-in grammars are "
+                      "available.[/yellow]")
+        console.print("[dim]pip install tree-sitter-language-pack adds the "
+                      "rest.[/dim]")
+
+    if verbose:
+        console.print("\n" + "  ".join(s["languages"]))
+    else:
+        console.print("\n" + "  ".join(s["languages"][:40])
+                      + f"  [dim]... and {max(0, s['count'] - 40)} more "
+                      "(--verbose for all)[/dim]")
+
+
 @app.command(rich_help_panel="Build the graph")
 def index(
     path_arg: str = typer.Argument(None, metavar="[PATH]", help="Project root to index"),
@@ -155,6 +204,8 @@ def index(
             f"[bold]{st['nodes']}[/bold] symbols"
             + (f"   [dim]({', '.join(detail)})[/dim]" if detail else "")
         )
+
+    _report_skipped(st)
 
     # Resolution is whole-graph: a call site binds against every definition in
     # the project, so it cannot be done per-file. But if no file was touched,
@@ -767,6 +818,26 @@ def embed(
     conn.close()
 
 
+def _open_browser(target: str, is_file: bool = False) -> None:
+    """Open a URL or file, and say plainly when it could not be opened.
+
+    `webbrowser.open` used to be called directly and its answer thrown away, so
+    a headless box, a container, an SSH session and WSL all printed "serving
+    at..." and then nothing ever appeared. The message below is the whole
+    point: on those machines there is nothing to fix, the user just has to be
+    told to open the URL themselves.
+    """
+    from . import browser
+
+    result = (browser.open_file(Path(target)) if is_file
+              else browser.open_url(target))
+    if result.opened:
+        return
+    console.print(f"[yellow]Could not open a browser[/yellow] ({result.how}).")
+    if result.hint:
+        console.print(f"[dim]{result.hint}[/dim]")
+
+
 def _viz_serve(root: Path, view: str, focus: str, port: int, open_it: bool) -> None:
     """Run the explorer until the user stops it."""
     from . import server as servermod
@@ -787,8 +858,7 @@ def _viz_serve(root: Path, view: str, focus: str, port: int, open_it: bool) -> N
                       "network can reach it.[/dim]")
         console.print("[dim]Ctrl-C to stop.[/dim]")
         if open_it:
-            import webbrowser
-            webbrowser.open(target)
+            _open_browser(target)
 
     try:
         servermod.serve(root, port, on_ready=ready)
@@ -868,8 +938,7 @@ def viz(
     console.print(f"[green]Wrote[/green] {target}  [dim]({sub})[/dim]")
 
     if open_it:
-        import webbrowser
-        webbrowser.open(target.resolve().as_uri())
+        _open_browser(str(target), is_file=True)
 
 
 @app.command(rich_help_panel="Explore")

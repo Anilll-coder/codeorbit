@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from codeorbit import audit, db, query, rules
+from codeorbit import audit, db, langs, query, resolve, rules
 from codeorbit.extract import module_qname, parse_and_extract
 from codeorbit.indexer import index_project
 from codeorbit.resolve import resolve_project
@@ -417,3 +417,95 @@ def test_every_rule_compiles_and_is_documented():
 def test_rule_ids_are_unique():
     ids = [r.id for r in rules.RULES]
     assert len(ids) == len(set(ids))
+
+
+def test_every_rule_names_a_family_that_exists():
+    """A rule scoped to a language *id* rather than a family fires on nothing.
+    That is how TypeScript ended up with no rules at all: `rules_for` was
+    called with "typescript" and every JS rule declared "javascript"."""
+    known = {langs.family(l) for l in langs.SUFFIX.values()} | {"*"}
+    for r in rules.RULES:
+        for fam in r.langs:
+            assert fam in known, f"{r.id} targets {fam!r}, which is no family"
+
+
+@pytest.mark.parametrize("lang", ["typescript", "tsx", "vue", "svelte"])
+def test_javascript_rules_reach_the_rest_of_the_family(lang):
+    """They are the same language with different endings, and before families
+    the audit silently skipped every one of them."""
+    ids = {r.id for r in rules.rules_for(lang)}
+    assert "js-eval" in ids and "js-innerhtml" in ids
+
+
+@pytest.mark.parametrize("lang,source,rule_id", [
+    ("go", 'exec.Command("sh", "-c", userInput)', "go-exec-command"),
+    ("go", "tls.Config{InsecureSkipVerify: true}", "go-insecure-tls"),
+    ("java", "Runtime.getRuntime().exec(cmd)", "jvm-runtime-exec"),
+    ("ruby", 'User.where("name = \'#{term}\'")', "rb-sql-interp"),
+    ("php", "system($q);", "php-shell"),
+    ("c", "strcpy(dst, src);", "c-strcpy"),
+    ("csharp", "new BinaryFormatter()", "cs-binaryformatter"),
+    ("rust", "let x = maybe.unwrap();", "rs-unwrap"),
+    ("bash", "curl https://x/i.sh | sh", "sh-curl-pipe-shell"),
+])
+def test_a_rule_fires_on_the_thing_it_is_about(lang, source, rule_id):
+    """One real line per rule family. A regex that matches nothing is worse
+    than no rule: it reads as a clean audit."""
+    applicable = {r.id: r for r in rules.rules_for(lang)}
+    assert rule_id in applicable, f"{rule_id} does not apply to {lang}"
+    assert applicable[rule_id].pattern.search(source), \
+        f"{rule_id} did not match {source!r}"
+
+
+@pytest.mark.parametrize("path,expected", [
+    ("tests/test_x.py", True), ("pkg/x_test.go", True),
+    ("src/Foo.spec.ts", True), ("spec/models/user_spec.rb", True),
+    ("src/__tests__/a.js", True), ("app/Latest.java", False),
+    ("src/contestant.py", False), ("lib/protest/run.rb", False),
+])
+def test_test_paths_are_recognised_by_convention_not_substring(path, expected):
+    """`"test" in path` matched `latest.py` and `contest/`, which meant rules
+    were skipped in real code and blast-radius reported phantom coverage."""
+    assert rules.is_test_path(path) is expected
+
+
+# ------------------------------------------- import specifiers across languages
+
+@pytest.mark.parametrize("spec,expected", [
+    ("pkg.core", "pkg.core"),                       # python
+    ("./pkg/core", "pkg.core"),                     # javascript
+    ("../pkg/core.js", "pkg.core"),                 # javascript, relative
+    ("example.com/app/pkg/core", "example.com.app.pkg.core"),   # go
+    ("crate::pkg::core", "pkg.core"),               # rust
+    (r"app\Pkg\Core", "app.Pkg.Core"),            # php
+    ("pkg/core.h", "pkg.core"),                     # c
+    ("./Base.sol", "Base"),                         # solidity
+])
+def test_import_specifiers_reduce_to_one_shape(spec, expected):
+    """Every language spells the same dependency differently. Unless they all
+    reduce to the same thing, the module view shows a project of islands."""
+    assert resolve._normalise_spec(spec) == expected
+
+
+def test_a_go_import_path_finds_the_module_inside_the_repo():
+    """A Go import carries a whole domain in front of the part that is in
+    this project, and matching on the full string finds nothing."""
+    modules = {"pkg.core": 7}
+    by_tail = {"pkg.core": [7], "core": [7]}
+    assert resolve._match_module(
+        "github.com/me/app/pkg/core", modules, by_tail) == 7
+
+
+def test_an_ambiguous_tail_is_not_guessed():
+    """Binding `core` to whichever of five modules ends in `.core` is how the
+    module view fills with edges nobody can check."""
+    modules = {"a.core": 1, "b.core": 2}
+    by_tail = {"a.core": [1], "b.core": [2], "core": [1, 2]}
+    assert resolve._match_module("core", modules, by_tail) is None
+
+
+def test_a_java_import_names_a_class_not_a_module():
+    modules = {"app.pkg.Service": 3, "app.pkg": 4}
+    by_tail = {"app.pkg.Service": [3], "pkg.Service": [3], "Service": [3],
+               "app.pkg": [4], "pkg": [4]}
+    assert resolve._match_module("app.pkg.Service", modules, by_tail) == 3

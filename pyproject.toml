@@ -5,9 +5,18 @@ description = "Local-first code intelligence: a structural code graph answered b
 requires-python = ">=3.10"
 dependencies = [
     "tree-sitter>=0.25",
+    # The three CodeOrbit parses with its own extractors. Direct dependencies
+    # rather than going through the pack for everything, so the core languages
+    # keep working if the pack ever fails to build on a platform.
     "tree-sitter-python>=0.25",
     "tree-sitter-javascript>=0.25",
     "tree-sitter-typescript>=0.23",
+    # ~370 more grammars, as prebuilt wheels for every platform the installer
+    # supports. Without it the tool reads three languages, which is the wrong
+    # answer for most repositories. `codeorbit/langs.py` degrades to the three
+    # built-ins if the import fails, so this staying optional-in-practice is
+    # deliberate - but it should be installed.
+    "tree-sitter-language-pack>=0.9",
     "typer>=0.15",
     "rich>=13.0",
     "requests>=2.31",

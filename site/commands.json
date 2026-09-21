@@ -601,6 +601,34 @@
       ]
     },
     {
+      "name": "langs",
+      "panel": "Build the graph",
+      "summary": "Which languages and file types this installation can read.",
+      "description": "",
+      "usage": "[OPTIONS]",
+      "arguments": [],
+      "options": [
+        {
+          "kind": "option",
+          "name": "--verbose, -v",
+          "help": "List every language, not just a summary",
+          "required": false,
+          "default": "",
+          "metavar": ""
+        }
+      ],
+      "examples": [
+        {
+          "cmd": "codeorbit langs",
+          "note": "Which languages and file types this install can read."
+        },
+        {
+          "cmd": "codeorbit langs --verbose",
+          "note": "The full list, not a summary."
+        }
+      ]
+    },
+    {
       "name": "mcp",
       "panel": "Connect an AI agent",
       "summary": "Serve the graph over MCP so Claude Code, Cursor and other agents can use it.",

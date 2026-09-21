@@ -124,13 +124,24 @@ def retrieve(conn, question: str, max_symbols: int = 6, semantic: bool = True):
 
 def build(root: Path, conn, question: str, max_symbols: int = 2,
           body_lines: int = 55, semantic: bool = True) -> tuple[str, list]:
-    """Return (context_text, symbols_used)."""
+    """Return (context_text, symbols_used).
+
+    Bodies are budgeted rather than uniform, and the budget tapers down the
+    ranking. A local 3.8B model has a small window and every line spent on the
+    fourth-best match is a line the best match does not get - so the symbol
+    most likely to hold the answer is the one that arrives complete.
+    """
+    from . import budget as budgetmod
+
     picks = retrieve(conn, question, max_symbols, semantic=semantic)
     if not picks:
         return "", []
 
+    budgets = budgetmod.allocate(len(picks), body_lines, floor=15)
+    seen_spans: list[tuple[str, int, int]] = []
+
     parts: list[str] = []
-    for row in picks:
+    for row, lines in zip(picks, budgets):
         head = (
             f"### {row['kind']} {row['qname']}\n"
             f"defined at {row['path']}:{row['start_line']}"
@@ -163,9 +174,19 @@ def build(root: Path, conn, question: str, max_symbols: int = 2,
             if mem:
                 parts.append("members: " + ", ".join(m["name"] for m in mem[:20]))
 
-        body = query.source_of(root, row, max_lines=body_lines)
-        if body:
-            parts.append(f"source:\n```{row['lang']}\n{body}\n```")
+        # A class and one of its own methods are both plausible picks, and
+        # their bodies overlap exactly. Printing the inner one again spends
+        # context on code already above it.
+        span = (row["path"], row["start_line"], min(row["end_line"],
+                                                    row["start_line"] + lines))
+        covered = any(p == span[0] and s <= span[1] and span[2] <= e
+                      for p, s, e in seen_spans)
+        if not covered:
+            seen_spans.append(span)
+            body = query.source_of(root, row, max_lines=lines)
+            if body:
+                parts.append(f"source:\n```{row['lang']}\n"
+                             f"{budgetmod.trim_source(body)}\n```")
 
         parts.append("")
 

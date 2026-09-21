@@ -78,7 +78,11 @@ def index_project(root: Path, progress=None, full: bool = False) -> dict:
     """Index `root`. Re-parses only changed files unless `full` is set."""
     root = root.resolve()
     conn = db.connect(root, create=True)
-    found = scan(root)
+    # Collected during the walk rather than by a second one: the caller reports
+    # which languages this machine has no grammar for, and an index that
+    # produced nothing has to be able to say why.
+    skipped: dict[str, int] = {}
+    found = scan(root, skipped=skipped)
 
     if full:
         conn.execute("DELETE FROM files")
@@ -133,5 +137,6 @@ def index_project(root: Path, progress=None, full: bool = False) -> dict:
         "removed": len(removed),
         "unchanged": unchanged,
         "touched": added + changed + len(removed),
+        "skipped": sorted(skipped.items(), key=lambda kv: -kv[1]),
     })
     return st

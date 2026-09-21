@@ -32,6 +32,7 @@ from pathlib import Path
 from mcp.server import MCPServer
 
 from . import audit as auditmod
+from . import budget as budgetmod
 from . import context as ctxmod
 from . import db, query
 from .db import DB_DIRNAME
@@ -40,7 +41,13 @@ from .db import DB_DIRNAME
 DEFAULT_ROOT: Path = Path.cwd()
 
 MAX_BODY_LINES = 120
+FULL_BODY_LINES = 600       # what detail="full" is allowed to spend
 MAX_CHARS = 24_000          # keep one response inside a sane slice of context
+
+# What has already gone to this agent. One per server process, which is one per
+# agent session, so it measures exactly the right thing: what is in the context
+# window on the other end of the pipe.
+LEDGER = budgetmod.Ledger()
 
 INSTRUCTIONS = """\
 CodeOrbit serves a structural knowledge graph of this repository: its symbols,
@@ -59,6 +66,13 @@ Edges marked [uncertain] were resolved by name rather than by an import, so
 treat them as likely rather than certain. Static parsing cannot see dynamic
 dispatch, so a missing edge means "not statically visible", never "does not
 happen".
+
+These tools spend your context deliberately. The best match in a response gets
+the longest body and later ones get less; a body already sent to you in this
+session comes back as a citation instead of a second copy. If a response says
+source was returned earlier and you no longer have it, call the same tool with
+detail="full" - that is what it is for. detail="signatures" returns structure
+with no bodies, which is the cheapest way to survey an unfamiliar area.
 """
 
 
@@ -80,7 +94,16 @@ def _not_indexed(root: Path) -> str:
     )
 
 
-def _fmt_symbol(root: Path, conn, row, body_lines: int = MAX_BODY_LINES) -> str:
+def _fmt_symbol(root: Path, conn, row, body_lines: int = MAX_BODY_LINES,
+                ledger: budgetmod.Ledger | None = None, source: bool = True) -> str:
+    """One symbol: what it is, what touches it, and its body.
+
+    `body_lines` is a budget rather than a constant, and `ledger` is what keeps
+    the same body from being billed to the agent twice. Both exist because the
+    tool's whole claim is that calling it costs less than reading the file, and
+    a flat 120 lines per symbol times four symbols per call is not obviously
+    cheaper than just opening one file.
+    """
     out = [
         f"## {row['kind']} {row['qname']}",
         f"{row['path']}:{row['start_line']}-{row['end_line']}  ({row['lang']})",
@@ -111,11 +134,49 @@ def _fmt_symbol(root: Path, conn, row, body_lines: int = MAX_BODY_LINES) -> str:
         if members:
             out.append("\nmembers: " + ", ".join(m["name"] for m in members[:25]))
 
-    src = query.source_of(root, row, max_lines=body_lines)
-    if src:
-        out.append(f"\n```{row['lang']}\n{src}\n```")
-
+    if source:
+        out.append(_body(root, row, body_lines, ledger))
     return "\n".join(out)
+
+
+def _body(root: Path, row, body_lines: int, ledger: budgetmod.Ledger | None) -> str:
+    """The source, a pointer to it, or nothing."""
+    start, end = row["start_line"], row["end_line"]
+    cite = f"{row['path']}:{start}-{end}"
+
+    if ledger is not None:
+        if not ledger.claim(row["path"], start, min(end, start + body_lines)):
+            return ("\nsource: already shown above in this response "
+                    f"({cite}) - it is inside a symbol already printed.")
+        if not ledger.should_send_body(row["id"]):
+            return (f"\nsource: already returned to you earlier in this session "
+                    f"({cite}), unchanged since. If it is no longer in your "
+                    f"context, call codeorbit_node with detail=\"full\".")
+
+    src = query.source_of(root, row, max_lines=body_lines)
+    if not src:
+        return ""
+    if ledger is not None:
+        ledger.record(row["id"])
+
+    truncated = (end - start + 1) > body_lines
+    tail = (f"\n[body continues to line {end}; "
+            f"codeorbit_node with detail=\"full\" returns all of it]"
+            if truncated else "")
+    return f"\n```{row['lang']}\n{budgetmod.trim_source(src)}\n```{tail}"
+
+
+def _ledger_for(detail: str, node_ids: list[int]) -> budgetmod.Ledger:
+    """The session ledger, reset for the symbols this call must resend.
+
+    `detail="full"` is the agent saying "I no longer have that", and the only
+    correct response is to forget having sent it and send it again.
+    """
+    if detail == "full":
+        for nid in node_ids:
+            LEDGER.forget(nid)
+    LEDGER.start_response()
+    return LEDGER
 
 
 def _clip(text: str) -> str:
@@ -195,7 +256,8 @@ mcp = MCPServer(name="codeorbit", instructions=INSTRUCTIONS)
 
 @mcp.tool()
 @graph_tool
-def codeorbit_explore(root, conn, query_text: str, max_symbols: int = 4) -> str:
+def codeorbit_explore(root, conn, query_text: str, max_symbols: int = 4,
+                      detail: str = "auto") -> str:
     """PRIMARY TOOL. Answer a question about this codebase from its call graph.
 
     Retrieves the symbols the question is about, their real source, who calls
@@ -203,15 +265,26 @@ def codeorbit_explore(root, conn, query_text: str, max_symbols: int = 4) -> str:
     Y handled" or "what happens when Z" question. Naming concrete symbols
     (including qualified ones like Class.method) sharpens the result. Treat the
     source it returns as already read - do not open those files again.
+
+    detail: "auto" spends the most lines on the best match and tapers, and
+    omits a body this session has already sent you. "full" resends everything
+    - use it if the earlier response has fallen out of your context.
+    "signatures" returns names, docs and call relationships with no bodies at
+    all, which is the cheapest way to see the shape of an area.
     """
     picks = ctxmod.retrieve(conn, query_text, max_symbols=max_symbols)
     if not picks:
         return (f"Nothing in the graph matched: {query_text!r}\n\n"
                 "Try codeorbit_search with a single identifier to see what "
                 "exists, or codeorbit_overview for the project's main symbols.")
+
+    ledger = _ledger_for(detail, [r["id"] for r in picks])
+    budgets = budgetmod.allocate(len(picks), MAX_BODY_LINES)
     header = f"Retrieved {len(picks)} symbol(s) for: {query_text}\n"
     return _clip(header + "\n\n" + "\n\n".join(
-        _fmt_symbol(root, conn, r) for r in picks))
+        _fmt_symbol(root, conn, r, body_lines=lines, ledger=ledger,
+                    source=detail != "signatures")
+        for r, lines in zip(picks, budgets)))
 
 
 @mcp.tool()
@@ -234,18 +307,25 @@ def codeorbit_search(root, conn, term: str, limit: int = 20) -> str:
 
 @mcp.tool()
 @graph_tool
-def codeorbit_node(root, conn, name: str) -> str:
+def codeorbit_node(root, conn, name: str, detail: str = "auto") -> str:
     """Everything about one symbol in a single call.
 
     Full source, its callers, and what it calls. If the name is ambiguous, the
     other candidates are listed too so no follow-up call is needed. Treat the
     returned source as already read.
+
+    detail="full" resends a body this session already gave you, for when the
+    earlier response is no longer in your context.
     """
     hits = query.search(conn, name, limit=6)
     if not hits:
         return (f"No symbol named {name!r}. Call codeorbit_search to find "
                 "the right name.")
-    parts = [_fmt_symbol(root, conn, hits[0])]
+    ledger = _ledger_for(detail, [hits[0]["id"]])
+    parts = [_fmt_symbol(root, conn, hits[0],
+                         body_lines=FULL_BODY_LINES if detail == "full"
+                         else MAX_BODY_LINES,
+                         ledger=ledger, source=detail != "signatures")]
     if len(hits) > 1:
         parts.append("\nOther symbols share this name:")
         parts += [f"  {h['kind']} {h['qname']} ({h['path']}:{h['start_line']})"

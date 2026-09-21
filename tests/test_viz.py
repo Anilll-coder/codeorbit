@@ -150,3 +150,32 @@ def test_html_survives_a_label_containing_markup(graph):
     html = viz.render_html(data, "T", "S")
     body = html.split("const DATA = ", 1)[1].split("\n", 1)[0]
     assert "</script>" not in body, "json.dumps must not emit a raw closing tag"
+
+
+# ------------------------------------------------------- language colouring
+
+def test_the_legend_is_built_from_the_data_not_hardcoded():
+    """The page used to name python and javascript and paint everything else
+    grey, so a Go or Rails repo got a legend describing languages it did not
+    contain and a picture that could not tell one language from another."""
+    html = viz.render_html(
+        {"view": "modules",
+         "nodes": [{"id": 1, "label": "a.go", "full": "a.go", "lang": "go",
+                    "weight": 1, "meta": "x"},
+                   {"id": 2, "label": "b.rb", "full": "b.rb", "lang": "ruby",
+                    "weight": 1, "meta": "x"}],
+         "edges": []},
+        "T", "S")
+    assert "python: '#5aa9e6'" not in html, "no hardcoded language colours"
+    assert "const LANGS = " in html
+    assert "legend" in html
+
+
+def test_a_language_the_page_has_never_heard_of_still_gets_a_colour(graph):
+    """PALETTE is indexed modulo its length, so there is no language that
+    falls through to grey."""
+    _, conn = graph
+    data = viz.module_graph(conn)
+    data["nodes"][0]["lang"] = "brainfuck"
+    html = viz.render_html(data, "T", "S")
+    assert "PALETTE[i % PALETTE.length]" in html

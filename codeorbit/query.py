@@ -165,12 +165,18 @@ def call_path(conn, src_id: int, dst_id: int, max_depth: int = 8):
 
 
 def affected_tests(conn, node_id: int, max_depth: int = 4) -> list[sqlite3.Row]:
-    """Of the blast radius, the parts that look like tests."""
+    """Of the blast radius, the parts that look like tests.
+
+    Path conventions come from `rules.is_test_path`, which knows each
+    ecosystem's spelling - `x_test.go`, `XTest.java`, `x.spec.ts` - rather than
+    the substring "test", which matched `latest.py` and `contest/`.
+    """
+    from .rules import is_test_path
+
     hits = []
     for _, r in impact(conn, node_id, max_depth):
-        p = (r["path"] or "").lower()
         nm = (r["name"] or "").lower()
-        if "test" in p or "spec" in p or nm.startswith("test"):
+        if is_test_path(r["path"] or "") or nm.startswith(("test", "should_", "it_")):
             hits.append(r)
     return hits
 

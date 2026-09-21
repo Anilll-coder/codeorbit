@@ -218,12 +218,7 @@ HTML = """<!doctype html>
 <header>
   <h1>__TITLE__</h1>
   <span class="sub">__SUBTITLE__</span>
-  <span class="legend" style="margin-left:auto">
-    <span><i class="dot" style="background:#5aa9e6"></i>python</span>
-    <span><i class="dot" style="background:#e6a15a"></i>javascript</span>
-    <span>dashed = uncertain edge</span>
-    <span>drag to pan, scroll to zoom</span>
-  </span>
+  <span class="legend" id="legend" style="margin-left:auto"></span>
 </header>
 <main>
   <div id="stage"><svg id="svg"></svg></div>
@@ -258,7 +253,39 @@ const gEdges = document.createElementNS(NS, 'g');
 const gNodes = document.createElementNS(NS, 'g');
 root.append(gEdges, gNodes); svg.append(root);
 
-const COLOR = { python: '#5aa9e6', javascript: '#e6a15a' };
+// Colours are assigned from what the graph actually contains, not from a fixed
+// list of languages. The page used to name python and javascript in its legend
+// and paint every other language the same grey, which on a Go or Rails repo
+// meant a legend describing languages that were not there and a picture that
+// could not tell one language from another.
+const PALETTE = ['#5aa9e6', '#e6a15a', '#7ee081', '#c792ea', '#4ec9b0',
+                 '#e06c75', '#d7ba7d', '#9aa5b8', '#69c0ff', '#f78c6c'];
+const LANGS = [...new Set(DATA.nodes.map(n => n.lang).filter(Boolean))].sort();
+const COLOR = Object.fromEntries(
+  LANGS.map((l, i) => [l, PALETTE[i % PALETTE.length]]));
+
+const legend = document.getElementById('legend');
+// Cap the legend: past a handful of languages the header wraps into the canvas
+// and the colours stop being distinguishable anyway.
+for (const l of LANGS.slice(0, 8)) {
+  const s = document.createElement('span');
+  const dot = document.createElement('i');
+  dot.className = 'dot';
+  dot.style.background = COLOR[l];
+  s.append(dot, document.createTextNode(l));
+  legend.append(s);
+}
+if (LANGS.length > 8) {
+  const more = document.createElement('span');
+  more.textContent = '+' + (LANGS.length - 8) + ' more';
+  legend.append(more);
+}
+for (const t of ['dashed = uncertain edge', 'drag to pan, scroll to zoom']) {
+  const s = document.createElement('span');
+  s.textContent = t;
+  legend.append(s);
+}
+
 const radius = n => Math.min(4 + Math.sqrt(n.weight) * 2.2, 22);
 
 const els = new Map();

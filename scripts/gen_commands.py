@@ -34,6 +34,10 @@ EXAMPLES: dict[str, list[tuple[str, str]]] = {
     "status": [
         ("codeorbit status", "What the index holds, and whether Ollama is up."),
     ],
+    "langs": [
+        ("codeorbit langs", "Which languages and file types this install can read."),
+        ("codeorbit langs --verbose", "The full list, not a summary."),
+    ],
     "embed": [
         ("codeorbit embed", "One time. Lets `ask` find code by meaning, not just names."),
     ],

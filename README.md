@@ -84,6 +84,7 @@ pip install -e .
 ```bash
 codeorbit index .                      # build the graph
 codeorbit status                       # what the index holds
+codeorbit langs                        # which languages this install can read
 
 codeorbit search Console               # find symbols by name
 codeorbit show Console.print           # source + callers + callees
@@ -142,8 +143,15 @@ told you nothing about where to start.
 
 ```
 files
+  -> langs.py        which file is which language, and what grammar reads it
   -> scanner.py      walk the repo, skip vendored/generated, respect git
   -> extract/        tree-sitter -> symbols, call sites, imports  (pass 1)
+       python_ex.py      hand-written, for the languages this is
+       javascript_ex.py  measured on
+       typescript_ex.py
+       generic.py        one walker for every other grammar, driven by a
+                         table or, failing that, by the grammar itself
+       embedded.py       .vue / .svelte / .astro: parse the script block
   -> indexer.py      write nodes + pending calls into SQLite
   -> resolve.py      bind call sites to real definitions           (pass 2)
   -> query.py        callers / callees / impact / search / source
@@ -151,13 +159,15 @@ files
   -> review.py       diff -> changed symbols -> blast radius -> review prompt
   -> github.py       the GitHub API, read a PR and post one comment
   -> pr.py           a PR reviewed against a graph of its own head
-  -> rules.py        29 security / bug / quality patterns
+  -> rules.py        66 security / bug / quality patterns, per language family
   -> audit.py        findings, attributed to symbols and ranked by reach
   -> semantic.py     symbol embeddings, fused with keyword search by RRF
   -> fixer.py        propose a fix for one symbol, splice it, never trust it
   -> verify.py       the gates a fix must survive before it may touch a file
   -> viz.py          graph data, self-contained HTML, or Mermaid
   -> server.py       local HTTP server for the explorer
+  -> browser.py      open a URL on any platform, or say why it could not
+  -> budget.py       spend an agent's context deliberately, not by accident
   -> web/            the explorer itself: canvas renderer + layout worker
   -> mcp_server.py   the graph as MCP tools, for Claude Code / Cursor / etc
   -> agent.py        a local Ollama model driving those same tools
@@ -210,8 +220,50 @@ model believes it.**
 
 ## Languages
 
-Python and JavaScript/JSX. Adding one is a new file in `extract/` plus an entry
-in `extract/__init__.py`.
+```bash
+codeorbit langs              # what this install can read
+codeorbit langs --verbose    # the whole list
+```
+
+Around 137 languages across 200-odd file extensions, from one registry in
+`langs.py`. Extraction has three tiers, tried in that order:
+
+1. **A hand-written extractor** — Python, JavaScript/JSX, TypeScript/TSX. These
+   are the languages the tool is measured on, and a tuned extractor catches what
+   a generic one cannot: PEP 257 docstrings, an arrow function bound to a
+   `const`, `extends B implements C`.
+2. **A generic tree-sitter extractor**, driven by a per-language table in
+   `extract/generic.py`. Roughly twenty-five languages have an entry —
+   Go, Rust, Java, C, C++, C#, Ruby, PHP, Swift, Kotlin, Scala, Dart, Elixir,
+   Solidity, Lua, shell and the rest.
+3. **Inference**, for everything else. `infer_spec` reads the node types out of
+   the grammar itself and classifies them by name. Tree-sitter grammars are
+   written by different people over a decade and still converge hard on
+   `function_definition`, `class_declaration`, `call_expression`,
+   `import_declaration` — so a language nobody here has looked at still yields a
+   graph. Gleam has no table entry and needs none.
+
+`.vue`, `.svelte`, `.astro` and `.html` go through a fourth path: the wrapper is
+blanked out line-for-line and the script block handed to the JavaScript or
+TypeScript extractor, so a single-file component indexes its logic *and* its
+line numbers still point at the real lines.
+
+Adding a language is normally one line in `SUFFIX`. A language whose grammar
+spells things unusually gets a `Spec` entry; a language with no definition node
+at all — Elixir, where `def` is a macro call — gets a hook.
+
+**What this does not do.** A language with no grammar installed is *skipped*,
+not indexed empty, and `codeorbit index` names what it skipped — a file row with
+no symbols is indistinguishable from an empty file, and that is a lie the graph
+then repeats to the model. Inference is weaker than a table entry: Nim and
+Crystal yield symbols and imports but no call edges, because their call nodes
+are named in ways the patterns do not reach. That limit is pinned by a test
+rather than papered over, because inventing edges is worse than missing them.
+
+Name resolution is scoped to a language **family**, not an exact language id.
+TypeScript, JavaScript, `.vue` and `.svelte` compile together and call each
+other; Go and Python do not, and binding a Go `Load` to a Python `load` produced
+call edges that were pure coincidence.
 
 ## Measured
 
@@ -478,6 +530,45 @@ codeorbit viz --port 9000           # a specific port, an error if it is taken
 The standalone file is still the right tool for sending someone a picture of a
 codebase. The server is the tool for exploring one.
 
+### Opening the browser, on machines that are not a laptop
+
+`viz` is the command most likely to be run somewhere other than a developer's
+desktop — a server, a container, a WSL shell, an SSH session. It used to call
+`webbrowser.open(url)` and throw the answer away, which failed three separate
+ways and reported all three as success:
+
+- **It blocked.** `webbrowser` picks a *console* browser — w3m, links, lynx —
+  when no graphical one is registered, and runs it in the foreground waiting for
+  it to exit. The callback that opens the browser ran before `serve_forever()`,
+  so the terminal browser took over the terminal and the server it was pointed
+  at never started answering. The command looked hung with its own URL printed
+  above it.
+- **It did nothing.** Headless, containerised or over SSH without X forwarding,
+  `webbrowser.open` returns `False`. Nobody looked, so nothing was printed and
+  the user waited for a window that was never coming.
+- **It looked in the wrong place.** Under WSL it searched for a Linux browser
+  inside the VM while the browser the user wanted was on the Windows side,
+  reached through `wslview` or `powershell.exe`.
+
+`browser.py` now picks the opener per platform — `open`, `cmd /c start ""`,
+`xdg-open`/`gio`, `wslview`/`powershell.exe` — spawns it **detached** so nothing
+can block, and returns a result saying what happened. `on_ready` runs on its own
+thread, so even a slow opener cannot delay serving. On a machine with no way to
+open a window it says so and tells you to forward the port:
+
+```
+Could not open a browser (headless).
+No graphical session was detected (no DISPLAY or WAYLAND_DISPLAY). If you are
+on a remote machine, forward the port and open the URL locally:
+ssh -L 7373:127.0.0.1:7373 <host>
+```
+
+`CODEORBIT_NO_BROWSER=1` turns the attempt off entirely, for CI and scripts.
+
+The exported page colours nodes from what the graph actually contains rather
+than a fixed list of two languages, so a Go or Rails repo gets a legend that
+describes it instead of one naming languages it does not have.
+
 ## Using it from Claude Code, Cursor, or any MCP agent
 
 ```bash
@@ -554,6 +645,53 @@ Three rules shape the responses, and they are about how agents actually behave:
 Rule 3 was learned the hard way: a transient read error escaped as a protocol
 error and the agent received only `Error executing tool codeorbit_explore`.
 
+### Does it actually save the agent any tokens?
+
+That is the whole claim — a tool call has to cost less than the file read it
+replaces — and the first version did not clear the bar convincingly. Every one
+of four picks got a flat 120-line body plus its full call neighbourhood, clipped
+at 24,000 characters. Roughly six thousand tokens a call, most of it spent on
+the third and fourth pick, which are the least likely to be what was asked.
+
+Three things were wasting it, and `budget.py` fixes each:
+
+- **A flat cap.** The first pick earns a long body; the fourth earns enough to
+  recognise. Budgets taper down the ranking, so the symbol that matters is not
+  shortened at all and the tail costs a fraction.
+- **The same code twice in one response.** Retrieval routinely returns a class
+  *and* one of its own methods, whose bodies overlap exactly. The second is now
+  a pointer at the first.
+- **The same code in every response.** An agent's session is `explore`, then
+  `node`, then `impact`, mostly over the same few symbols. After two full sends
+  the body becomes a citation — with a note saying to call again with
+  `detail="full"` if it has fallen out of context, which is the escape hatch
+  that makes the elision safe rather than merely cheap.
+
+Measured over six questions against this repository, estimated at four
+characters per token:
+
+| | est. tokens | |
+|---|---|---|
+| old format, six calls | 13,307 | |
+| new format, first pass | 10,805 | **-18%** |
+| the same six questions, third time in the session | 5,131 | **-61%** |
+| `detail="signatures"` | 4,067 | **-69%** |
+
+Passes one and two cost the same by design — a body gets two full sends before
+it is elided, because an agent's context is compacted without warning and a
+symbol asked about twice running is one it is actively working on.
+
+The numbers are estimates and say so: `estimate_tokens` is a budgeting ratio at
+four characters per token, not a tokeniser. The direction is what is claimed,
+and the *shape* is the point — the saving grows the longer the session runs,
+which is exactly when an agent's context is under pressure.
+
+Clipping is still there as a backstop but should never fire. Deciding what to
+leave out before paying to format it beats truncating a response already built.
+And a body that *is* cut short says so, with the line it stopped at and how to
+get the rest — silently truncating mid-function teaches an agent the tool is
+unreliable and to go read the file, which costs more than it ever saved.
+
 ## Driving it with a local model
 
 No cloud agent needed - `codeorbit agent` lets an Ollama model call the same MCP
@@ -621,10 +759,17 @@ pip install -e ".[dev]"
 pytest
 ```
 
-137 tests, no mocks: each builds a small project on disk, indexes it, and asserts
+418 tests, no mocks: each builds a small project on disk, indexes it, and asserts
 against the real graph. Mocking the parser would only test the mock, and the
 fixer's tests never call the model - what has to hold is that everything
 *around* the model is safe regardless of what it returns.
+
+`test_polyglot.py` does the same for each language: one real file per language,
+asserting that a class comes out as a class, a method as a method *under its
+type*, a call as a call and an import as an import. Without it a language
+degrades silently to a module node with nothing in it, which looks exactly like
+an empty file. The three tests that skip are the ones needing
+`tree-sitter-language-pack`, so the suite still passes on an install without it.
 
 Writing them found two real bugs, both now pinned by a test:
 
@@ -649,10 +794,19 @@ answers, review of a change, ranked auditing, verified fix generation, an
 interactive graph viewer, an MCP server for external agents, and a local
 Ollama-driven agent over those same tools.
 
-Languages are Python and JavaScript. The known limits are honest ones: static
-parsing cannot follow dynamic dispatch (decorator-registered and dict-dispatched
-functions show up as uncalled), and answer latency is bounded by CPU generation
-speed rather than by anything the graph does.
+Around 137 languages, with three tiers of fidelity — see
+[Languages](#languages). The known limits are honest ones, and the tool says
+which apply rather than hiding them:
+
+- Static parsing cannot follow dynamic dispatch. Decorator-registered and
+  dict-dispatched functions show up as uncalled, and a missing edge always means
+  "not statically visible", never "does not happen".
+- Outside the hand-written and tabled languages, extraction is inferred from the
+  grammar. It finds definitions and imports reliably and call edges less so; a
+  few grammars (Nim, Crystal) yield no call edges at all.
+- A language with no grammar installed is skipped and named, not indexed empty.
+- Answer latency for `ask` is bounded by CPU generation speed rather than by
+  anything the graph does.
 
 ## Uninstalling
 

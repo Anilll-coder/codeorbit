@@ -16,7 +16,8 @@ from codeorbit import db, query
 from codeorbit.extract import parse_and_extract
 from codeorbit.indexer import index_project
 from codeorbit.resolve import resolve_project
-from codeorbit.scanner import LANG_BY_SUFFIX, scan
+from codeorbit.langs import SUFFIX as LANG_BY_SUFFIX
+from codeorbit.scanner import scan
 
 
 def ex(src: str, lang: str = "typescript", path: str = "src/m.ts"):
