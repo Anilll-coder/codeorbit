@@ -1697,3 +1697,556 @@ p {
 @media (prefers-reduced-motion: reduce) {
   .cmd-item, .cmd-copy { transition: none; }
 }
+
+/* ================================================================ languages
+   The coverage section. Three ideas have to land in one screen: the tool now
+   reads a lot of languages, it does not read them all equally well, and it is
+   explicit about which is which. So the tiers are a visible ladder rather than
+   a flat list, and each chip carries its tier as a colour. */
+
+.langs-section {
+  background:
+    radial-gradient(90% 60% at 12% 0%, var(--accent-soft) 0%, transparent 58%),
+    var(--bg);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.stat-band {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  overflow: hidden;
+  margin-bottom: 40px;
+}
+
+.stat {
+  background: var(--bg-raised);
+  padding: 26px 24px;
+}
+
+.stat-num {
+  font-family: var(--mono);
+  font-size: clamp(30px, 4.4vw, 46px);
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  /* The numbers are the headline of this section, so the accent runs through
+     them rather than sitting beside them. */
+  background: linear-gradient(140deg, var(--accent-strong), var(--text-primary) 72%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.stat-lbl {
+  margin-top: 10px;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+@media (max-width: 820px) {
+  .stat-band { grid-template-columns: repeat(2, 1fr); }
+  .stat { padding: 20px 18px; }
+}
+
+/* ------------------------------------------------------------------ tiers */
+
+.tiers {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 40px;
+}
+
+.tier {
+  position: relative;
+  padding: 26px 24px 24px;
+  background: var(--bg-raised);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  overflow: hidden;
+}
+
+/* A weakening accent bar down the three tiers: tier 1 is a language this is
+   measured on, tier 3 is a grammar nobody has looked at. The design should say
+   that before the copy does. */
+.tier::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: var(--accent);
+}
+
+.tier.is-2::before { background: var(--accent-dim); }
+.tier.is-3::before { background: var(--border-strong); }
+
+.tier-rule {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 14px;
+  margin-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.tier-idx {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.tier-count {
+  font-family: var(--mono);
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.tier.is-3 .tier-count { color: var(--text-secondary); }
+
+.tier h4 {
+  font-size: 17px;
+  margin-bottom: 8px;
+}
+
+.tier p {
+  font-size: 14px;
+  line-height: 1.62;
+  color: var(--text-secondary);
+}
+
+.tier code,
+.honest code,
+.fail-card code,
+.bar-label code {
+  font-family: var(--mono);
+  font-size: 0.86em;
+  color: var(--text-primary);
+}
+
+@media (max-width: 900px) {
+  .tiers { grid-template-columns: 1fr; }
+}
+
+/* ------------------------------------------------------------ language cloud */
+
+.lang-cloud {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--bg-raised);
+  overflow: hidden;
+  margin-bottom: 40px;
+}
+
+.lang-cloud-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-raised-2);
+}
+
+.lang-cloud-title {
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+}
+
+.lang-key {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.lang-key-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 11px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-tertiary);
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  transition: color 0.18s var(--ease), border-color 0.18s var(--ease),
+              background 0.18s var(--ease);
+}
+
+.lang-key-item:hover {
+  color: var(--text-secondary);
+  border-color: var(--border-strong);
+}
+
+.lang-key-item.is-on {
+  color: var(--text-primary);
+  border-color: var(--border-accent);
+  background: var(--accent-soft);
+}
+
+.lang-key-item .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.lang-key-item .dot.t2 { background: var(--accent-dim); }
+.lang-key-item .dot.t3 { background: var(--text-tertiary); }
+
+.lang-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 20px;
+  max-height: 268px;
+  overflow-y: auto;
+}
+
+.lang-chip {
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  background: var(--bg);
+  white-space: nowrap;
+  transition: opacity 0.18s var(--ease), border-color 0.18s var(--ease);
+}
+
+/* The tier is the chip's border, not a label on it. With 137 chips, a legend
+   that had to be read per chip would be unreadable. */
+.lang-chip[data-tier="builtin"] {
+  border-color: var(--border-accent);
+  color: var(--text-primary);
+  background: var(--accent-soft);
+}
+
+.lang-chip[data-tier="tabled"] {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.lang-chip.is-dim { opacity: 0.22; }
+
+.lang-chip.is-fallback {
+  font-family: var(--sans);
+  border: 0;
+  background: transparent;
+  color: var(--text-tertiary);
+}
+
+/* ------------------------------------------------------------------ honest */
+
+.honest {
+  border-left: 2px solid var(--border-strong);
+  padding: 4px 0 4px 22px;
+}
+
+.honest h4 {
+  font-size: 15px;
+  margin-bottom: 14px;
+  color: var(--text-primary);
+}
+
+.honest h4 em {
+  font-style: italic;
+  color: var(--accent);
+}
+
+.honest ul {
+  list-style: none;
+  display: grid;
+  gap: 12px;
+  max-width: 76ch;
+}
+
+.honest li {
+  font-size: 14px;
+  line-height: 1.66;
+  color: var(--text-secondary);
+}
+
+.honest strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+/* =================================================================== budget
+   The agent-cost section. A bar chart rather than a table, because the claim
+   is about proportion and four numbers in a table do not show a proportion. */
+
+.budget-grid {
+  display: grid;
+  grid-template-columns: 1.25fr 1fr;
+  gap: 24px;
+  align-items: start;
+}
+
+@media (max-width: 980px) {
+  .budget-grid { grid-template-columns: 1fr; }
+}
+
+.budget-chart {
+  padding: 26px 26px 22px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--bg-raised);
+}
+
+.bchart-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding-bottom: 18px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.bchart-unit {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.bar-row {
+  display: grid;
+  grid-template-columns: 148px 1fr auto;
+  gap: 14px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.bar-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.bar-sub {
+  display: block;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--text-tertiary);
+}
+
+.bar-track {
+  height: 26px;
+  border-radius: 6px;
+  background: var(--bg-well);
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  width: 0;
+  border-radius: 6px;
+  background: linear-gradient(90deg, var(--accent-dim), var(--accent));
+  /* Widths animate in when the card reveals. Transitioning width rather than
+     transform keeps the right edge crisp against the track. */
+  transition: width 1s var(--ease);
+}
+
+.bar-fill.is-base {
+  background: linear-gradient(90deg, var(--bg-raised-2), var(--border-strong));
+}
+
+.bar-fill.is-best {
+  background: linear-gradient(90deg, var(--accent), var(--accent-strong));
+}
+
+.budget-chart.is-visible .bar-fill { width: var(--pct); }
+
+.bar-value {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  text-align: right;
+}
+
+.bar-value em {
+  font-style: normal;
+  color: var(--accent);
+  margin-left: 6px;
+}
+
+.bchart-note {
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-tertiary);
+}
+
+.bchart-note em {
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+@media (max-width: 560px) {
+  .bar-row { grid-template-columns: 1fr; gap: 6px; }
+  .bar-value { text-align: left; }
+}
+
+.budget-notes {
+  display: grid;
+  gap: 12px;
+}
+
+.bnote {
+  position: relative;
+  padding: 20px 22px 20px 58px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--bg-raised);
+}
+
+.bnote-n {
+  position: absolute;
+  left: 20px;
+  top: 20px;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--accent);
+}
+
+.bnote h4 {
+  font-size: 15px;
+  margin-bottom: 6px;
+}
+
+.bnote p {
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.bnote code {
+  font-family: var(--mono);
+  font-size: 0.86em;
+  color: var(--text-primary);
+}
+
+/* ================================================================= anywhere
+   Three named failures and the fix for each. Naming them is the point: the
+   old behaviour reported all three as success. */
+
+.anywhere-section {
+  border-top: 1px solid var(--border);
+}
+
+.fail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 28px;
+}
+
+@media (max-width: 900px) {
+  .fail-grid { grid-template-columns: 1fr; }
+}
+
+.fail-card {
+  padding: 22px 22px 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--bg-raised);
+}
+
+.fail-tag {
+  display: inline-block;
+  margin-bottom: 12px;
+  padding: 4px 10px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-strong);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
+}
+
+.fail-card p {
+  font-size: 13.5px;
+  line-height: 1.64;
+  color: var(--text-secondary);
+}
+
+.fail-card em {
+  color: var(--text-primary);
+  font-style: italic;
+}
+
+.platform-strip {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  overflow: hidden;
+}
+
+.platform {
+  background: var(--bg-raised);
+  padding: 18px 18px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.platform.is-none { background: var(--bg-raised-2); }
+
+.p-os {
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.platform code {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--accent);
+  word-break: break-word;
+}
+
+.platform.is-none code { color: var(--text-secondary); }
+
+@media (max-width: 980px) {
+  .platform-strip { grid-template-columns: repeat(2, 1fr); }
+  .platform.is-none { grid-column: 1 / -1; }
+}
+
+/* ---------------------------------------------------------------- hero tweak */
+
+.sub-hl {
+  font-family: var(--mono);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bar-fill { transition: none; width: var(--pct); }
+}

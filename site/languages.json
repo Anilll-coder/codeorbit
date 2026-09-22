@@ -1,0 +1,1075 @@
+{
+  "count": 137,
+  "suffixes": 207,
+  "tiers": {
+    "builtin": [
+      "python",
+      "javascript",
+      "typescript",
+      "tsx"
+    ],
+    "tabled": [
+      "bash",
+      "c",
+      "cpp",
+      "csharp",
+      "dart",
+      "elixir",
+      "elm",
+      "erlang",
+      "gdscript",
+      "go",
+      "groovy",
+      "haskell",
+      "hcl",
+      "java",
+      "julia",
+      "kotlin",
+      "lua",
+      "objc",
+      "ocaml",
+      "perl",
+      "php",
+      "r",
+      "ruby",
+      "rust",
+      "scala",
+      "solidity",
+      "swift",
+      "terraform",
+      "zig",
+      "zsh"
+    ],
+    "inferred": 103
+  },
+  "embedded": [
+    "astro",
+    "html",
+    "svelte",
+    "vue"
+  ],
+  "languages": [
+    {
+      "id": "actionscript",
+      "suffixes": [
+        ".as"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "ada",
+      "suffixes": [
+        ".ada",
+        ".adb",
+        ".ads"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "apex",
+      "suffixes": [
+        ".apex",
+        ".cls",
+        ".trigger"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "astro",
+      "suffixes": [
+        ".astro"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "awk",
+      "suffixes": [
+        ".awk"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "ballerina",
+      "suffixes": [
+        ".bal",
+        ".ballerina"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "bash",
+      "suffixes": [
+        ".bash",
+        ".ksh",
+        ".sh"
+      ],
+      "tier": "tabled"
+    },
+    {
+      "id": "batch",
+      "suffixes": [
+        ".bat",
+        ".cmd"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "blade",
+      "suffixes": [
+        ".blade.php"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "c",
+      "suffixes": [
+        ".c",
+        ".h"
+      ],
+      "tier": "tabled"
+    },
+    {
+      "id": "cairo",
+      "suffixes": [
+        ".cairo"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "capnp",
+      "suffixes": [
+        ".capnp"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "clojure",
+      "suffixes": [
+        ".clj",
+        ".cljc",
+        ".cljs",
+        ".edn"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "cmake",
+      "suffixes": [
+        ".cmake"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "commonlisp",
+      "suffixes": [
+        ".cl",
+        ".lisp",
+        ".lsp"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "cpp",
+      "suffixes": [
+        ".c++",
+        ".cc",
+        ".cpp",
+        ".cxx",
+        ".h++",
+        ".hh",
+        ".hpp",
+        ".hxx",
+        ".inl"
+      ],
+      "tier": "tabled"
+    },
+    {
+      "id": "crystal",
+      "suffixes": [
+        ".cr"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "csharp",
+      "suffixes": [
+        ".cs",
+        ".csx"
+      ],
+      "tier": "tabled"
+    },
+    {
+      "id": "cuda",
+      "suffixes": [
+        ".cu",
+        ".cuh"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "cue",
+      "suffixes": [
+        ".cue"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "cython",
+      "suffixes": [
+        ".pxd",
+        ".pyx"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "d",
+      "suffixes": [
+        ".d"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "dart",
+      "suffixes": [
+        ".dart"
+      ],
+      "tier": "tabled"
+    },
+    {
+      "id": "dhall",
+      "suffixes": [
+        ".dhall"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "dockerfile",
+      "suffixes": [],
+      "tier": "inferred"
+    },
+    {
+      "id": "dotenv",
+      "suffixes": [],
+      "tier": "inferred"
+    },
+    {
+      "id": "earthfile",
+      "suffixes": [],
+      "tier": "inferred"
+    },
+    {
+      "id": "eex",
+      "suffixes": [
+        ".eex"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "eiffel",
+      "suffixes": [
+        ".e",
+        ".eiffel"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "elisp",
+      "suffixes": [
+        ".el"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "elixir",
+      "suffixes": [
+        ".ex",
+        ".exs"
+      ],
+      "tier": "tabled"
+    },
+    {
+      "id": "elm",
+      "suffixes": [
+        ".elm"
+      ],
+      "tier": "tabled"
+    },
+    {
+      "id": "elvish",
+      "suffixes": [
+        ".elv"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "embeddedtemplate",
+      "suffixes": [
+        ".ejs",
+        ".erb"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "erlang",
+      "suffixes": [
+        ".erl",
+        ".hrl"
+      ],
+      "tier": "tabled"
+    },
+    {
+      "id": "fennel",
+      "suffixes": [
+        ".fnl"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "fish",
+      "suffixes": [
+        ".fish"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "flatbuffers",
+      "suffixes": [
+        ".fbs"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "fortran",
+      "suffixes": [
+        ".f",
+        ".f03",
+        ".f90",
+        ".f95"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "fsharp",
+      "suffixes": [
+        ".fs",
+        ".fsx"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "fsharp_signature",
+      "suffixes": [
+        ".fsi"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "gdscript",
+      "suffixes": [
+        ".gd"
+      ],
+      "tier": "tabled"
+    },
+    {
+      "id": "gleam",
+      "suffixes": [
+        ".gleam"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "glimmer",
+      "suffixes": [
+        ".handlebars",
+        ".hbs"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "glsl",
+      "suffixes": [
+        ".frag",
+        ".glsl",
+        ".vert"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "go",
+      "suffixes": [
+        ".go"
+      ],
+      "tier": "tabled"
+    },
+    {
+      "id": "gomod",
+      "suffixes": [],
+      "tier": "inferred"
+    },
+    {
+      "id": "gosum",
+      "suffixes": [],
+      "tier": "inferred"
+    },
+    {
+      "id": "gowork",
+      "suffixes": [],
+      "tier": "inferred"
+    },
+    {
+      "id": "graphql",
+      "suffixes": [
+        ".gql",
+        ".graphql"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "groovy",
+      "suffixes": [
+        ".groovy",
+        ".gvy"
+      ],
+      "tier": "tabled"
+    },
+    {
+      "id": "haml",
+      "suffixes": [
+        ".haml"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "haskell",
+      "suffixes": [
+        ".hs",
+        ".lhs"
+      ],
+      "tier": "tabled"
+    },
+    {
+      "id": "haxe",
+      "suffixes": [
+        ".hx"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "hcl",
+      "suffixes": [
+        ".hcl"
+      ],
+      "tier": "tabled"
+    },
+    {
+      "id": "heex",
+      "suffixes": [
+        ".heex"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "hlsl",
+      "suffixes": [
+        ".hlsl"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "hoon",
+      "suffixes": [
+        ".hoon"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "html",
+      "suffixes": [
+        ".htm",
+        ".html"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "janet",
+      "suffixes": [
+        ".janet"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "java",
+      "suffixes": [
+        ".java"
+      ],
+      "tier": "tabled"
+    },
+    {
+      "id": "javascript",
+      "suffixes": [
+        ".cjs",
+        ".js",
+        ".jsx",
+        ".mjs"
+      ],
+      "tier": "builtin"
+    },
+    {
+      "id": "jinja2",
+      "suffixes": [
+        ".j2",
+        ".jinja"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "jsonnet",
+      "suffixes": [
+        ".jsonnet",
+        ".libsonnet"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "julia",
+      "suffixes": [
+        ".jl"
+      ],
+      "tier": "tabled"
+    },
+    {
+      "id": "just",
+      "suffixes": [
+        ".just"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "koka",
+      "suffixes": [
+        ".koka"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "kotlin",
+      "suffixes": [
+        ".kt",
+        ".kts"
+      ],
+      "tier": "tabled"
+    },
+    {
+      "id": "liquid",
+      "suffixes": [
+        ".liquid"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "lua",
+      "suffixes": [
+        ".lua"
+      ],
+      "tier": "tabled"
+    },
+    {
+      "id": "luau",
+      "suffixes": [
+        ".luau"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "make",
+      "suffixes": [
+        ".mk"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "matlab",
+      "suffixes": [
+        ".matlab"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "meson",
+      "suffixes": [],
+      "tier": "inferred"
+    },
+    {
+      "id": "mojo",
+      "suffixes": [
+        ".mojo",
+        ".\ud83d\udd25"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "move",
+      "suffixes": [
+        ".move"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "nim",
+      "suffixes": [
+        ".nim",
+        ".nims"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "nix",
+      "suffixes": [
+        ".nix",
+        ".nix.in"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "nushell",
+      "suffixes": [
+        ".nu"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "objc",
+      "suffixes": [
+        ".m",
+        ".mm"
+      ],
+      "tier": "tabled"
+    },
+    {
+      "id": "ocaml",
+      "suffixes": [
+        ".ml"
+      ],
+      "tier": "tabled"
+    },
+    {
+      "id": "ocaml_interface",
+      "suffixes": [
+        ".mli"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "odin",
+      "suffixes": [
+        ".odin"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "pascal",
+      "suffixes": [
+        ".pas",
+        ".pp"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "perl",
+      "suffixes": [
+        ".pl",
+        ".pm",
+        ".t"
+      ],
+      "tier": "tabled"
+    },
+    {
+      "id": "php",
+      "suffixes": [
+        ".php",
+        ".php4",
+        ".php5",
+        ".phtml"
+      ],
+      "tier": "tabled"
+    },
+    {
+      "id": "pkl",
+      "suffixes": [
+        ".pkl"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "pony",
+      "suffixes": [
+        ".pony"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "powershell",
+      "suffixes": [
+        ".ps1",
+        ".psd1",
+        ".psm1"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "prisma",
+      "suffixes": [
+        ".prisma"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "prolog",
+      "suffixes": [
+        ".pro"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "proto",
+      "suffixes": [
+        ".proto"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "pug",
+      "suffixes": [
+        ".pug"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "purescript",
+      "suffixes": [
+        ".purs"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "python",
+      "suffixes": [
+        ".py",
+        ".pyi",
+        ".pyw"
+      ],
+      "tier": "builtin"
+    },
+    {
+      "id": "ql",
+      "suffixes": [
+        ".ql"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "qmljs",
+      "suffixes": [
+        ".qml"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "r",
+      "suffixes": [
+        ".R",
+        ".r"
+      ],
+      "tier": "tabled"
+    },
+    {
+      "id": "racket",
+      "suffixes": [
+        ".rkt"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "razor",
+      "suffixes": [
+        ".cshtml",
+        ".razor"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "reason",
+      "suffixes": [
+        ".re"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "rego",
+      "suffixes": [
+        ".rego"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "rescript",
+      "suffixes": [
+        ".res"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "roc",
+      "suffixes": [
+        ".roc"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "ruby",
+      "suffixes": [
+        ".gemspec",
+        ".rake",
+        ".rb",
+        ".ru"
+      ],
+      "tier": "tabled"
+    },
+    {
+      "id": "rust",
+      "suffixes": [
+        ".rs",
+        ".rs.in"
+      ],
+      "tier": "tabled"
+    },
+    {
+      "id": "sas",
+      "suffixes": [
+        ".sas"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "scala",
+      "suffixes": [
+        ".sc",
+        ".scala"
+      ],
+      "tier": "tabled"
+    },
+    {
+      "id": "scheme",
+      "suffixes": [
+        ".scm",
+        ".ss"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "slang",
+      "suffixes": [
+        ".slang"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "slim",
+      "suffixes": [
+        ".slim"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "smali",
+      "suffixes": [
+        ".smali"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "smithy",
+      "suffixes": [
+        ".smithy"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "sml",
+      "suffixes": [
+        ".sml"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "solidity",
+      "suffixes": [
+        ".sol"
+      ],
+      "tier": "tabled"
+    },
+    {
+      "id": "sql",
+      "suffixes": [
+        ".pgsql",
+        ".psql",
+        ".sql"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "starlark",
+      "suffixes": [
+        ".bzl",
+        ".star"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "svelte",
+      "suffixes": [
+        ".svelte"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "swift",
+      "suffixes": [
+        ".swift"
+      ],
+      "tier": "tabled"
+    },
+    {
+      "id": "tcl",
+      "suffixes": [
+        ".tcl"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "templ",
+      "suffixes": [
+        ".templ"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "terraform",
+      "suffixes": [
+        ".tf",
+        ".tfvars"
+      ],
+      "tier": "tabled"
+    },
+    {
+      "id": "thrift",
+      "suffixes": [
+        ".thrift"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "tlaplus",
+      "suffixes": [
+        ".tla"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "tsx",
+      "suffixes": [
+        ".tsx"
+      ],
+      "tier": "builtin"
+    },
+    {
+      "id": "twig",
+      "suffixes": [
+        ".twig"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "typescript",
+      "suffixes": [
+        ".cts",
+        ".mts",
+        ".ts"
+      ],
+      "tier": "builtin"
+    },
+    {
+      "id": "vala",
+      "suffixes": [
+        ".vala"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "vb",
+      "suffixes": [
+        ".vb"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "verilog",
+      "suffixes": [
+        ".sv",
+        ".svh",
+        ".v"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "vhdl",
+      "suffixes": [
+        ".vhd",
+        ".vhdl"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "vim",
+      "suffixes": [
+        ".vim"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "vue",
+      "suffixes": [
+        ".vue"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "wgsl",
+      "suffixes": [
+        ".wgsl"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "wit",
+      "suffixes": [
+        ".wit"
+      ],
+      "tier": "inferred"
+    },
+    {
+      "id": "zig",
+      "suffixes": [
+        ".zig"
+      ],
+      "tier": "tabled"
+    },
+    {
+      "id": "zsh",
+      "suffixes": [
+        ".zsh"
+      ],
+      "tier": "tabled"
+    }
+  ]
+}

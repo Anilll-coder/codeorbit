@@ -1,10 +1,55 @@
+<div align="center">
+
+<img src="assets/logo.svg" alt="" width="104" height="104">
+
 # CodeOrbit
 
-**[anilll-coder.github.io/codeorbit](https://anilll-coder.github.io/codeorbit/)**
+**Local-first code intelligence.**
 
-Local-first code intelligence. It parses a repository with tree-sitter, builds a
-structural knowledge graph of its symbols and their relationships in SQLite, and
-answers questions about the code using a **local** LLM through Ollama.
+A structural graph of your repository — **137 languages, one index** — served to any
+MCP agent, or answered by a model that runs on your machine.
+
+[![Languages](https://img.shields.io/badge/languages-137-e2a13f?style=flat-square&labelColor=0a0b0d)](#languages)
+[![Extensions](https://img.shields.io/badge/extensions-207-e2a13f?style=flat-square&labelColor=0a0b0d)](#languages)
+[![Python](https://img.shields.io/badge/python-3.10%2B-e2a13f?style=flat-square&logo=python&logoColor=f2b658&labelColor=0a0b0d)](#install)
+[![MCP](https://img.shields.io/badge/MCP-server-e2a13f?style=flat-square&labelColor=0a0b0d)](#using-it-from-claude-code-cursor-or-any-mcp-agent)
+[![tree-sitter](https://img.shields.io/badge/parser-tree--sitter-9b9ca4?style=flat-square&labelColor=0a0b0d)](#languages)
+[![Network calls](https://img.shields.io/badge/network%20calls-none-7fb992?style=flat-square&labelColor=0a0b0d)](#what-it-is)
+
+**[Website](https://anilll-coder.github.io/codeorbit/)**&nbsp; · &nbsp;**[Install](#install)**&nbsp; · &nbsp;**[Languages](#languages)**&nbsp; · &nbsp;**[For agents](#does-it-actually-save-the-agent-any-tokens)**&nbsp; · &nbsp;**[Commands](https://anilll-coder.github.io/codeorbit/#usage)**
+
+</div>
+
+---
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/Anilll-coder/codeorbit/main/install.sh | sh
+codeorbit index .
+codeorbit install-mcp            # your agent now reads the graph, not guesses
+```
+
+<table>
+<tr>
+<td width="25%" align="center"><h3>137</h3><sub>LANGUAGES READ</sub></td>
+<td width="25%" align="center"><h3>61%</h3><sub>CALL SITES BOUND</sub></td>
+<td width="25%" align="center"><h3>&minus;61%</h3><sub>AGENT TOKENS</sub></td>
+<td width="25%" align="center"><h3>0</h3><sub>NETWORK CALLS</sub></td>
+</tr>
+<tr>
+<td align="center"><sub>Three tiers of extraction, from hand-written to inferred straight out of the grammar.</sub></td>
+<td align="center"><sub>Measured on <code>rich</code>: 1,193 symbols, 5,381 edges. The rest genuinely leaves the project.</sub></td>
+<td align="center"><sub>Over a repeated session, against the flat response format. Estimated at 4 chars/token.</sub></td>
+<td align="center"><sub>Indexing is on disk, the graph is served over loopback and stdio. No keys, no telemetry.</sub></td>
+</tr>
+</table>
+
+---
+
+## What it is
+
+CodeOrbit parses a repository with tree-sitter, builds a structural knowledge
+graph of its symbols and their relationships in SQLite, and answers questions
+about the code using a **local** LLM through Ollama.
 
 CodeOrbit itself never calls out: indexing runs on disk, the graph is served over
 local stdio, and there are no API keys and no telemetry. Answer fully offline
@@ -225,23 +270,20 @@ codeorbit langs              # what this install can read
 codeorbit langs --verbose    # the whole list
 ```
 
-Around 137 languages across 200-odd file extensions, from one registry in
-`langs.py`. Extraction has three tiers, tried in that order:
+**137 languages across 207 file extensions**, from one registry in `langs.py`.
+Extraction has three tiers, tried in that order:
 
-1. **A hand-written extractor** — Python, JavaScript/JSX, TypeScript/TSX. These
-   are the languages the tool is measured on, and a tuned extractor catches what
-   a generic one cannot: PEP 257 docstrings, an arrow function bound to a
-   `const`, `extends B implements C`.
-2. **A generic tree-sitter extractor**, driven by a per-language table in
-   `extract/generic.py`. Roughly twenty-five languages have an entry —
-   Go, Rust, Java, C, C++, C#, Ruby, PHP, Swift, Kotlin, Scala, Dart, Elixir,
-   Solidity, Lua, shell and the rest.
-3. **Inference**, for everything else. `infer_spec` reads the node types out of
-   the grammar itself and classifies them by name. Tree-sitter grammars are
-   written by different people over a decade and still converge hard on
-   `function_definition`, `class_declaration`, `call_expression`,
-   `import_declaration` — so a language nobody here has looked at still yields a
-   graph. Gleam has no table entry and needs none.
+| | tier | count | how it reads a file |
+|---|---|---|---|
+| **1** | Hand-written | **4** | Python, JavaScript/JSX, TypeScript/TSX. The languages this is measured on, where a tuned extractor catches what a generic one cannot: PEP 257 docstrings, an arrow function bound to a `const`, `extends B implements C`. |
+| **2** | Table-driven | **30** | A `Spec` per language in `extract/generic.py` naming which node types are definitions, calls and imports. Go, Rust, Java, C, C++, C#, Ruby, PHP, Swift, Kotlin, Scala, Dart, Elixir, Solidity, Lua, shell and the rest. |
+| **3** | Inferred | **103** | `infer_spec` reads node types out of the grammar itself and classifies them by name. Grammars written by different people over a decade still converge hard on `function_definition`, `class_declaration`, `call_expression`, `import_declaration` — so a language nobody here has looked at still yields a graph. Gleam has no table entry and needs none. |
+
+Each tier-2 entry earned itself against a real file. Go methods needed the
+receiver (`Server.Start`, not `Start`); a Rust `impl` had to fold into its
+struct rather than duplicate it; C hides a function's name two declarators deep;
+Dart has no call node at all; Elixir has no *definition* node, because `def`
+there is a macro call, so it gets a hook.
 
 `.vue`, `.svelte`, `.astro` and `.html` go through a fourth path: the wrapper is
 blanked out line-for-line and the script block handed to the JavaScript or
@@ -252,18 +294,21 @@ Adding a language is normally one line in `SUFFIX`. A language whose grammar
 spells things unusually gets a `Spec` entry; a language with no definition node
 at all — Elixir, where `def` is a macro call — gets a hook.
 
-**What this does not do.** A language with no grammar installed is *skipped*,
-not indexed empty, and `codeorbit index` names what it skipped — a file row with
-no symbols is indistinguishable from an empty file, and that is a lie the graph
-then repeats to the model. Inference is weaker than a table entry: Nim and
-Crystal yield symbols and imports but no call edges, because their call nodes
-are named in ways the patterns do not reach. That limit is pinned by a test
-rather than papered over, because inventing edges is worse than missing them.
-
-Name resolution is scoped to a language **family**, not an exact language id.
-TypeScript, JavaScript, `.vue` and `.svelte` compile together and call each
-other; Go and Python do not, and binding a Go `Load` to a Python `load` produced
-call edges that were pure coincidence.
+> [!IMPORTANT]
+> **What this does not do.**
+>
+> - **A language with no grammar installed is skipped and named**, never indexed
+>   empty. A file row with no symbols is indistinguishable from an empty file,
+>   and that is a lie the graph then repeats to the model.
+> - **Inference is weaker than a table entry.** Nim and Crystal yield symbols and
+>   imports but *no call edges*, because their call nodes are named in ways the
+>   patterns do not reach. That limit is pinned by a test rather than papered
+>   over — inventing edges is worse than missing them, since the model believes
+>   them.
+> - **Name resolution never crosses a language family.** TypeScript, JavaScript,
+>   `.vue` and `.svelte` compile together and call each other; Go and Python do
+>   not, and binding a Go `Load` to a Python `load` produced call edges that were
+>   pure coincidence.
 
 ## Measured
 
@@ -537,24 +582,25 @@ desktop — a server, a container, a WSL shell, an SSH session. It used to call
 `webbrowser.open(url)` and throw the answer away, which failed three separate
 ways and reported all three as success:
 
-- **It blocked.** `webbrowser` picks a *console* browser — w3m, links, lynx —
-  when no graphical one is registered, and runs it in the foreground waiting for
-  it to exit. The callback that opens the browser ran before `serve_forever()`,
-  so the terminal browser took over the terminal and the server it was pointed
-  at never started answering. The command looked hung with its own URL printed
-  above it.
-- **It did nothing.** Headless, containerised or over SSH without X forwarding,
-  `webbrowser.open` returns `False`. Nobody looked, so nothing was printed and
-  the user waited for a window that was never coming.
-- **It looked in the wrong place.** Under WSL it searched for a Linux browser
-  inside the VM while the browser the user wanted was on the Windows side,
-  reached through `wslview` or `powershell.exe`.
+| failure | what actually happened |
+|---|---|
+| **It blocked** | `webbrowser` picks a *console* browser — w3m, links, lynx — when no graphical one is registered, and runs it in the foreground waiting for it to exit. The callback that opens the browser ran before `serve_forever()`, so the terminal browser took over the terminal and the server it was pointed at never started answering. The command looked hung with its own URL printed above it. |
+| **It did nothing** | Headless, containerised or over SSH without X forwarding, `webbrowser.open` returns `False`. Nobody looked, so nothing was printed and the user waited for a window that was never coming. |
+| **It looked in the wrong place** | Under WSL it searched for a Linux browser inside the VM while the browser the user wanted was on the Windows side, reached through `wslview` or `powershell.exe`. |
 
-`browser.py` now picks the opener per platform — `open`, `cmd /c start ""`,
-`xdg-open`/`gio`, `wslview`/`powershell.exe` — spawns it **detached** so nothing
-can block, and returns a result saying what happened. `on_ready` runs on its own
-thread, so even a slow opener cannot delay serving. On a machine with no way to
-open a window it says so and tells you to forward the port:
+`browser.py` now picks the opener per platform, spawns it **detached** so
+nothing can block, and returns a result saying what happened:
+
+| platform | opener |
+|---|---|
+| macOS | `open` |
+| Windows | `cmd /c start ""` |
+| Linux | `xdg-open` → `gio open` → `gnome-open` → `kde-open` |
+| WSL | `wslview` → `powershell.exe Start-Process` → `cmd.exe start` |
+| headless | none — prints the URL and the `ssh -L` that reaches it |
+
+`on_ready` runs on its own thread, so even a slow opener cannot delay serving.
+On a machine with no way to open a window it says so:
 
 ```
 Could not open a browser (headless).
@@ -655,27 +701,21 @@ the third and fourth pick, which are the least likely to be what was asked.
 
 Three things were wasting it, and `budget.py` fixes each:
 
-- **A flat cap.** The first pick earns a long body; the fourth earns enough to
-  recognise. Budgets taper down the ranking, so the symbol that matters is not
-  shortened at all and the tail costs a fraction.
-- **The same code twice in one response.** Retrieval routinely returns a class
-  *and* one of its own methods, whose bodies overlap exactly. The second is now
-  a pointer at the first.
-- **The same code in every response.** An agent's session is `explore`, then
-  `node`, then `impact`, mostly over the same few symbols. After two full sends
-  the body becomes a citation — with a note saying to call again with
-  `detail="full"` if it has fallen out of context, which is the escape hatch
-  that makes the elision safe rather than merely cheap.
+| | waste | fix |
+|---|---|---|
+| **01** | **A flat cap.** Every pick got the same 120 lines, however unlikely it was to be the answer. | Budgets taper down the ranking. The symbol that matters is not shortened at all; the tail costs a fraction. |
+| **02** | **The same code twice in one response.** Retrieval routinely returns a class *and* one of its own methods, whose bodies overlap exactly. | The second becomes a pointer at the first. |
+| **03** | **The same code in every response.** A session is `explore`, then `node`, then `impact`, over the same few symbols. | After two full sends the body becomes a citation — with `detail="full"` as the escape hatch, which is what makes the elision safe rather than merely cheap. |
 
 Measured over six questions against this repository, estimated at four
 characters per token:
 
-| | est. tokens | |
-|---|---|---|
-| old format, six calls | 13,307 | |
-| new format, first pass | 10,805 | **-18%** |
-| the same six questions, third time in the session | 5,131 | **-61%** |
-| `detail="signatures"` | 4,067 | **-69%** |
+| | est. tokens | change |
+|---|--:|--:|
+| old format, six calls | 13,307 | — |
+| new format, first pass | 10,805 | **−18%** |
+| the same six questions, third time in the session | 5,131 | **−61%** |
+| `detail="signatures"` | 4,067 | **−69%** |
 
 Passes one and two cost the same by design — a body gets two full sends before
 it is elided, because an agent's context is compacted without warning and a
@@ -759,7 +799,7 @@ pip install -e ".[dev]"
 pytest
 ```
 
-418 tests, no mocks: each builds a small project on disk, indexes it, and asserts
+425 tests, no mocks: each builds a small project on disk, indexes it, and asserts
 against the real graph. Mocking the parser would only test the mock, and the
 fixer's tests never call the model - what has to hold is that everything
 *around* the model is safe regardless of what it returns.
@@ -845,3 +885,16 @@ edges as heuristic — follows
 [colbymchenry/codegraph](https://github.com/colbymchenry/codegraph) (MIT), a
 TypeScript implementation of the same idea, studied as a reference. This is an
 independent Python implementation and shares no code with it.
+
+---
+
+<div align="center">
+
+<sub>Local-first, always. No API keys leave the process; no telemetry is sent.</sub>
+
+**[Website](https://anilll-coder.github.io/codeorbit/)** &nbsp;·&nbsp;
+**[Install](#install)** &nbsp;·&nbsp;
+**[Languages](#languages)** &nbsp;·&nbsp;
+**[Issues](https://github.com/Anilll-coder/codeorbit/issues)**
+
+</div>

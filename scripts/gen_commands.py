@@ -1,12 +1,17 @@
-"""Generate site/commands.json from the CLI itself.
+"""Generate the site's data files from the tool itself.
 
-Hand-written command documentation is wrong within two releases. Every flag
-here is read out of the live Click command objects, so the site cannot claim an
-option that does not exist or miss one that does. Only the examples are written
-by hand, and a test asserts every command has one.
+Hand-written documentation is wrong within two releases and nobody notices,
+because nothing fails. Both files here are read out of the live objects:
 
-    python scripts/gen_commands.py          # rewrite site/commands.json
-    python scripts/gen_commands.py --check  # fail if it is out of date (CI)
+  site/commands.json   every command and flag, from the Click command tree
+  site/languages.json  every language and extension, from the registry
+
+So the site cannot claim an option that does not exist, and it cannot claim to
+read a language this build has no grammar for. Only the examples are written by
+hand, and a test asserts every command has one.
+
+    python scripts/gen_commands.py          # rewrite both
+    python scripts/gen_commands.py --check  # fail if either is stale (CI)
 """
 from __future__ import annotations
 
@@ -21,7 +26,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from codeorbit.cli import app  # noqa: E402
 
-OUT = Path(__file__).resolve().parent.parent / "site" / "commands.json"
+SITE = Path(__file__).resolve().parent.parent / "site"
+OUT = SITE / "commands.json"
+LANGS_OUT = SITE / "languages.json"
 
 # What someone would actually type. One line per example, with the reason it is
 # worth showing - the site renders the note under the command.
@@ -213,22 +220,79 @@ PANEL_ORDER = [
 ]
 
 
-def main() -> int:
-    data = build()
-    text = json.dumps(data, indent=2) + "\n"
+# The languages read by a hand-written extractor rather than the generic one.
+TIER_BUILTIN = ("python", "javascript", "typescript", "tsx")
 
-    if "--check" in sys.argv:
-        current = OUT.read_text(encoding="utf-8") if OUT.exists() else ""
+
+def build_languages() -> dict:
+    """The language registry, as the site renders it.
+
+    Generated rather than written down, because the numbers *are* the claim. A
+    page saying "137 languages" beside a build that reads three would be worse
+    than a page that said nothing, and that is exactly the drift nobody
+    notices.
+    """
+    from codeorbit import langs
+    from codeorbit.extract import generic
+
+    supported = sorted(langs.supported())
+    builtin = [lang for lang in TIER_BUILTIN if lang in supported]
+    tabled = sorted(set(generic.TUNED) & set(supported) - set(builtin))
+    inferred = [lang for lang in supported
+                if lang not in tabled and lang not in builtin]
+
+    by_lang: dict[str, list[str]] = {}
+    for suffix, lang in sorted(langs.SUFFIX.items()):
+        if lang in supported:
+            by_lang.setdefault(lang, []).append(suffix)
+
+    return {
+        "count": len(supported),
+        "suffixes": sum(len(v) for v in by_lang.values()),
+        "tiers": {
+            "builtin": builtin,
+            "tabled": tabled,
+            "inferred": len(inferred),
+        },
+        "embedded": sorted(langs.EMBEDDED),
+        "languages": [
+            {
+                "id": lang,
+                "suffixes": by_lang.get(lang, []),
+                "tier": ("builtin" if lang in builtin
+                         else "tabled" if lang in tabled else "inferred"),
+            }
+            for lang in supported
+        ],
+    }
+
+
+def _sync(path: Path, data: dict, check: bool, label: str) -> int:
+    text = json.dumps(data, indent=2) + "\n"
+    if check:
+        current = path.read_text(encoding="utf-8") if path.exists() else ""
         if current != text:
-            print(f"{OUT} is out of date. Run: python scripts/gen_commands.py")
+            print(f"{path} is out of date. Run: python scripts/gen_commands.py")
             return 1
-        print(f"{OUT} is up to date.")
+        print(f"{path} is up to date.")
         return 0
 
-    OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text(text, encoding="utf-8")
-    print(f"wrote {OUT} ({len(data['commands'])} commands)")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    print(f"wrote {path} ({label})")
     return 0
+
+
+def main() -> int:
+    check = "--check" in sys.argv
+    commands = build()
+    languages = build_languages()
+
+    # Both files, always, and the worse of the two exit codes. A run that fixed
+    # one and left the other stale is how a site ends up half-right.
+    rc = _sync(OUT, commands, check, f"{len(commands['commands'])} commands")
+    rc |= _sync(LANGS_OUT, languages, check, f"{languages['count']} languages")
+    return rc
 
 
 if __name__ == "__main__":

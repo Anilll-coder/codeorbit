@@ -4,10 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>CodeOrbit: local-first code intelligence</title>
-  <meta name="description" content="CodeOrbit builds a structural knowledge graph of your repository with tree-sitter and serves it over MCP to Claude Code, Cursor, or any agent, or answers questions directly with a local LLM through Ollama. No API keys, no telemetry." />
+  <meta name="description" content="CodeOrbit builds a structural knowledge graph of your repository with tree-sitter across 137 languages, and serves it over MCP to Claude Code, Cursor, or any agent — or answers questions directly with a local LLM through Ollama. No API keys, no telemetry." />
 
   <meta property="og:title" content="CodeOrbit: local-first code intelligence" />
-  <meta property="og:description" content="A structural knowledge graph of your repo, served to any MCP agent or answered by a model that runs on your machine. No API keys, no telemetry." />
+  <meta property="og:description" content="A structural knowledge graph of your repo across 137 languages, served to any MCP agent or answered by a model that runs on your machine. No API keys, no telemetry." />
   <meta property="og:type" content="website" />
   <meta name="theme-color" content="#0a0b0d" />
 
@@ -48,9 +48,10 @@
 
       <nav class="nav-links" aria-label="Primary">
         <a href="#story">How it works</a>
+        <a href="#languages">Languages</a>
         <a href="#architecture">Architecture</a>
+        <a href="#budget">For agents</a>
         <a href="#commands">Commands</a>
-        <a href="#usage">Usage</a>
         <a href="https://github.com/Anilll-coder/codeorbit#readme">Docs</a>
       </nav>
 
@@ -83,8 +84,11 @@
 
   <div class="mobile-menu" id="mobile-menu">
     <a href="#story">How it works</a>
+    <a href="#languages">Languages</a>
     <a href="#architecture">Architecture</a>
+    <a href="#budget">For agents</a>
     <a href="#commands">Commands</a>
+    <a href="#usage">Usage</a>
     <a href="https://github.com/Anilll-coder/codeorbit#readme">Docs</a>
     <a href="https://github.com/Anilll-coder/codeorbit" target="_blank" rel="noopener">GitHub</a>
     <a class="btn btn-primary" href="#install">Install CodeOrbit</a>
@@ -97,7 +101,7 @@
       <div class="hero-inner">
         <div class="hero-copy">
           <h1>Code intelligence, entirely <em>local</em>.</h1>
-          <p class="sub">A structural graph of your repository, queryable by any agent over MCP, or answered by a model that runs here.</p>
+          <p class="sub">A structural graph of your repository — <span class="sub-hl" data-lang-count>137</span> languages, one index — queryable by any agent over MCP, or answered by a model that runs here.</p>
           <div class="hero-actions">
             <a class="btn btn-primary" href="#install">Install CodeOrbit</a>
             <a class="btn btn-ghost" href="https://github.com/Anilll-coder/codeorbit" target="_blank" rel="noopener">
@@ -162,6 +166,10 @@
               <div class="proof-item">
                 <div class="num">61%</div>
                 <div class="lbl">call sites bound</div>
+              </div>
+              <div class="proof-item">
+                <div class="num" data-lang-count>137</div>
+                <div class="lbl">languages read</div>
               </div>
             </div>
             <div class="proof-note">Measured indexing rich, a 100-file, 38,615-line open-source project. The rest is calls that genuinely leave the project.</div>
@@ -236,12 +244,12 @@
           <div class="pipeline-stage" data-i="0">
             <div class="pipeline-node">1</div>
             <h4>scanner</h4>
-            <p>Walks the repo, skips vendored and generated files, respects .gitignore.</p>
+            <p>Walks the repo, skips vendored and generated files, respects .gitignore, and names any language it had no grammar for.</p>
           </div>
           <div class="pipeline-stage" data-i="1">
             <div class="pipeline-node">2</div>
             <h4>extract</h4>
-            <p>Tree-sitter turns source into symbols, call sites, and imports.</p>
+            <p>Tree-sitter turns source into symbols, call sites and imports. Hand-written for three languages, table-driven for thirty, inferred for the rest.</p>
           </div>
           <div class="pipeline-stage" data-i="2">
             <div class="pipeline-node">3</div>
@@ -267,6 +275,81 @@
       </div>
     </section>
 
+    <!-- ============================================================ LANGUAGES -->
+    <!-- Counts and chips come from languages.json, generated from the registry
+         by scripts/gen_commands.py. The static numbers below are the fallback
+         when that fetch fails, and a test asserts they match. -->
+    <section class="section langs-section" id="languages">
+      <div class="wrap">
+        <div class="section-head reveal">
+          <div class="eyebrow">Coverage</div>
+          <h2>Most repositories are not one language.</h2>
+          <p>A Rails app has JavaScript in it. A Go service has Terraform beside it. A Flutter app is Dart and Kotlin and Swift at once. A tool that reads three of those reads none of them properly.</p>
+        </div>
+
+        <div class="stat-band reveal">
+          <div class="stat">
+            <div class="stat-num" data-lang-count>137</div>
+            <div class="stat-lbl">languages</div>
+          </div>
+          <div class="stat">
+            <div class="stat-num" data-suffix-count>207</div>
+            <div class="stat-lbl">file extensions</div>
+          </div>
+          <div class="stat">
+            <div class="stat-num">3</div>
+            <div class="stat-lbl">extraction tiers</div>
+          </div>
+          <div class="stat">
+            <div class="stat-num">4</div>
+            <div class="stat-lbl">single-file component formats</div>
+          </div>
+        </div>
+
+        <div class="tiers reveal">
+          <article class="tier is-1">
+            <div class="tier-rule"><span class="tier-idx">Tier 1</span><span class="tier-count" data-tier-count="builtin">4</span></div>
+            <h4>Hand-written</h4>
+            <p>Python, JavaScript/JSX, TypeScript/TSX. The languages this is measured on, where a tuned extractor catches what a generic one cannot: PEP 257 docstrings, an arrow function bound to a <code>const</code>, <code>extends B implements C</code>.</p>
+          </article>
+          <article class="tier is-2">
+            <div class="tier-rule"><span class="tier-idx">Tier 2</span><span class="tier-count" data-tier-count="tabled">30</span></div>
+            <h4>Table-driven</h4>
+            <p>A <code>Spec</code> per language saying which node types are definitions, calls and imports. Go methods bind to their receiver; a Rust <code>impl</code> folds into its struct; Elixir gets a hook, because <code>def</code> there is a macro call and the grammar has no definition node at all.</p>
+          </article>
+          <article class="tier is-3">
+            <div class="tier-rule"><span class="tier-idx">Tier 3</span><span class="tier-count" data-tier-count="inferred">103</span></div>
+            <h4>Inferred</h4>
+            <p>The node types are read out of the grammar itself and classified by name. Tree-sitter grammars converge hard on <code>function_definition</code>, <code>class_declaration</code>, <code>call_expression</code> — so a language nobody here has looked at still yields a graph.</p>
+          </article>
+        </div>
+
+        <div class="lang-cloud reveal">
+          <div class="lang-cloud-head">
+            <span class="lang-cloud-title">Every language this build can read</span>
+            <div class="lang-key">
+              <button class="lang-key-item is-on" type="button" data-tier-filter="all">All</button>
+              <button class="lang-key-item" type="button" data-tier-filter="builtin"><i class="dot t1"></i>Hand-written</button>
+              <button class="lang-key-item" type="button" data-tier-filter="tabled"><i class="dot t2"></i>Table</button>
+              <button class="lang-key-item" type="button" data-tier-filter="inferred"><i class="dot t3"></i>Inferred</button>
+            </div>
+          </div>
+          <div class="lang-chips" id="lang-chips" aria-live="polite">
+            <span class="lang-chip is-fallback">Run <code>codeorbit langs</code> to list them.</span>
+          </div>
+        </div>
+
+        <div class="honest reveal">
+          <h4>What it does <em>not</em> do</h4>
+          <ul>
+            <li><strong>A language with no grammar installed is skipped and named</strong>, never indexed empty. A file row with no symbols is indistinguishable from an empty file, and that is a lie the graph then repeats to the model.</li>
+            <li><strong>Inference is weaker than a table entry.</strong> Nim and Crystal yield symbols and imports but no call edges, because their call nodes are named in ways the patterns do not reach. That limit is pinned by a test rather than papered over.</li>
+            <li><strong>Name resolution never crosses a language family.</strong> TypeScript, JavaScript, <code>.vue</code> and <code>.svelte</code> compile together and call each other. Go and Python do not, and binding a Go <code>Load</code> to a Python <code>load</code> produced edges that were pure coincidence.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
     <!-- ============================================================ COMMANDS -->
     <section class="section" id="commands">
       <div class="wrap">
@@ -279,7 +362,7 @@
         <div class="bento reveal">
           <div class="bento-cell is-hero">
             <h4>MCP</h4>
-            <p>Serve the graph to Claude Code, Cursor, or any MCP client. It reads real source and call edges, not a guess.</p>
+            <p>Serve the graph to Claude Code, Cursor, or any MCP client. It reads real source and call edges, not a guess &mdash; and budgets what it returns, so a repeated question costs a fraction of the first.</p>
             <div class="bento-code">codeorbit install-mcp --agent claude</div>
           </div>
           <div class="bento-cell">
@@ -304,7 +387,7 @@
           </div>
           <div class="bento-cell is-graph is-wide">
             <h4>Visualize</h4>
-            <p>An interactive graph in one HTML file. No server, no network.</p>
+            <p>An interactive graph served on loopback, or exported as one self-contained file. Opens on macOS, Windows, Linux and WSL — and says why when it can't.</p>
             <div class="bento-code">codeorbit viz --focus Segment</div>
           </div>
         </div>
@@ -335,6 +418,102 @@
 
           <article class="usage-detail" id="cmd-detail" aria-live="polite"></article>
         </div>
+      </div>
+    </section>
+
+    <!-- ============================================================ BUDGET -->
+    <section class="section budget-section" id="budget">
+      <div class="wrap">
+        <div class="section-head reveal">
+          <div class="eyebrow">For agents</div>
+          <h2>A tool call has to cost less than the file read it replaces.</h2>
+          <p>That is the whole claim, and the first version did not clear the bar convincingly. Four picks, a flat 120-line body each, clipped at 24,000 characters — about six thousand tokens a call, most of it spent on the pick least likely to be the answer.</p>
+        </div>
+
+        <div class="budget-grid">
+          <div class="budget-chart reveal" id="budget-chart">
+            <div class="bchart-head">
+              <span>Six questions against this repository</span>
+              <span class="bchart-unit">est. tokens</span>
+            </div>
+
+            <div class="bar-row" style="--pct:100%">
+              <div class="bar-label">Flat format</div>
+              <div class="bar-track"><div class="bar-fill is-base"></div></div>
+              <div class="bar-value">13,307</div>
+            </div>
+            <div class="bar-row" style="--pct:81%">
+              <div class="bar-label">Budgeted <span class="bar-sub">pass 1–2</span></div>
+              <div class="bar-track"><div class="bar-fill"></div></div>
+              <div class="bar-value">10,805 <em>−18%</em></div>
+            </div>
+            <div class="bar-row" style="--pct:39%">
+              <div class="bar-label">Budgeted <span class="bar-sub">pass 3 on</span></div>
+              <div class="bar-track"><div class="bar-fill"></div></div>
+              <div class="bar-value">5,131 <em>−61%</em></div>
+            </div>
+            <div class="bar-row" style="--pct:31%">
+              <div class="bar-label"><code>detail="signatures"</code></div>
+              <div class="bar-track"><div class="bar-fill is-best"></div></div>
+              <div class="bar-value">4,067 <em>−69%</em></div>
+            </div>
+
+            <p class="bchart-note">Estimates, and they say so: four characters per token is a budgeting ratio, not a tokeniser. The <em>shape</em> is the point — the saving grows the longer the session runs, which is exactly when an agent's context is under pressure.</p>
+          </div>
+
+          <div class="budget-notes reveal">
+            <article class="bnote">
+              <div class="bnote-n">01</div>
+              <h4>Taper, don't cap</h4>
+              <p>The first pick earns a long body; the fourth earns enough to recognise. The symbol that matters is never the one shortened.</p>
+            </article>
+            <article class="bnote">
+              <div class="bnote-n">02</div>
+              <h4>Never print the same code twice</h4>
+              <p>Retrieval routinely returns a class <em>and</em> one of its own methods, whose bodies overlap exactly. The second becomes a pointer at the first.</p>
+            </article>
+            <article class="bnote">
+              <div class="bnote-n">03</div>
+              <h4>Remember what you already sent</h4>
+              <p>A session is explore, then node, then impact, over the same few symbols. After two full sends the body becomes a citation — with <code>detail="full"</code> as the escape hatch, because withholding a body the agent no longer has is worse than re-sending one.</p>
+            </article>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================================ ANYWHERE -->
+    <section class="section anywhere-section" id="anywhere">
+      <div class="wrap">
+        <div class="section-head reveal">
+          <div class="eyebrow">Runs where you run</div>
+          <h2>The viewer opens, or tells you why it can't.</h2>
+          <p><code>codeorbit viz</code> is the command most likely to run somewhere that is not a laptop. It used to call <code>webbrowser.open</code> and throw the answer away, which failed three ways and reported all three as success.</p>
+        </div>
+
+        <div class="fail-grid reveal">
+          <article class="fail-card">
+            <div class="fail-tag">It blocked</div>
+            <p>With no graphical browser registered, Python picks a <em>console</em> one and waits for it to exit. That ran before <code>serve_forever()</code> — so the terminal browser took the terminal and the server it pointed at never started answering.</p>
+          </article>
+          <article class="fail-card">
+            <div class="fail-tag">It did nothing</div>
+            <p>Headless, containerised, or over SSH without X forwarding, the call returns <code>False</code>. Nobody looked at the return value, so nothing was printed and the user waited for a window that was never coming.</p>
+          </article>
+          <article class="fail-card">
+            <div class="fail-tag">It looked in the wrong place</div>
+            <p>Under WSL it searched inside the VM for a browser that lives on the Windows side, reached through <code>wslview</code> or <code>powershell.exe</code>.</p>
+          </article>
+        </div>
+
+        <div class="platform-strip reveal">
+          <div class="platform"><span class="p-os">macOS</span><code>open</code></div>
+          <div class="platform"><span class="p-os">Windows</span><code>cmd /c start ""</code></div>
+          <div class="platform"><span class="p-os">Linux</span><code>xdg-open · gio</code></div>
+          <div class="platform"><span class="p-os">WSL</span><code>wslview · powershell.exe</code></div>
+          <div class="platform is-none"><span class="p-os">Headless</span><code>prints the URL and the ssh -L to reach it</code></div>
+        </div>
+        <p class="proof-note" style="margin-top:20px">Each opener is spawned detached, so nothing can block, and <code>on_ready</code> runs on its own thread so even a slow one cannot delay serving. <code>CODEORBIT_NO_BROWSER=1</code> turns the attempt off for CI.</p>
       </div>
     </section>
 
@@ -400,14 +579,16 @@
             </svg>
             CodeOrbit
           </a>
-          <p>A structural code graph, served over MCP or answered by a local model. Python and JavaScript, indexed with tree-sitter.</p>
+          <p>A structural code graph, served over MCP or answered by a local model. <span data-lang-count>137</span> languages, indexed with tree-sitter.</p>
         </div>
 
         <div class="footer-col">
           <h5>Product</h5>
           <ul>
             <li><a href="#story">How it works</a></li>
+            <li><a href="#languages">Languages</a></li>
             <li><a href="#architecture">Architecture</a></li>
+            <li><a href="#budget">For agents</a></li>
             <li><a href="#commands">Commands</a></li>
           </ul>
         </div>
@@ -427,7 +608,7 @@
             <li><span class="plain">Python 3.10+</span></li>
             <li><span class="plain">Ollama, for <code style="font-family:inherit;">ask</code> / <code style="font-family:inherit;">agent</code></span></li>
             <li><span class="plain">An MCP client, for <code style="font-family:inherit;">mcp</code></span></li>
-            <li><span class="plain">Python and JavaScript repos</span></li>
+            <li><span class="plain">Any repo: <span data-lang-count>137</span> languages read</span></li>
           </ul>
         </div>
       </div>
@@ -444,5 +625,6 @@
 
   <script src="app.js"></script>
   <script src="commands.js"></script>
+  <script src="languages.js"></script>
 </body>
 </html>
