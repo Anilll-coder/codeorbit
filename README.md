@@ -52,10 +52,13 @@ graph of its symbols and their relationships in SQLite, and answers questions
 about the code using a **local** LLM through Ollama.
 
 CodeOrbit itself never calls out: indexing runs on disk, the graph is served over
-local stdio, and there are no API keys and no telemetry. Answer fully offline
-with a model in Ollama, or hand the same graph to Claude Code, Cursor, or any
-agent you already use — in which case what you send travels to whatever that
-agent talks to.
+local stdio, and there are no API keys and no telemetry required to use it.
+Answer fully offline with a model in Ollama, or hand the same graph to Claude
+Code, Cursor, or any agent you already use — in which case what you send
+travels to whatever that agent talks to. `codeorbit agent` can optionally
+drive a cloud model itself (`--provider openai` or `--provider anthropic`) if
+you choose to point it at one and set the key yourself; left alone, it is
+Ollama, which is the only choice that needs no network at all.
 
 ## The idea
 
@@ -119,8 +122,20 @@ Needs Python 3.10+, and [Ollama](https://ollama.com) for `codeorbit ask`.
 ```sh
 python -m venv .venv
 .venv/Scripts/activate        # Windows;  source .venv/bin/activate on Unix
-pip install -e .
+pip install -e ".[dev]"
 ```
+
+`pyproject.toml` is the only source of truth for dependencies. There is no
+committed `requirements.txt` - a hand-maintained second copy of the same list
+goes stale exactly like hand-written docs do. If some part of your toolchain
+specifically wants one, generate it:
+
+```sh
+python scripts/gen_requirements.py        # requirements.txt, core deps
+python scripts/gen_requirements.py --dev  # ...plus the dev extra
+```
+
+It is gitignored on purpose; regenerate it rather than committing it.
 
 </details>
 
@@ -215,8 +230,11 @@ files
   -> budget.py       spend an agent's context deliberately, not by accident
   -> web/            the explorer itself: canvas renderer + layout worker
   -> mcp_server.py   the graph as MCP tools, for Claude Code / Cursor / etc
-  -> agent.py        a local Ollama model driving those same tools
-  -> llm.py          Ollama, streaming, local only
+  -> mcp_config.py   write CodeOrbit into an agent's own MCP config file
+  -> agent.py        drives those same tools itself - any provider, not fixed
+  -> providers.py    the openai-compatible and anthropic backends behind
+                     --provider; translated to one shape agent.py depends on
+  -> llm.py          Ollama client, streaming, local only - what `ask` uses
   -> cli.py          the commands above
 ```
 
@@ -618,18 +636,34 @@ describes it instead of one naming languages it does not have.
 ## Using it from Claude Code, Cursor, or any MCP agent
 
 ```bash
-codeorbit install-mcp                  # writes the config for Claude Code
-codeorbit install-mcp -a cursor        # ...or Cursor, or windsurf
-codeorbit install-mcp --print          # show it, change nothing
-codeorbit install-mcp --remove         # take it back out
+codeorbit install-mcp                     # writes the config for Claude Code
+codeorbit install-mcp -a cursor           # ...or Cursor
+codeorbit install-mcp -a windsurf         # ...or Windsurf
+codeorbit install-mcp -a vscode           # ...or VS Code
+codeorbit install-mcp -a claude-desktop   # ...or the Claude desktop app
+codeorbit install-mcp --print             # show it for any OTHER MCP client
+codeorbit install-mcp --remove            # take it back out
 ```
 
-That writes the file the agent reads (`.mcp.json` for Claude Code,
-`.cursor/mcp.json` for Cursor) and then you restart the agent. It **merges** -
-other MCP servers already in the file are left exactly as they were, a backup is
-taken before the first write, running it twice changes nothing, and a file it
-cannot parse is refused rather than overwritten, because that file may hold your
-other servers.
+| agent | file it writes |
+|---|---|
+| `claude` (default) | `.mcp.json`, project-scoped, safe to commit |
+| `cursor` | `.cursor/mcp.json` (or `~/.cursor/mcp.json` with `--global`) |
+| `windsurf` | `.windsurf/mcp.json` (or `~/.codeium/windsurf/mcp_config.json` global) |
+| `vscode` | `.vscode/mcp.json` — the one target with a genuinely different file shape: `{"servers": {...}}`, not `{"mcpServers": {...}}` |
+| `claude-desktop` | the desktop app's own config. There is no per-project file for it at all, so `--global` is implied whether you pass it or not |
+
+Five named targets is not the ceiling. The graph is served over **standard
+MCP** — any client that speaks the protocol can use it, named here or not.
+`--print` shows the exact `mcpServers` (or `servers`, for VS Code) block to
+paste into whatever config file your client expects; adding a sixth named
+target is one entry in `mcp_config.py`'s `TARGETS` table, not a new code path.
+
+Running the write form **merges** — other MCP servers already in the file are
+left exactly as they were, a backup is taken before the first write, running
+it twice changes nothing, and a file it cannot parse is refused rather than
+overwritten, because that file may hold your other servers. Then restart the
+agent.
 
 The command it writes is an absolute path to a real executable. An agent spawns
 the server as a bare subprocess with no shell and no PATH lookup of its own, so
@@ -668,7 +702,10 @@ Seven tools are exposed: `explore` (the primary one), `search`, `node`,
 makes no outbound call of its own — it speaks stdio to a client on the same
 machine — but a tool result is source code, and a cloud-backed client sends what
 it receives to its own provider. That is the trade for a stronger model. For a
-private codebase, `codeorbit ask` and `codeorbit agent` keep everything local.
+private codebase, `codeorbit ask` keeps everything local, and so does
+`codeorbit agent` at its default `--provider ollama` - the same trade only
+applies there if you explicitly choose `--provider openai` or `--provider
+anthropic`, and even then only to the questions you ask it, not to indexing.
 
 **These return context, not answers, and that is the point.** `codeorbit ask`
 runs a local 3.8B model because a developer at a terminal has none to hand. An
@@ -732,17 +769,44 @@ And a body that *is* cut short says so, with the line it stopped at and how to
 get the rest — silently truncating mid-function teaches an agent the tool is
 unreliable and to go read the file, which costs more than it ever saved.
 
-## Driving it with a local model
+## Driving it yourself - any model, through the same MCP tools
 
-No cloud agent needed - `codeorbit agent` lets an Ollama model call the same MCP
-tools, over the same protocol an external agent uses:
+No cloud agent needed - `codeorbit agent` drives the same MCP tools any
+external agent would, over the same protocol, itself. By default that means an
+Ollama model, fully local, no key, nothing leaves the machine. It is not
+limited to Ollama: `--provider` points the same loop at any OpenAI-compatible
+server (LM Studio, vLLM, llama.cpp's own server, or the real OpenAI API) or at
+Claude directly, without changing what it does - the graph, the tool-calling
+loop, the context budgeting below are all identical regardless of who answers.
 
 ```bash
 codeorbit agent                               # a session: ask, read, ask again
 codeorbit agent .                             # the same, on this directory
 codeorbit agent "what does resolve_project do and what calls it?"   # one shot
 codeorbit agent --check                       # which local models can call tools
+
+codeorbit agent --provider openai --model gpt-4o-mini
+codeorbit agent --provider openai --model local-model \
+  --base-url http://localhost:1234/v1         # a local server instead
+codeorbit agent --provider anthropic --model claude-sonnet-5
 ```
+
+`--provider` is the only thing that changes. `openai` covers anything that
+speaks the OpenAI chat-completions shape - not just OpenAI's own API - because
+LM Studio, vLLM, llama.cpp's server, text-generation-webui and OpenRouter all
+agree on that wire format; only `--base-url` differs between them. `anthropic`
+talks to Claude's Messages API directly, which is different enough (content
+blocks, no `tool` role, the system prompt as its own field) that the
+translation happens once, here, rather than being left to each caller.
+
+**Credentials are read from the environment only** - `OPENAI_API_KEY` /
+`ANTHROPIC_API_KEY` by default, or a name you choose with `--api-key-env` - and
+never accepted as CLI text, the same rule this project holds for every other
+secret. A local OpenAI-compatible server that takes no key at all (LM Studio, a
+bare llama.cpp server) is a first-class case: no key set means no
+`Authorization` header sent, not a refusal to start. Anthropic is the one
+provider that does require a key, and says so - with where to get one - before
+it makes any request.
 
 With no question it opens an interactive session: one question at a time, each
 answered against the graph, with the previous couple of exchanges carried
@@ -799,7 +863,7 @@ pip install -e ".[dev]"
 pytest
 ```
 
-425 tests, no mocks: each builds a small project on disk, indexes it, and asserts
+483 tests, no mocks: each builds a small project on disk, indexes it, and asserts
 against the real graph. Mocking the parser would only test the mock, and the
 fixer's tests never call the model - what has to hold is that everything
 *around* the model is safe regardless of what it returns.
@@ -831,8 +895,9 @@ is now scoped to one language.
 
 Complete and working end to end: index → resolve → query → graph-grounded local
 answers, review of a change, ranked auditing, verified fix generation, an
-interactive graph viewer, an MCP server for external agents, and a local
-Ollama-driven agent over those same tools.
+interactive graph viewer, an MCP server for external agents, and an agent of its
+own over those same tools - Ollama by default, or any OpenAI-compatible server
+or Claude directly via `--provider`.
 
 Around 137 languages, with three tiers of fidelity — see
 [Languages](#languages). The known limits are honest ones, and the tool says

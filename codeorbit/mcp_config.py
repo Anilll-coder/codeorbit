@@ -22,29 +22,68 @@ import shutil
 import sys
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
 SERVER_KEY = "codeorbit"
+
+
+def _platform_app_dir(app: str) -> Path:
+    """Where a desktop app on this OS keeps its user-level config directory.
+
+    The same three-way branch essentially every desktop app follows:
+    %APPDATA% on Windows, ~/Library/Application Support on macOS, and the XDG
+    convention (~/.config, or $XDG_CONFIG_HOME if set) everywhere else. Getting
+    this wrong does not fail loudly - it writes into a file the app never
+    reads, and a user-scoped install that "worked" silently does nothing.
+    """
+    if sys.platform == "win32":
+        base = os.environ.get("APPDATA") or str(Path.home() / "AppData" / "Roaming")
+        return Path(base) / app
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / app
+    base = os.environ.get("XDG_CONFIG_HOME") or str(Path.home() / ".config")
+    return Path(base) / app
 
 
 @dataclass
 class Target:
     name: str
     description: str
-    # Where the file lives, relative to the project root (or home, if global).
-    project_rel: str
+    # Where the file lives, relative to the project root. None means this
+    # agent has no project-scoped config at all (Claude Desktop): only the
+    # global location applies, regardless of --global.
+    project_rel: str | None
+    # Relative to $HOME, for agents whose global config sits at a fixed path
+    # under it (Cursor, Windsurf). Ignored when global_path is set.
     global_rel: str | None = None
+    # For agents whose global config location is OS-specific (VS Code, Claude
+    # Desktop) rather than a fixed path under $HOME.
+    global_path: Callable[[], Path] | None = None
+    # The top-level key the server entry is nested under. Every target here
+    # uses "mcpServers" except VS Code, which uses "servers" - one real
+    # difference in an otherwise identical file shape.
+    servers_key: str = "mcpServers"
 
 
 TARGETS = {
     "claude": Target(
         "Claude Code", "project-scoped .mcp.json, committed with the repo",
         ".mcp.json", None),
+    "claude-desktop": Target(
+        "Claude Desktop", "the desktop app's global config - it has no "
+        "per-project file, so this always writes there",
+        None, global_path=lambda: _platform_app_dir("Claude") / "claude_desktop_config.json"),
     "cursor": Target(
         "Cursor", ".cursor/mcp.json",
         ".cursor/mcp.json", ".cursor/mcp.json"),
     "windsurf": Target(
         "Windsurf", "~/.codeium/windsurf/mcp_config.json",
         ".windsurf/mcp.json", ".codeium/windsurf/mcp_config.json"),
+    "vscode": Target(
+        "VS Code", "project-scoped .vscode/mcp.json, or the user config",
+        ".vscode/mcp.json",
+        global_path=lambda: _platform_app_dir("Code") / "User" / "mcp.json",
+        servers_key="servers"),
 }
 
 
@@ -176,11 +215,18 @@ def entry_equivalent(existing: object, wanted: dict) -> bool:
 
 def config_path(agent: str, root: Path, use_global: bool = False) -> Path:
     target = TARGETS[agent]
-    if use_global:
-        if not target.global_rel:
-            raise ValueError(f"{target.name} has no global config location")
-        return Path.home() / target.global_rel
-    return root / target.project_rel
+    # A target with no project-scoped file at all (Claude Desktop) has exactly
+    # one sensible location, so --global is implied rather than required: the
+    # alternative is a footgun where the natural first command - no flags -
+    # fails for a reason the user has no way to guess.
+    want_global = use_global or target.project_rel is None
+    if not want_global:
+        return root / target.project_rel
+    if target.global_path is not None:
+        return target.global_path()
+    if not target.global_rel:
+        raise ValueError(f"{target.name} has no global config location")
+    return Path.home() / target.global_rel
 
 
 def _load(path: Path) -> tuple[dict, str | None]:
@@ -206,17 +252,21 @@ def _load(path: Path) -> tuple[dict, str | None]:
 
 def install(agent: str, root: Path, use_global: bool = False,
             exe: str | None = None) -> tuple[Result | None, str | None]:
-    path = config_path(agent, root, use_global)
+    try:
+        path = config_path(agent, root, use_global)
+    except ValueError as e:
+        return None, str(e)
+    key = TARGETS[agent].servers_key
     data, err = _load(path)
     if err:
         return None, err
 
-    servers = data.get("mcpServers")
+    servers = data.get(key)
     if servers is None:
         servers = {}
-        data["mcpServers"] = servers
+        data[key] = servers
     elif not isinstance(servers, dict):
-        return None, f'"mcpServers" in {path} is not an object; refusing to touch it.'
+        return None, f'"{key}" in {path} is not an object; refusing to touch it.'
 
     entry = server_entry(root, exe)
     others = sorted(k for k in servers if k != SERVER_KEY)
@@ -244,7 +294,11 @@ def install(agent: str, root: Path, use_global: bool = False,
 
 def remove(agent: str, root: Path, use_global: bool = False
            ) -> tuple[Result | None, str | None]:
-    path = config_path(agent, root, use_global)
+    try:
+        path = config_path(agent, root, use_global)
+    except ValueError as e:
+        return None, str(e)
+    key = TARGETS[agent].servers_key
     if not path.exists():
         return Result(path, "absent", None, []), None
 
@@ -252,7 +306,7 @@ def remove(agent: str, root: Path, use_global: bool = False
     if err:
         return None, err
 
-    servers = data.get("mcpServers")
+    servers = data.get(key)
     if not isinstance(servers, dict) or SERVER_KEY not in servers:
         return Result(path, "absent", None,
                       sorted(servers) if isinstance(servers, dict) else []), None

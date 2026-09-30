@@ -219,3 +219,109 @@ def test_editable_source_is_reported_and_never_deleted(tmp_path: Path, monkeypat
     assert checkout not in plan.launchers
     uninstall.execute(plan)
     assert checkout.exists() and (checkout / "pyproject.toml").exists()
+
+
+# ------------------------------------------------------- mcp_registrations
+#
+# Every entry in mcp_config.TARGETS must survive being scanned here, even one
+# with no project-scoped file at all (Claude Desktop) or a different top-level
+# key (VS Code's "servers" instead of "mcpServers"). A target that breaks this
+# takes the whole `uninstall` command down with it - see build_plan below.
+
+def test_every_target_survives_a_scan_with_no_project(tmp_path, monkeypatch):
+    """The regression this guards: a target with project_rel=None crashed
+    `project / target.project_rel` for every OTHER target too, because they
+    were all built in one list comprehension."""
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    assert uninstall.mcp_registrations(None) == []
+
+
+def test_every_target_survives_a_scan_with_a_project(tmp_path, monkeypatch):
+    monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+    assert uninstall.mcp_registrations(tmp_path / "proj") == []
+
+
+def test_finds_a_project_scoped_registration(tmp_path, monkeypatch):
+    monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+    proj = tmp_path / "proj"
+    cfg = proj / ".mcp.json"
+    cfg.parent.mkdir(parents=True)
+    cfg.write_text('{"mcpServers": {"codeorbit": {}}}', encoding="utf-8")
+
+    assert uninstall.mcp_registrations(proj) == [cfg]
+
+
+def test_finds_a_vscode_registration_under_its_own_key(tmp_path, monkeypatch):
+    """VS Code nests under "servers", not "mcpServers" - a scan hardcoded to
+    the latter would silently miss it."""
+    monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+    proj = tmp_path / "proj"
+    cfg = proj / ".vscode" / "mcp.json"
+    cfg.parent.mkdir(parents=True)
+    cfg.write_text('{"servers": {"codeorbit": {}}}', encoding="utf-8")
+
+    assert cfg in uninstall.mcp_registrations(proj)
+
+
+def test_finds_claude_desktops_global_registration_with_no_project_at_all(
+        tmp_path, monkeypatch):
+    """Claude Desktop has no project-scoped file - its entry must still be
+    found from its global location when `project` is None."""
+    from codeorbit import mcp_config
+
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdgcfg"))
+    cfg = mcp_config.config_path("claude-desktop", tmp_path)
+    cfg.parent.mkdir(parents=True)
+    cfg.write_text('{"mcpServers": {"codeorbit": {}}}', encoding="utf-8")
+
+    assert cfg in uninstall.mcp_registrations(None)
+
+
+def test_a_file_naming_another_tool_is_not_flagged(tmp_path, monkeypatch):
+    monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+    proj = tmp_path / "proj"
+    cfg = proj / ".mcp.json"
+    cfg.parent.mkdir(parents=True)
+    cfg.write_text('{"mcpServers": {"some-other-tool": {}}}', encoding="utf-8")
+
+    assert uninstall.mcp_registrations(proj) == []
+
+
+def test_build_plan_does_not_crash_with_any_target_present(tmp_path, monkeypatch):
+    """End to end: this is what the CLI actually calls, and it crashed
+    outright before the fix - not merely returned a wrong answer."""
+    monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+    venv = fake_venv(tmp_path / "env")
+    monkeypatch.setattr(sys, "prefix", str(venv))
+    monkeypatch.setattr(uninstall, "_launchers", lambda venv=None: [])
+
+    plan = uninstall.build_plan(tmp_path / "proj", with_index=False)
+    assert plan.mcp_configs == []
+
+
+def test_execute_cleans_up_a_vscode_registration_under_its_own_key(
+        tmp_path, monkeypatch):
+    """The other half of the VS Code fix: mcp_registrations() finding the
+    file is only half the job. execute() used to hardcode "mcpServers" and
+    silently fail to remove anything from a "servers"-keyed file."""
+    monkeypatch.setattr(Path, "home", lambda: tmp_path / "home")
+    venv = fake_venv(tmp_path / "env")
+    monkeypatch.setattr(sys, "prefix", str(venv))
+    monkeypatch.setattr(uninstall, "_launchers", lambda venv=None: [])
+
+    project = tmp_path / "proj"
+    cfg = project / ".vscode" / "mcp.json"
+    cfg.parent.mkdir(parents=True)
+    cfg.write_text(
+        '{"servers": {"codeorbit": {"command": "x"}, "other-tool": {"command": "y"}}}',
+        encoding="utf-8")
+
+    plan = uninstall.build_plan(project, with_index=False)
+    assert cfg in plan.mcp_configs
+    uninstall.execute(plan)
+
+    import json
+    data = json.loads(cfg.read_text(encoding="utf-8"))
+    assert "codeorbit" not in data["servers"], "our entry should be gone"
+    assert "other-tool" in data["servers"], "another tool's entry must survive"

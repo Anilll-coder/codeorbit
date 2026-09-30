@@ -235,16 +235,27 @@ def prune(messages: list[dict], budget: int = MAX_CONTEXT_CHARS) -> list[dict]:
 async def ask_once(session, tools, question: str, model: str, *,
                    history: list[dict] | None = None,
                    max_rounds: int = MAX_ROUNDS, num_ctx: int = 8192,
-                   num_predict: int = 700, on_step=None, on_status=None) -> Run:
+                   num_predict: int = 700, on_step=None, on_status=None,
+                   chat_fn=None) -> Run:
     """Answer one question on an already-open session.
 
     `on_status(text)` is called whenever the wait changes character. On a CPU
     model a single round is tens of seconds, and a caller that cannot say which
     of them it is in can only offer an undifferentiated spinner.
+
+    `chat_fn(model, messages, tools, num_ctx, num_predict) -> dict` is the only
+    seam between this loop and a specific backend. Left as `None` it is exactly
+    `_chat` below - the original, unmodified Ollama path every existing caller
+    still gets by default. `codeorbit agent --provider openai|anthropic` passes
+    a different one in (see `providers.py`); the loop itself does not know or
+    care which backend answered, because every one of them normalises its
+    reply to the same shape this function already expects.
     """
     def say(text):
         if on_status:
             on_status(text)
+
+    chat = chat_fn or _chat
 
     out = Run()
     messages = [{"role": "system", "content": SYSTEM}]
@@ -254,11 +265,11 @@ async def ask_once(session, tools, question: str, model: str, *,
     for rnd in range(1, max_rounds + 1):
         out.rounds = rnd
         say(f"thinking (round {rnd}/{max_rounds})" if rnd > 1 else "thinking")
-        # Off the event loop: _chat blocks on an HTTP request that can take a
-        # minute, and while it does, nothing else in this loop can run - not a
-        # progress ticker, and not the MCP session's own stream handling.
+        # Off the event loop: a backend call blocks on an HTTP request that can
+        # take a minute, and while it does, nothing else in this loop can run -
+        # not a progress ticker, and not the MCP session's own stream handling.
         msg = await asyncio.to_thread(
-            _chat, model, prune(messages), tools, num_ctx, num_predict)
+            chat, model, prune(messages), tools, num_ctx, num_predict)
         calls = msg.get("tool_calls") or []
 
         if not calls:
@@ -329,14 +340,16 @@ def remember(history: list[dict], question: str, answer: str) -> list[dict]:
 
 async def run(root: Path, question: str, model: str, *,
               max_rounds: int = MAX_ROUNDS, num_ctx: int = 8192,
-              num_predict: int = 700, on_step=None, on_status=None) -> Run:
+              num_predict: int = 700, on_step=None, on_status=None,
+              chat_fn=None) -> Run:
     """Drive the MCP tools with `model` until it answers one question.
 
     Connects as a real MCP client over stdio, exactly as an external agent
-    would.
+    would. `chat_fn` - see `ask_once` - selects the backend; omitted, it is
+    Ollama, unchanged.
     """
     async with session_for(root) as (session, tools):
         return await ask_once(session, tools, question, model,
                               max_rounds=max_rounds, num_ctx=num_ctx,
                               num_predict=num_predict, on_step=on_step,
-                              on_status=on_status)
+                              on_status=on_status, chat_fn=chat_fn)

@@ -82,6 +82,7 @@ def _root(
 
 
 from .llm import OllamaError as OllamaErrorType  # noqa: E402
+from .providers import ProviderError as ProviderErrorType  # noqa: E402
 
 
 def _resolve(path: str | None) -> str:
@@ -993,25 +994,48 @@ def mcp(
         pass
 
 
+PROVIDER_HELP = (
+    "ollama (default, fully local, no key) | openai (any OpenAI-compatible "
+    "server: LM Studio, vLLM, llama.cpp, or the real OpenAI API) | anthropic "
+    "(Claude models directly)"
+)
+
+
 @app.command(rich_help_panel="Ask questions")
 def agent(
     question: str = typer.Argument(
         None, help="A question. Omit it to start an interactive session."),
     path: str = typer.Option(None, "--path", "-p", help=PATH_HELP),
     model: str = typer.Option(None, "--model", "-m",
-                              help="A tool-calling Ollama model"),
+                              help="A tool-calling model, meaningful to --provider"),
+    provider: str = typer.Option("ollama", "--provider", help=PROVIDER_HELP),
+    base_url: str = typer.Option(
+        None, "--base-url",
+        help="openai/anthropic only: e.g. http://localhost:1234/v1 for a "
+             "local server. Defaults to the provider's own cloud API."),
+    api_key_env: str = typer.Option(
+        None, "--api-key-env",
+        help="Env var holding the key (default OPENAI_API_KEY / "
+             "ANTHROPIC_API_KEY). The key itself is never read from the "
+             "command line."),
     rounds: int = typer.Option(6, "--rounds", "-r", help="Max tool-calling rounds"),
     max_tokens: int = typer.Option(700, "--max-tokens", "-t"),
     check: bool = typer.Option(False, "--check",
-                               help="Only report which local models can call tools"),
+                               help="Only report which models can call tools"),
 ):
-    """Ask a local model about this project. Omit the question for a session."""
+    """Drive the MCP tools with a model of your choice. Omit the question for a session.
+
+    The tools are the same either way: a structural graph of this project,
+    served over real MCP. --provider only chooses what answers it - Ollama by
+    default (fully local, no key, and the only choice this needs no network
+    for), or any OpenAI-compatible server, or Claude directly.
+    """
     from . import agent as agentmod
 
     root = Path(_resolve(path)).resolve()
 
     # A path is not a question. `codeorbit agent .` is someone asking to work on
-    # this directory, and answering "." wastes a round on a CPU model replying
+    # this directory, and answering "." wastes a round having the model reply
     # that it is ready. Treat it as the session request it obviously is.
     if question is not None and _looks_like_a_path(question):
         root = Path(_resolve(path or question)).resolve()
@@ -1022,6 +1046,19 @@ def agent(
                           f"question. To ask about it: codeorbit agent "
                           f'"what is {question}?"[/dim]')
         question = None
+
+    if provider not in ("ollama", "openai", "anthropic"):
+        console.print(f"[red]Unknown provider {provider!r}.[/red] Choose one of: "
+                      "ollama, openai, anthropic")
+        raise typer.Exit(1)
+
+    if provider != "ollama":
+        asyncio.run(_agent_remote(
+            agentmod, root, question, provider, model, base_url, api_key_env,
+            rounds, max_tokens, check))
+        return
+
+    # ---- the original, fully local path: unchanged below this line -------
 
     if not llm.available():
         if not llm.installed():
@@ -1086,6 +1123,86 @@ def agent(
         return
 
     asyncio.run(_agent_session(agentmod, root, model, rounds, max_tokens))
+
+
+async def _agent_remote(agentmod, root: Path, question: str | None, provider: str,
+                        model: str | None, base_url: str | None,
+                        api_key_env: str | None, rounds: int, max_tokens: int,
+                        check: bool) -> None:
+    """The openai/anthropic path: same MCP tools, a different backend.
+
+    Split out from `agent()` rather than interleaved with the Ollama branch,
+    so neither reads like an afterthought bolted onto the other - and so the
+    original Ollama path above stays exactly as it was, line for line.
+    """
+    from . import providers
+
+    prov = providers.resolve(provider, base_url, api_key_env)
+    hint = providers.key_missing_hint(provider, api_key_env)
+    if hint:
+        console.print(f"[red]{hint}[/red]")
+        raise typer.Exit(1)
+
+    if check:
+        console.print(f"Probing {prov.base_url} for tool-calling models...\n")
+        names = prov.list_models()
+        if not names:
+            console.print("[dim]This provider did not list its models (some "
+                          "API keys cannot). Naming one with --model still "
+                          "works.[/dim]\n")
+            console.print("Known to call tools:")
+            for name, note in prov.model_hints():
+                console.print(f"  {name}   [dim]{note}[/dim]")
+            return
+        t = Table("model", "calls tools?")
+        for name in names:
+            if "embed" in name:
+                continue
+            with console.status(f"probing {name}..."):
+                ok, _ = prov.supports_tools(name)
+            t.add_row(name, "[green]yes[/green]" if ok else "[red]no[/red]")
+        console.print(t)
+        return
+
+    if not model:
+        console.print(f"[red]--model is required for --provider {provider}.[/red]\n")
+        console.print("A few that are known to call tools:")
+        for name, note in prov.model_hints():
+            console.print(f"  {name}   [dim]{note}[/dim]")
+        raise typer.Exit(1)
+
+    with console.status(f"checking {model} can call tools..."):
+        try:
+            ok, reply = await asyncio.to_thread(prov.supports_tools, model)
+        except providers.ProviderError as e:
+            console.print(f"[red]{e}[/red]")
+            raise typer.Exit(1) from e
+    if not ok:
+        console.print(f"[red]{model} did not call the probe tool.[/red] Either "
+                      "the model has no tool-calling support, or the name is "
+                      "wrong for this provider:\n")
+        if reply:
+            console.print(f"  [dim]{reply[:180]}[/dim]\n")
+        raise typer.Exit(1)
+
+    label = f"{model} (via {provider})"
+    if question:
+        console.print(f"[dim]{model} (via {provider}) driving the MCP tools "
+                      f"(max {rounds} rounds)[/dim]\n")
+        try:
+            result = await _with_progress(
+                lambda on_status: agentmod.run(
+                    root, question, model, max_rounds=rounds,
+                    num_predict=max_tokens, on_step=_agent_step,
+                    on_status=on_status, chat_fn=prov.chat))
+        except (OSError, providers.ProviderError) as e:
+            console.print(f"[red]Could not run the agent: {e}[/red]")
+            raise typer.Exit(1) from e
+        _agent_answer(result, label)
+        return
+
+    await _agent_session(agentmod, root, model, rounds, max_tokens,
+                         chat_fn=prov.chat, label=label)
 
 
 def _agent_step(step) -> None:
@@ -1170,14 +1287,21 @@ AGENT_HELP = """[bold]Commands[/bold]
 
 
 async def _agent_session(agentmod, root: Path, model: str, rounds: int,
-                         max_tokens: int) -> None:
+                         max_tokens: int, chat_fn=None, label: str | None = None
+                         ) -> None:
     """One question at a time, against one MCP server held open throughout.
 
     The server is started once here rather than per question: on the machines
     this targets, spawning it and shaking hands is most of the wait before the
     first token.
+
+    `chat_fn` picks the backend answering each question - `None` means the
+    original Ollama path, unchanged; `--provider openai|anthropic` passes a
+    bound `providers.Provider.chat` instead. `label` is what gets shown for
+    "who answered", since `model` alone ("gpt-4o-mini") does not say which
+    provider it came from the way an Ollama model tag already does.
     """
-    console.print(f"[bold]{model}[/bold] on [bold]{root.name}[/bold] "
+    console.print(f"[bold]{label or model}[/bold] on [bold]{root.name}[/bold] "
                   f"[dim]- ask about this codebase. /help for commands, "
                   f"/exit to leave.[/dim]\n")
 
@@ -1225,16 +1349,17 @@ async def _agent_session(agentmod, root: Path, model: str, rounds: int,
                         lambda on_status: agentmod.ask_once(
                             session, tools, question, model, history=history,
                             max_rounds=rounds, num_predict=max_tokens,
-                            on_step=_agent_step, on_status=on_status))
+                            on_step=_agent_step, on_status=on_status,
+                            chat_fn=chat_fn))
                 except KeyboardInterrupt:
                     # Abandon this question, keep the session and its server.
                     console.print("\n[yellow]cancelled[/yellow]")
                     continue
-                except OllamaErrorType as e:
+                except (OllamaErrorType, ProviderErrorType) as e:
                     console.print(f"[red]{e}[/red]")
                     continue
 
-                _agent_answer(result, model)
+                _agent_answer(result, label or model)
                 console.print()
                 if result.answer:
                     history = agentmod.remember(history, question, result.answer)
@@ -1246,8 +1371,9 @@ async def _agent_session(agentmod, root: Path, model: str, rounds: int,
 @app.command("install-mcp", rich_help_panel="Connect an AI agent")
 def install_mcp(
     path: str = typer.Option(None, "--path", "-p", help=PATH_HELP),
-    agent: str = typer.Option("claude", "--agent", "-a",
-                              help="claude, cursor or windsurf"),
+    agent: str = typer.Option(
+        "claude", "--agent", "-a",
+        help="claude, claude-desktop, cursor, windsurf or vscode"),
     use_global: bool = typer.Option(False, "--global", "-g",
                                     help="Write the user-wide config, not this project's"),
     show: bool = typer.Option(False, "--print",
@@ -1255,7 +1381,12 @@ def install_mcp(
     remove_it: bool = typer.Option(False, "--remove",
                                    help="Take CodeOrbit back out of the config"),
 ):
-    """Register CodeOrbit with an AI agent by writing its MCP config."""
+    """Register CodeOrbit with an AI agent by writing its MCP config.
+
+    This covers the agents with a well-documented config file worth writing
+    for you. Any other MCP client reads the same `mcpServers` shape - run with
+    --print and paste the block into whatever config file it expects.
+    """
     import json
 
     from . import mcp_config
@@ -1270,10 +1401,15 @@ def install_mcp(
 
     if show:
         exe = mcp_config.find_executable()
-        console.print(f"[bold]{target.name}[/bold] - config for "
-                      f"{mcp_config.config_path(agent, root, use_global)}:\n")
-        print(json.dumps({"mcpServers": {"codeorbit": mcp_config.server_entry(root, exe)}},
-                         indent=2))
+        try:
+            cfg_path = mcp_config.config_path(agent, root, use_global)
+        except ValueError as e:
+            console.print(f"[red]{e}[/red]")
+            raise typer.Exit(1)
+        console.print(f"[bold]{target.name}[/bold] - config for {cfg_path}:\n")
+        print(json.dumps(
+            {target.servers_key: {"codeorbit": mcp_config.server_entry(root, exe)}},
+            indent=2))
         if agent == "claude":
             console.print("\n[dim]or, as one command:[/dim]")
             print(f"  claude mcp add codeorbit -- {exe} mcp --path {root}")

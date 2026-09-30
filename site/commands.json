@@ -12,8 +12,8 @@
     {
       "name": "agent",
       "panel": "Ask questions",
-      "summary": "Ask a local model about this project. Omit the question for a session.",
-      "description": "",
+      "summary": "Drive the MCP tools with a model of your choice. Omit the question for a session.",
+      "description": "The tools are the same either way: a structural graph of this project,\nserved over real MCP. --provider only chooses what answers it - Ollama by\ndefault (fully local, no key, and the only choice this needs no network\nfor), or any OpenAI-compatible server, or Claude directly.",
       "usage": "[OPTIONS] [question]",
       "arguments": [
         {
@@ -35,7 +35,31 @@
         {
           "kind": "option",
           "name": "--model, -m",
-          "help": "A tool-calling Ollama model",
+          "help": "A tool-calling model, meaningful to --provider",
+          "required": false,
+          "default": "",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--provider",
+          "help": "ollama (default, fully local, no key) | openai (any OpenAI-compatible server: LM Studio, vLLM, llama.cpp, or the real OpenAI API) | anthropic (Claude models directly)",
+          "required": false,
+          "default": "ollama",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--base-url",
+          "help": "openai/anthropic only: e.g. http://localhost:1234/v1 for a local server. Defaults to the provider's own cloud API.",
+          "required": false,
+          "default": "",
+          "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--api-key-env",
+          "help": "Env var holding the key (default OPENAI_API_KEY / ANTHROPIC_API_KEY). The key itself is never read from the command line.",
           "required": false,
           "default": "",
           "metavar": ""
@@ -59,7 +83,7 @@
         {
           "kind": "option",
           "name": "--check",
-          "help": "Only report which local models can call tools",
+          "help": "Only report which models can call tools",
           "required": false,
           "default": "",
           "metavar": ""
@@ -81,6 +105,18 @@
         {
           "cmd": "codeorbit agent --check",
           "note": "Which of your local models can actually call tools."
+        },
+        {
+          "cmd": "codeorbit agent --provider openai --model gpt-4o-mini",
+          "note": "Drive the same tools with any OpenAI-compatible model instead."
+        },
+        {
+          "cmd": "codeorbit agent --provider openai --model local-model --base-url http://localhost:1234/v1",
+          "note": "...or a local server: LM Studio, vLLM, llama.cpp."
+        },
+        {
+          "cmd": "codeorbit agent --provider anthropic --model claude-sonnet-5",
+          "note": "...or Claude directly. Reads ANTHROPIC_API_KEY, never a CLI argument."
         }
       ]
     },
@@ -540,7 +576,7 @@
       "name": "install-mcp",
       "panel": "Connect an AI agent",
       "summary": "Register CodeOrbit with an AI agent by writing its MCP config.",
-      "description": "",
+      "description": "This covers the agents with a well-documented config file worth writing\nfor you. Any other MCP client reads the same `mcpServers` shape - run with\n--print and paste the block into whatever config file it expects.",
       "usage": "[OPTIONS]",
       "arguments": [],
       "options": [
@@ -555,7 +591,7 @@
         {
           "kind": "option",
           "name": "--agent, -a",
-          "help": "claude, cursor or windsurf",
+          "help": "claude, claude-desktop, cursor, windsurf or vscode",
           "required": false,
           "default": "claude",
           "metavar": ""
@@ -592,11 +628,19 @@
         },
         {
           "cmd": "codeorbit install-mcp -a cursor",
-          "note": "...or Cursor, or windsurf."
+          "note": "...or Cursor, Windsurf, VS Code, or the Claude desktop app."
+        },
+        {
+          "cmd": "codeorbit install-mcp -a vscode",
+          "note": "Writes .vscode/mcp.json."
+        },
+        {
+          "cmd": "codeorbit install-mcp -a claude-desktop",
+          "note": "No per-project file for this one - writes the app's global config."
         },
         {
           "cmd": "codeorbit install-mcp --print",
-          "note": "Show the config without writing it."
+          "note": "Show the config for any other MCP client to paste in by hand."
         }
       ]
     },

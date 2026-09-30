@@ -240,3 +240,32 @@ def test_every_static_language_count_on_the_page_agrees(languages, site_html):
 
     counts = {int(n) for n in re.findall(r'data-lang-count[^>]*>(\d+)<', site_html)}
     assert counts == {languages["count"]}, counts
+
+
+# ------------------------------------------------------------- requirements
+#
+# requirements.txt is generated from pyproject.toml and deliberately not
+# committed (see .gitignore) - pyproject.toml is the single source of truth,
+# and a stale committed copy would be worse than no file at all.
+
+def test_requirements_is_generated_from_pyproject(tmp_path):
+    import importlib
+    import sys
+
+    sys.path.insert(0, str(ROOT / "scripts"))
+    gen_requirements = importlib.import_module("gen_requirements")
+
+    text = gen_requirements.build(include_dev=False)
+    assert "tree-sitter>=0.25" in text
+    assert "typer>=0.15" in text
+    assert "pytest" not in text, "the dev extra must be opt-in"
+
+    with_dev = gen_requirements.build(include_dev=True)
+    assert "pytest>=8.0" in with_dev
+
+
+def test_requirements_txt_is_gitignored():
+    gitignore = (ROOT / ".gitignore").read_text(encoding="utf-8")
+    assert "requirements.txt" in gitignore, (
+        "requirements.txt is generated output, not a committed artifact - "
+        "see scripts/gen_requirements.py")

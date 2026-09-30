@@ -462,3 +462,136 @@ def test_ask_once_reports_each_phase():
 
     assert "thinking" in seen[0]
     assert any("codeorbit_explore" in s for s in seen), seen
+
+
+# -------------------------------------------------------- --provider openai/anthropic
+#
+# `codeorbit agent` used to be Ollama or nothing. These pin the new branch:
+# the same MCP tools, answered by a different backend, selected with
+# --provider, with credentials read only from the environment.
+
+from codeorbit import providers as providersmod  # noqa: E402
+
+
+def test_provider_flag_rejects_an_unknown_value(tmp_path):
+    r = runner.invoke(cli.app, ["agent", "q", "--provider", "made-up", "-p", str(tmp_path)])
+    assert r.exit_code == 1
+    assert "Unknown provider" in r.output
+
+
+def test_anthropic_without_a_key_refuses_before_any_network_call(monkeypatch, tmp_path):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.setattr(providersmod, "_anthropic_supports_tools",
+                        lambda *a, **k: pytest.fail("must not reach the network"))
+    r = runner.invoke(cli.app, ["agent", "q", "--provider", "anthropic",
+                                "--model", "claude-x", "-p", str(tmp_path)])
+    assert r.exit_code == 1
+    assert "ANTHROPIC_API_KEY" in r.output
+
+
+def test_openai_with_no_key_set_is_allowed_to_proceed(monkeypatch, tmp_path):
+    """A local OpenAI-compatible server (LM Studio, llama.cpp) takes no key
+    at all - refusing to start on principle would break that case."""
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setattr(providersmod, "_openai_supports_tools",
+                        lambda *a, **k: (False, "no tool call"))
+    r = runner.invoke(cli.app, ["agent", "q", "--provider", "openai",
+                                "--model", "local-model", "-p", str(tmp_path)])
+    # It gets far enough to probe the model and fail there - not on a missing key.
+    assert "did not call the probe tool" in r.output
+
+
+def test_remote_provider_without_a_model_says_so_and_suggests_one(monkeypatch, tmp_path):
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    r = runner.invoke(cli.app, ["agent", "q", "--provider", "openai", "-p", str(tmp_path)])
+    assert r.exit_code == 1
+    assert "--model is required" in r.output
+    assert "gpt-4o-mini" in r.output
+
+
+def test_a_model_that_cannot_call_tools_is_refused_for_a_remote_provider(
+        monkeypatch, tmp_path):
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    monkeypatch.setattr(providersmod, "_openai_supports_tools",
+                        lambda *a, **k: (False, "I would call it now"))
+    r = runner.invoke(cli.app, ["agent", "q", "--provider", "openai",
+                                "--model", "weak-model", "-p", str(tmp_path)])
+    assert r.exit_code == 1
+    assert "did not call the probe tool" in r.output
+
+
+def test_a_capable_remote_model_runs_the_agent_loop(monkeypatch, tmp_path):
+    seen = {}
+
+    async def fake_run(root, question, model, *, max_rounds, num_predict,
+                       on_step, on_status, chat_fn):
+        seen["chat_fn"] = chat_fn
+        seen["model"] = model
+
+        class R:
+            answer = "done via openai"
+            steps = []
+            rounds = 1
+            truncated = False
+        return R()
+
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    monkeypatch.setattr(providersmod, "_openai_supports_tools",
+                        lambda *a, **k: (True, ""))
+    monkeypatch.setattr(agent, "run", fake_run)
+
+    r = runner.invoke(cli.app, ["agent", "how does load work", "--provider", "openai",
+                                "--model", "gpt-4o-mini", "-p", str(tmp_path)])
+    assert r.exit_code == 0, r.output
+    assert "done via openai" in r.output
+    assert seen["model"] == "gpt-4o-mini"
+    assert callable(seen["chat_fn"]), "the provider's chat method must be passed through"
+
+
+def test_check_lists_remote_provider_models(monkeypatch, tmp_path):
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    monkeypatch.setattr(providersmod, "_openai_list_models",
+                        lambda *a, **k: ["gpt-4o-mini", "text-embedding-3"])
+    monkeypatch.setattr(providersmod, "_openai_supports_tools",
+                        lambda *a, **k: (True, ""))
+    r = runner.invoke(cli.app, ["agent", "x", "--provider", "openai",
+                                "--check", "-p", str(tmp_path)])
+    assert r.exit_code == 0
+    assert "gpt-4o-mini" in r.output
+    assert "text-embedding-3" not in r.output, "embedding models cannot chat; skip them"
+
+
+def test_check_falls_back_to_hints_when_listing_is_unsupported(monkeypatch, tmp_path):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant")
+    monkeypatch.setattr(providersmod, "_anthropic_list_models", lambda *a, **k: [])
+    r = runner.invoke(cli.app, ["agent", "x", "--provider", "anthropic",
+                                "--check", "-p", str(tmp_path)])
+    assert r.exit_code == 0
+    assert "claude-sonnet-5" in r.output
+
+
+def test_a_custom_base_url_reaches_a_local_server(monkeypatch, tmp_path):
+    """The point of --base-url: LM Studio, vLLM, llama.cpp's own server."""
+    seen = {}
+
+    def fake_supports_tools(base_url, api_key, model, timeout):
+        seen["base_url"] = base_url
+        return False, "no tools"
+
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setattr(providersmod, "_openai_supports_tools", fake_supports_tools)
+    runner.invoke(cli.app, ["agent", "q", "--provider", "openai",
+                            "--model", "local", "--base-url",
+                            "http://localhost:1234/v1", "-p", str(tmp_path)])
+    assert seen["base_url"] == "http://localhost:1234/v1"
+
+
+def test_a_provider_error_during_the_probe_is_reported_not_raised(monkeypatch, tmp_path):
+    def boom(*a, **k):
+        raise providersmod.ProviderError("connection refused")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    monkeypatch.setattr(providersmod, "_openai_supports_tools", boom)
+    r = runner.invoke(cli.app, ["agent", "q", "--provider", "openai",
+                                "--model", "m", "-p", str(tmp_path)])
+    assert r.exit_code == 1
+    assert "connection refused" in r.output

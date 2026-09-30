@@ -92,6 +92,13 @@ EXAMPLES: dict[str, list[tuple[str, str]]] = {
          "One question, one answer. The model drives the tools itself."),
         ("codeorbit agent --check",
          "Which of your local models can actually call tools."),
+        ("codeorbit agent --provider openai --model gpt-4o-mini",
+         "Drive the same tools with any OpenAI-compatible model instead."),
+        ("codeorbit agent --provider openai --model local-model "
+         "--base-url http://localhost:1234/v1",
+         "...or a local server: LM Studio, vLLM, llama.cpp."),
+        ("codeorbit agent --provider anthropic --model claude-sonnet-5",
+         "...or Claude directly. Reads ANTHROPIC_API_KEY, never a CLI argument."),
     ],
     "review": [
         ("codeorbit review", "Review your working tree with its blast radius."),
@@ -113,8 +120,13 @@ EXAMPLES: dict[str, list[tuple[str, str]]] = {
     ],
     "install-mcp": [
         ("codeorbit install-mcp", "Register with Claude Code."),
-        ("codeorbit install-mcp -a cursor", "...or Cursor, or windsurf."),
-        ("codeorbit install-mcp --print", "Show the config without writing it."),
+        ("codeorbit install-mcp -a cursor",
+         "...or Cursor, Windsurf, VS Code, or the Claude desktop app."),
+        ("codeorbit install-mcp -a vscode", "Writes .vscode/mcp.json."),
+        ("codeorbit install-mcp -a claude-desktop",
+         "No per-project file for this one - writes the app's global config."),
+        ("codeorbit install-mcp --print",
+         "Show the config for any other MCP client to paste in by hand."),
     ],
     "upgrade": [
         ("codeorbit upgrade", "Upgrade in place from wherever it was installed."),

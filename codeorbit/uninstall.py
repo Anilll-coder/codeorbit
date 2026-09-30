@@ -88,27 +88,41 @@ def mcp_registrations(project: Path | None) -> list[Path]:
     Leaving these behind is not cosmetic: the agent goes on spawning a command
     that no longer exists and reports the server as failed on every start. An
     uninstall that leaves an agent permanently erroring has not uninstalled.
+
+    Built through `mcp_config.config_path` rather than hand-rolling
+    `project / target.project_rel` here too - a target can have no
+    project-scoped file at all (Claude Desktop) or an OS-specific global one
+    (Claude Desktop, VS Code), and that logic already lives in one place.
     """
     from . import mcp_config
 
-    candidates: list[Path] = []
+    candidates: list[tuple[str, Path]] = []
     for agent, target in mcp_config.TARGETS.items():
-        if project is not None:
-            candidates.append(project / target.project_rel)
-        if target.global_rel:
-            candidates.append(Path.home() / target.global_rel)
+        if project is not None and target.project_rel is not None:
+            candidates.append(
+                (agent, mcp_config.config_path(agent, project, use_global=False)))
+        try:
+            # `root` is unused on the global branch, so a placeholder is fine
+            # when no project path was given at all.
+            candidates.append((agent, mcp_config.config_path(
+                agent, project or Path("."), use_global=True)))
+        except ValueError:
+            pass  # this target has no global location (Claude Code)
 
     out: list[Path] = []
-    for path in candidates:
+    for agent, path in candidates:
         if path in out or not path.exists():
             continue
+        # Different agents key their servers differently - VS Code uses
+        # "servers", everything else "mcpServers" - so the check has to match
+        # the target that produced this candidate, not a fixed key.
+        key = mcp_config.TARGETS[agent].servers_key
         try:
             import json
             data = json.loads(path.read_text(encoding="utf-8") or "{}")
         except Exception:
             continue
-        if isinstance(data, dict) and \
-                mcp_config.SERVER_KEY in (data.get("mcpServers") or {}):
+        if isinstance(data, dict) and mcp_config.SERVER_KEY in (data.get(key) or {}):
             out.append(path)
     return out
 
@@ -380,13 +394,24 @@ def execute(plan: Plan) -> list[str]:
     # Edited directly rather than through mcp_config.remove(), because these
     # paths were found by scanning and need not match a known agent layout -
     # only our own key is touched either way.
+    #
+    # The key itself still has to be guessed, though: this list was built by
+    # scanning every target, not by asking one known agent, and VS Code nests
+    # its servers under "servers" rather than "mcpServers". Trying every key
+    # any target in the registry actually uses (there are two) and taking the
+    # one that is present is cheap and correct either way - hardcoding
+    # "mcpServers" here silently failed to clean up a VS Code registration
+    # that mcp_registrations() had just found.
+    all_keys = {t.servers_key for t in mcp_config.TARGETS.values()}
     for cfg in plan.mcp_configs:
         try:
             import json
             data = json.loads(cfg.read_text(encoding="utf-8") or "{}")
-            servers = data.get("mcpServers") or {}
-            if mcp_config.SERVER_KEY not in servers:
+            key = next((k for k in all_keys if mcp_config.SERVER_KEY
+                       in (data.get(k) or {})), None)
+            if key is None:
                 continue
+            servers = data[key]
             backup = cfg.with_suffix(cfg.suffix + ".bak")
             try:
                 shutil.copy2(cfg, backup)

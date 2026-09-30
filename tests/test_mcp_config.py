@@ -194,3 +194,94 @@ def test_cli_rejects_an_unknown_agent(tmp_path: Path):
 def test_cli_warns_when_the_project_is_not_indexed(tmp_path: Path):
     r = runner.invoke(cli.app, ["install-mcp", "-p", str(tmp_path)])
     assert "not indexed yet" in r.output
+
+
+# ------------------------------------------------- new targets: any agent
+
+def test_vscode_uses_servers_not_mcpservers(tmp_path: Path):
+    """VS Code's MCP config is the one real shape difference among the
+    targets - it nests under "servers", not "mcpServers"."""
+    result, err = mcp_config.install("vscode", tmp_path)
+    assert err is None
+    data = read_config(result.path)
+    assert "servers" in data
+    assert "mcpServers" not in data
+    assert data["servers"]["codeorbit"]["args"][:2] == ["mcp", "--path"]
+
+
+def test_vscode_project_config_lives_under_dot_vscode(tmp_path: Path):
+    p = mcp_config.config_path("vscode", tmp_path)
+    assert p == tmp_path / ".vscode" / "mcp.json"
+
+
+def test_vscode_merges_alongside_other_servers_under_its_own_key(tmp_path: Path):
+    p = tmp_path / ".vscode" / "mcp.json"
+    p.parent.mkdir(parents=True)
+    p.write_text(json.dumps({"servers": {"other": OTHER}}), encoding="utf-8")
+
+    result, err = mcp_config.install("vscode", tmp_path)
+    assert err is None
+    data = read_config(p)
+    assert data["servers"]["other"] == OTHER
+    assert "codeorbit" in data["servers"]
+
+
+def test_claude_desktop_has_no_project_scope(tmp_path: Path):
+    """Claude Desktop has exactly one config file, ever - not one per
+    project. --global is implied rather than required, on purpose: the
+    natural first command (no flags) must not fail for a reason the user
+    has no way to guess."""
+    p = mcp_config.config_path("claude-desktop", tmp_path, use_global=False)
+    assert not str(p).startswith(str(tmp_path)), "must not be project-scoped"
+    assert p == mcp_config.config_path("claude-desktop", tmp_path, use_global=True)
+
+
+def test_claude_desktop_config_is_platform_specific(tmp_path: Path, monkeypatch):
+    import sys
+
+    monkeypatch.setattr(sys, "platform", "darwin")
+    mac = mcp_config.config_path("claude-desktop", tmp_path)
+    assert "Library" in str(mac) and "Application Support" in str(mac)
+
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setenv("APPDATA", str(tmp_path / "AppData" / "Roaming"))
+    win = mcp_config.config_path("claude-desktop", tmp_path)
+    assert str(win).startswith(str(tmp_path / "AppData" / "Roaming"))
+
+    assert mac != win
+
+
+def test_vscode_global_config_is_platform_specific(monkeypatch, tmp_path: Path):
+    import sys
+
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdgcfg"))
+    p = mcp_config.config_path("vscode", tmp_path, use_global=True)
+    assert p == tmp_path / "xdgcfg" / "Code" / "User" / "mcp.json"
+
+
+def test_every_target_has_a_distinct_project_or_global_location(tmp_path: Path):
+    """Extends the existing uniqueness check to the full, larger set."""
+    seen = {mcp_config.config_path(a, tmp_path) for a in mcp_config.TARGETS}
+    assert len(seen) == len(mcp_config.TARGETS)
+
+
+def test_claude_desktop_cli_writes_to_the_global_file(tmp_path: Path, monkeypatch):
+    import sys
+
+    monkeypatch.setattr(sys, "platform", "linux")
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdgcfg"))
+    r = runner.invoke(cli.app, ["install-mcp", "-p", str(tmp_path),
+                                "-a", "claude-desktop"])
+    assert r.exit_code == 0, r.output
+    written = tmp_path / "xdgcfg" / "Claude" / "claude_desktop_config.json"
+    assert written.exists()
+    assert "codeorbit" in read_config(written)["mcpServers"]
+
+
+def test_vscode_print_shows_the_servers_key(tmp_path: Path):
+    r = runner.invoke(cli.app, ["install-mcp", "-p", str(tmp_path),
+                                "-a", "vscode", "--print"])
+    assert r.exit_code == 0
+    assert '"servers"' in r.output
+    assert not (tmp_path / ".vscode").exists(), "--print must not write"
