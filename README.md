@@ -330,73 +330,74 @@ at all — Elixir, where `def` is a macro call — gets a hook.
 
 ## Measured
 
-Indexing [`rich`](https://github.com/Textualize/rich) (100 files, 38,615 lines):
+Indexing [`rich`](https://github.com/Textualize/rich) 15.0.0 (100 files, 38,615 lines):
 
 | | |
 |---|---|
 | symbols | 1,193 |
 | edges | 5,381 |
-| in-project call sites resolved | 61% |
-| index time | seconds |
+| in-project call sites bound to a target | 61% (2,757 of 4,488) |
+| full index time | 0.8 s (0.7 s parse, 0.1 s resolve) |
+| peak RSS while indexing | 39 MB |
+| database size | 1.4 MB |
 
 The unresolved remainder is almost entirely calls that genuinely leave the
 project (`append`, `len`, `Path`, library methods). Those correctly get no edge.
+61% is a *binding rate*, not an accuracy: it says how many call sites got an
+edge, not how many of those edges are right. Edge precision and recall need a
+hand-labelled sample and have not been measured yet.
 
-### Does the graph actually retrieve better? An A/B
+### Does the graph actually retrieve better?
 
 Run it yourself: `python scripts/benchmark.py`. Questions live in
 [`bench/datasets/`](bench/datasets/), pinned to the repository version they were
-written against. Besides the grep baseline below, the script runs BM25, dense,
-hybrid and two ablations (no embeddings, no graph expansion), reports
-Recall@1/5/10, MRR and nDCG@10, and writes per-question records plus run
-metadata to `bench/runs/`. Pass `--tokenizer tiktoken:o200k_base` or
-`hf:<model>` for real token counts, and `--measure-index` for index time,
-peak RSS and database size.
+written against. The script runs every arm below, reports Recall@1/5/10, MRR and
+nDCG@10, and writes per-question records plus run metadata to `bench/runs/`.
+Pass `--tokenizer tiktoken:o200k_base` or `hf:<model>` for real token counts,
+and `--measure-index` for index time, peak RSS and database size.
 
 **What is measured.** Whether an arm surfaces the code that answers a question.
 Each of 12 questions has a ground-truth symbol whose source actually contains
-the answer, verified against `rich` by hand before either arm ran. An arm either
-returned that symbol or it did not — no LLM judge, no rubric, no run-to-run
-variance. Answer quality would need a judge, and a judge running on a 3.8B model
-measures the judge.
+the answer, verified against `rich` by hand before any arm ran. No LLM judge, no
+rubric, no run-to-run variance. Answer quality would need a judge, and a judge
+running on a 3.8B model measures the judge.
 
-**The baseline is not a strawman.** "Without CodeOrbit" greps the question's
-identifiers across the repo and returns the matching regions ranked by hit count
-— what a developer, or a naive code-RAG, actually does. It gets the *same*
-6,000-character budget and the *same* keyword extraction as the graph arm, so
-the only thing under test is what each does after keyword matching.
+**Every arm gets the same 6,000-character budget.** Two context metrics are
+reported: *found* - the target's name or definition appears in what the model
+would see - and the stricter *code* - the target's definition itself appears.
+The difference matters: a callers list that names a symbol is not its source.
 
-On `rich` (100 files, 38,615 lines):
+Results on `rich` 15.0.0, embeddings live, tokens counted with the phi4-mini
+tokenizer ([run record](bench/runs/20261115T130656Z-rich/)):
 
-| question class | baseline | CodeOrbit |
-|---|---|---|
-| **names a real identifier** (8 questions) | 2/8 — **25%** | 8/8 — **100%** |
-| **names nothing in the code** (4 questions) | 0/4 — **0%** | 1/4 — **25%** |
-| **overall** (12) | 2/12 — **17%** | 9/12 — **75%** |
+| arm | MRR@10 | Recall@5 | found | code | tokens |
+|---|---|---|---|---|---|
+| grep - question identifiers, regions ranked by hit count | 0.07 | 17% | 17% | 17% | 1,232 |
+| BM25 over function/class chunks | 0.43 | 67% | 67% | 58% | 1,061 |
+| dense - embeddings only | 0.58 | 67% | 67% | 67% | 1,052 |
+| hybrid - BM25 + dense, RRF | 0.54 | 67% | 67% | 67% | 956 |
+| CodeOrbit, embeddings off | 0.50 | 58% | 67% | 58% | 1,398 |
+| CodeOrbit, graph expansion off | 0.58 | 67% | 67% | 67% | 1,058 |
+| **CodeOrbit** | **0.58** | **67%** | **75%** | **67%** | 1,325 |
 
-Both arms return ~5.4–5.9k characters, so this is not one arm simply being given
-more room.
+**What this does and does not show.**
 
-**Why the baseline loses on questions that name a symbol.** It finds the *name*
-everywhere — every call site, every import, every mention in a docstring — and
-its budget fills with references before it reaches the one definition that
-answers the question. `Console.get_style` is referenced all over `rich`; grep
-ranks by hit count and never surfaces the definition. The graph goes to the
-definition first and brings its callers and callees along.
-
-**Where CodeOrbit is still weak, and this is the honest part.** On questions that
-name nothing in the code it scores 25%. Semantic search moves that from 0/4 to
-1/4 — real, but modest. It found *"how does a piece of text get broken across
-several lines"* → `Text.wrap`, and missed the other three, including
-`Console.width` for *"where do we decide how wide the terminal is"*. Embedding a
-symbol's name, signature, docstring and body still does not reliably bridge from
-a user's vocabulary to a maintainer's. That is the open problem here, not a
-solved one.
-
-The first run of this benchmark scored 0/4 on that class for CodeOrbit too —
-because `rich` had no embeddings and the semantic layer was silently inactive.
-Building them takes about 7 minutes for 1,093 symbols on this machine; `ask`
-works without them, just with keyword ranking only.
+- Every structured arm beats grep by a wide margin. Grep finds a *name*
+  everywhere - every call site, import and docstring mention - and its budget
+  fills with references before it reaches the definition.
+- **CodeOrbit does not beat a standard dense or hybrid retriever on this set.**
+  Its ranking is identical to embeddings alone. Its one extra *found* hit
+  (*"how does a piece of text get broken across several lines"* →
+  `Text.wrap`) is the target's name appearing in a callers/callees list, not
+  its code; on the stricter *code* metric CodeOrbit, dense and hybrid tie at
+  67%.
+- What graph expansion adds here is pointers to neighbouring symbols. Whether
+  those pointers improve a model's *answers* is not measured yet.
+- Questions that name nothing in the code remain the open problem: no arm
+  retrieves the code for any of the four.
+- **12 questions is a pilot, not evidence.** Every arm's 95% bootstrap interval
+  spans roughly 40 percentage points. A multi-repository question set is the
+  next step before any general claim.
 
 ### Performance on constrained hardware
 
