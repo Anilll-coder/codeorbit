@@ -89,6 +89,7 @@ class Question:
     text: str
     target: str             # qualified name of the symbol that answers it
     kind: str               # "named" or "unnamed"
+    verified: bool = True   # target checked against the source by a person
 
 
 @dataclass
@@ -101,7 +102,8 @@ class Unit:
 
 def load_dataset(path: Path) -> tuple[dict, list[Question]]:
     data = json.loads(path.read_text(encoding="utf-8"))
-    qs = [Question(q["id"], q["text"], q["target"], q["kind"]) for q in data["questions"]]
+    qs = [Question(q["id"], q["text"], q["target"], q["kind"], q.get("verified", True))
+          for q in data["questions"]]
     ids = [q.id for q in qs]
     if len(ids) != len(set(ids)):
         sys.exit(f"{path}: duplicate question ids")
@@ -539,12 +541,23 @@ def main() -> None:
     ap.add_argument("--tokenizer", default="chars4",
                     help="chars4 | tiktoken:<encoding> | hf:<model-id>")
     ap.add_argument("--out", default=str(REPO / "bench/runs"))
+    ap.add_argument("--include-unverified", action="store_true",
+                    help="also score questions whose target nobody has checked yet")
     ap.add_argument("--measure-index", action="store_true",
                     help="also time a full index of a scratch copy and record peak RSS")
     args = ap.parse_args()
 
     data, questions = load_dataset(Path(args.dataset))
-    root = Path(args.root or data["repo"]["default_path"]).resolve()
+    unverified = [q for q in questions if not q.verified]
+    if unverified and not args.include_unverified:
+        # Drafted targets are guesses until someone reads the source; scoring
+        # them would let the benchmark grade itself.
+        questions = [q for q in questions if q.verified]
+        print(f"skipping {len(unverified)} unverified question(s); "
+              f"--include-unverified to score them anyway")
+    if not questions:
+        sys.exit("no questions to run")
+    root = (Path(args.root) if args.root else REPO / data["repo"]["default_path"]).resolve()
     arms = [a.strip() for a in args.arms.split(",") if a.strip()]
     for a in arms:
         if a not in ALL_ARMS:
@@ -609,6 +622,7 @@ def main() -> None:
         "dataset": {"path": Path(args.dataset).resolve().relative_to(REPO).as_posix()
                     if Path(args.dataset).resolve().is_relative_to(REPO) else args.dataset,
                     "name": data["name"], "questions": len(questions),
+                    "unverified_included": sum(not q.verified for q in questions),
                     "sha256": hashlib.sha256(Path(args.dataset).read_bytes()).hexdigest()},
         "repository": ident,
         "codeorbit": {"commit": _git("rev-parse", "HEAD", cwd=REPO),

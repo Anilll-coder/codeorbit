@@ -76,3 +76,39 @@ def test_shipped_dataset_is_well_formed():
         assert {q.kind for q in qs} <= {"named", "unnamed"}
         assert all(q.target.count(".") >= 1 for q in qs), path
         json.dumps(data)
+
+
+def _load(name):
+    spec = importlib.util.spec_from_file_location(name, ROOT / "scripts" / f"{name}.py")
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[name] = mod
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_edge_scoring_by_hand():
+    ev = _load("edge_eval")
+    rows = [
+        {"predicted": "a.f", "resolution": "exact", "gold": "a.f"},          # TP
+        {"predicted": "a.g", "resolution": "heuristic", "gold": "a.f"},      # FP + FN
+        {"predicted": "a.f | b.f", "resolution": "heuristic", "gold": "a.f"},  # TP + FP
+        {"predicted": "", "resolution": "unbound", "gold": "-"},             # correct no-edge
+        {"predicted": "c.len", "resolution": "heuristic", "gold": "-"},      # FP
+        {"predicted": "", "resolution": "unbound", "gold": "a.h"},           # FN
+        {"predicted": "a.f", "resolution": "exact", "gold": "?"},            # excluded
+        {"predicted": "a.f", "resolution": "exact", "gold": ""},             # unlabelled
+    ]
+    m = ev.score_rows(rows)["overall"]
+    assert (m["tp"], m["fp"], m["fn"], m["sites"]) == (2, 3, 2, 6)
+    assert m["precision"] == pytest.approx(2 / 5)
+    assert m["recall"] == pytest.approx(2 / 4)
+    assert ev.score_rows(rows)["heuristic"]["fp"] == 3
+
+
+def test_unverified_questions_load_as_unverified(tmp_path):
+    p = tmp_path / "d.json"
+    p.write_text(json.dumps({"name": "d", "repo": {"pin": {"commit": "x"}}, "questions": [
+        {"id": "1", "kind": "named", "text": "q", "target": "m.f", "verified": False},
+        {"id": "2", "kind": "named", "text": "q", "target": "m.g"}]}), encoding="utf-8")
+    _, qs = bench.load_dataset(p)
+    assert [q.verified for q in qs] == [False, True]
