@@ -123,13 +123,18 @@ def retrieve(conn, question: str, max_symbols: int = 6, semantic: bool = True):
 
 
 def build(root: Path, conn, question: str, max_symbols: int = 2,
-          body_lines: int = 55, semantic: bool = True) -> tuple[str, list]:
+          body_lines: int = 55, semantic: bool = True,
+          neighbours: bool = True) -> tuple[str, list]:
     """Return (context_text, symbols_used).
 
     Bodies are budgeted rather than uniform, and the budget tapers down the
     ranking. A local 3.8B model has a small window and every line spent on the
     fourth-best match is a line the best match does not get - so the symbol
     most likely to hold the answer is the one that arrives complete.
+
+    `neighbours=False` drops the callers/callees/members lines. Nothing in the
+    product turns it off; it exists so the benchmark can measure what graph
+    expansion contributes with retrieval held fixed.
     """
     from . import budget as budgetmod
 
@@ -153,7 +158,7 @@ def build(root: Path, conn, question: str, max_symbols: int = 2,
             head += f"\ndoc: {row['docstring'][:280]}"
         parts.append(head)
 
-        ins = query.callers(conn, row["id"], limit=6)
+        ins = query.callers(conn, row["id"], limit=6) if neighbours else []
         if ins:
             parts.append("called by:\n" + "\n".join(
                 f"  - {c['qname']} ({c['path']}:{c['call_line']})"
@@ -161,7 +166,7 @@ def build(root: Path, conn, question: str, max_symbols: int = 2,
                 for c in ins
             ))
 
-        outs = query.callees(conn, row["id"], limit=8)
+        outs = query.callees(conn, row["id"], limit=8) if neighbours else []
         if outs:
             parts.append("calls:\n" + "\n".join(
                 f"  - {c['qname']} (line {c['call_line']})"
@@ -169,7 +174,7 @@ def build(root: Path, conn, question: str, max_symbols: int = 2,
                 for c in outs
             ))
 
-        if row["kind"] == "class":
+        if neighbours and row["kind"] == "class":
             mem = query.members(conn, row["id"])
             if mem:
                 parts.append("members: " + ", ".join(m["name"] for m in mem[:20]))

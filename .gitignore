@@ -9,7 +9,7 @@ dist/
 .cursor/
 .claude/
 benchmark-results.json
-
+bench/
 # Generated from pyproject.toml by scripts/gen_requirements.py - pyproject.toml
 # is the source of truth, and a committed copy would go stale exactly like a
 # hand-written command reference does. Regenerate it locally if some part of
