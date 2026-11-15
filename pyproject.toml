@@ -1,7 +1,7 @@
 [project]
 name = "codeorbit"
 version = "0.1.0"
-description = "Local-first code intelligence: a structural code graph answered by a local LLM"
+description = "Local-First Code Intelligence with Graph-Grounded LLMs"
 requires-python = ">=3.10"
 dependencies = [
     "tree-sitter>=0.25",

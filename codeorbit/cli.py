@@ -1,4 +1,4 @@
-"""CodeOrbit CLI - local-first code intelligence with a local LLM."""
+"""CodeOrbit CLI - local-first code intelligence with graph-grounded LLMs."""
 from __future__ import annotations
 
 import asyncio

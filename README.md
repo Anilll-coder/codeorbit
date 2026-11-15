@@ -4,7 +4,7 @@
 
 # CodeOrbit
 
-**Local-first code intelligence.**
+**Local-First Code Intelligence with Graph-Grounded LLMs**
 
 A structural graph of your repository — **137 languages, one index** — served to any
 MCP agent, or answered by a model that runs on your machine.
