@@ -16,6 +16,7 @@ hand, and a test asserts every command has one.
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -205,7 +206,10 @@ def build() -> dict:
             "panel": getattr(cmd, "rich_help_panel", "") or "Other",
             "summary": summary,
             "description": rest,
-            "usage": " ".join(cmd.collect_usage_pieces(sub)),
+            # typer >= 0.28 brackets an optional argument twice ("[[PATH]]").
+            # Normalised so the committed file does not depend on its version.
+            "usage": re.sub(r"\[\[([^\[\]]+)\]\]", r"[\1]",
+                            " ".join(cmd.collect_usage_pieces(sub))),
             "arguments": [p for p in params if p["kind"] == "argument"],
             "options": [p for p in params if p["kind"] == "option"],
             "examples": [{"cmd": c, "note": n}
