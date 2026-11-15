@@ -1,0 +1,75 @@
+{
+  "dataset": {
+    "path": "bench/datasets/rich.json",
+    "name": "rich",
+    "questions": 12,
+    "sha256": "2523b3e3e304aee41b30c9485eaf3fba591e37da4d8a4bc6227223eb0d5a1b65"
+  },
+  "repository": {
+    "path": "C:\\Users\\anilk\\OneDrive\\Documents\\Desktop\\major_project\\codeorbit\\.venv\\Lib\\site-packages\\rich",
+    "files": 100,
+    "content_sha256": "98cd97c3851b6a099840a248c4b054624abc7002426bd7f2b9176becc2f3ab0c",
+    "pin": {
+      "pypi": "rich",
+      "version": "15.0.0"
+    },
+    "pin_ok": true,
+    "installed_version": "15.0.0"
+  },
+  "codeorbit": {
+    "commit": "c7cc1e888691ea68348143da2b6e7240c46c4f55",
+    "dirty": false
+  },
+  "run": {
+    "utc": "2026-11-15T13:06:56+00:00",
+    "arms": [
+      "grep",
+      "bm25",
+      "dense",
+      "hybrid",
+      "graph-kw",
+      "graph-noexp",
+      "codeorbit"
+    ],
+    "char_budget": 6000,
+    "rank_depth": 10,
+    "rrf_k": 20,
+    "semantic_live": true,
+    "semantic_detail": "1093 symbols embedded with nomic-embed-text",
+    "tokenizer": "hf microsoft/Phi-4-mini-instruct (tokenizers 0.23.3)",
+    "tokenizer_exact": true,
+    "bm25_index_s": 0.857
+  },
+  "environment": {
+    "python": "3.13.7",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "machine": "AMD64",
+    "packages": {
+      "codeorbit": "0.1.0",
+      "tree-sitter": "0.26.0",
+      "tree-sitter-language-pack": "1.20.0",
+      "tree-sitter-python": "0.25.0",
+      "tree-sitter-javascript": "0.25.0",
+      "tree-sitter-typescript": "0.23.2",
+      "tiktoken": "0.14.0",
+      "tokenizers": "0.23.3"
+    }
+  },
+  "index_cost": {
+    "parse_s": 0.7066045999526978,
+    "resolve_s": 0.11515389999840409,
+    "peak_rss_bytes": 38621184,
+    "stats": {
+      "files": 100,
+      "nodes": 1193,
+      "edges": 5381,
+      "loc": 38615,
+      "unresolved": 1731,
+      "resolved": 2757,
+      "exact": 1690,
+      "heuristic": 998,
+      "extends": 69
+    },
+    "db_bytes": 1372160
+  }
+}
