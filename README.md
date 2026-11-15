@@ -344,7 +344,14 @@ project (`append`, `len`, `Path`, library methods). Those correctly get no edge.
 
 ### Does the graph actually retrieve better? An A/B
 
-Run it yourself: `python scripts/benchmark.py`
+Run it yourself: `python scripts/benchmark.py`. Questions live in
+[`bench/datasets/`](bench/datasets/), pinned to the repository version they were
+written against. Besides the grep baseline below, the script runs BM25, dense,
+hybrid and two ablations (no embeddings, no graph expansion), reports
+Recall@1/5/10, MRR and nDCG@10, and writes per-question records plus run
+metadata to `bench/runs/`. Pass `--tokenizer tiktoken:o200k_base` or
+`hf:<model>` for real token counts, and `--measure-index` for index time,
+peak RSS and database size.
 
 **What is measured.** Whether an arm surfaces the code that answers a question.
 Each of 12 questions has a ground-truth symbol whose source actually contains

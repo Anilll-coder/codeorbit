@@ -1,0 +1,23 @@
+{
+  "name": "rich",
+  "description": "The original 12-question pilot set. Ground truth was established by reading rich's source, not by running any arm.",
+  "repo": {
+    "url": "https://github.com/Textualize/rich",
+    "default_path": ".venv/Lib/site-packages/rich",
+    "pin": {"pypi": "rich", "version": "15.0.0"}
+  },
+  "questions": [
+    {"id": "rich-n01", "kind": "named",   "text": "What does Console.print do to collect its renderables?",          "target": "console.Console._collect_renderables"},
+    {"id": "rich-n02", "kind": "named",   "text": "How does Segment.split_cells work?",                              "target": "segment.Segment.split_cells"},
+    {"id": "rich-n03", "kind": "named",   "text": "What does Console.get_style do?",                                 "target": "console.Console.get_style"},
+    {"id": "rich-n04", "kind": "named",   "text": "How does render_lines produce output?",                           "target": "console.Console.render_lines"},
+    {"id": "rich-n05", "kind": "named",   "text": "What does Text.append do?",                                       "target": "text.Text.append"},
+    {"id": "rich-n06", "kind": "named",   "text": "How does Table.add_row work?",                                    "target": "table.Table.add_row"},
+    {"id": "rich-n07", "kind": "named",   "text": "What does Style.combine do?",                                     "target": "style.Style.combine"},
+    {"id": "rich-n08", "kind": "named",   "text": "How does Color.parse handle its input?",                          "target": "color.Color.parse"},
+    {"id": "rich-u01", "kind": "unnamed", "text": "Where do we decide how wide the terminal is?",                    "target": "console.Console.width"},
+    {"id": "rich-u02", "kind": "unnamed", "text": "How does a piece of text get broken across several lines?",       "target": "text.Text.wrap"},
+    {"id": "rich-u03", "kind": "unnamed", "text": "Where is the decision made about whether colour is supported?",   "target": "console.Console.color_system"},
+    {"id": "rich-u04", "kind": "unnamed", "text": "How is a value turned into something printable?",                 "target": "protocol.rich_cast"}
+  ]
+}
