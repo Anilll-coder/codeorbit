@@ -256,8 +256,8 @@ def run(args) -> None:
         print(f"resuming {out}: {len(done)} task(s) already done")
     else:
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        out = REPO / "bench" / "runs" / f"{stamp}-swebench-{args.split}"
-        out.mkdir(parents=True)
+        out = Path(args.out) / f"{stamp}-swebench-{args.split}"
+        out.mkdir(parents=True, exist_ok=True)
         done = set()
         meta = None
 
@@ -270,7 +270,7 @@ def run(args) -> None:
         if iid in done:
             continue
         owner, name = task["repo"].split("/")
-        dest = CHECKOUTS / f"{owner}__{name}"
+        dest = Path(args.checkouts) / f"{owner}__{name}"
         print(f"[{n}/{len(tasks)}] {iid}", flush=True)
 
         try:
@@ -404,6 +404,11 @@ def main() -> None:
     r.add_argument("--embed", action="store_true",
                    help="build embeddings per checkout (slow on large repos; needs Ollama)")
     r.add_argument("--resume", help="continue an interrupted run directory")
+    r.add_argument("--checkouts", default=str(CHECKOUTS),
+                   help="where repositories are checked out - keep it outside a "
+                        "synced folder (OneDrive, Google Drive): several GB of files")
+    r.add_argument("--out", default=str(REPO / "bench" / "runs"),
+                   help="where run folders are written, e.g. a mounted Drive on Colab")
     args = ap.parse_args()
 
     if args.cmd == "download":
