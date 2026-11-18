@@ -24,6 +24,7 @@ counts for file-level scores and is excluded from function-level ones.
     python scripts/swebench.py download --split lite
     python scripts/swebench.py list --split lite
     python scripts/swebench.py run --split lite --repos psf/requests --limit 5
+    python scripts/swebench.py run --split lite --sample 60 --seed 0 --arms bm25,graph-kw,codeorbit
     python scripts/swebench.py run --split lite --resume bench/runs/<dir>
 """
 from __future__ import annotations
@@ -32,6 +33,7 @@ import argparse
 import hashlib
 import json
 import platform
+import random
 import re
 import sys
 import time
@@ -94,13 +96,18 @@ def load_tasks(split: str) -> list[dict]:
 
 
 def select(tasks: list[dict], repos: str | None, instances: str | None,
-           limit: int | None) -> list[dict]:
+           limit: int | None, sample: int | None = None, seed: int = 0) -> list[dict]:
     if repos:
         keep = {r.strip() for r in repos.split(",")}
         tasks = [t for t in tasks if t["repo"] in keep]
     if instances:
         keep = {i.strip() for i in instances.split(",")}
         tasks = [t for t in tasks if t["instance_id"] in keep]
+    if sample and sample < len(tasks):
+        # A seeded random subset: same seed, same tasks, so a sampled result
+        # can be rerun exactly. Random rather than first-N, which would all
+        # come from one repository and one era of it.
+        tasks = random.Random(seed).sample(tasks, sample)
     # Grouped by repository and then in commit date order, so each checkout
     # moves forward a little and the incremental index re-parses little.
     tasks = sorted(tasks, key=lambda t: (t["repo"], t["created_at"]))
@@ -233,7 +240,8 @@ def run(args) -> None:
     from codeorbit.indexer import index_project
     from codeorbit.resolve import resolve_project
 
-    tasks = select(load_tasks(args.split), args.repos, args.instances, args.limit)
+    tasks = select(load_tasks(args.split), args.repos, args.instances, args.limit,
+                   args.sample, args.seed)
     if not tasks:
         sys.exit("no tasks selected")
     arms = [a.strip() for a in args.arms.split(",") if a.strip()]
@@ -325,7 +333,8 @@ def run(args) -> None:
                     "sha256": hashlib.sha256(
                         (CACHE / f"{args.split}.jsonl").read_bytes()).hexdigest(),
                     "selection": {"repos": args.repos, "instances": args.instances,
-                                  "limit": args.limit}},
+                                  "limit": args.limit, "sample": args.sample,
+                                  "seed": args.seed}},
         "codeorbit": {"commit": bench._git("rev-parse", "HEAD", cwd=REPO),
                       "dirty": bool(bench._git("status", "--porcelain", "--untracked-files=no",
                                                cwd=REPO))},
@@ -386,6 +395,8 @@ def main() -> None:
     r.add_argument("--repos", help="comma-separated, e.g. psf/requests,pallets/flask")
     r.add_argument("--instances", help="comma-separated instance ids")
     r.add_argument("--limit", type=int, help="first N tasks after filtering")
+    r.add_argument("--sample", type=int, help="random N tasks after filtering")
+    r.add_argument("--seed", type=int, default=0, help="seed for --sample")
     r.add_argument("--arms", default=",".join(bench.ALL_ARMS))
     r.add_argument("--budget", type=int, default=bench.CHAR_BUDGET)
     r.add_argument("--tokenizer", default="chars4",
