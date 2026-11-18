@@ -54,6 +54,10 @@ CREATE TABLE IF NOT EXISTS pending_calls (
   resolved INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_pending_callee ON pending_calls(callee, resolved);
+-- ON DELETE CASCADE looks rows up by these columns. Without them every node a
+-- re-index drops scanned the whole table: ~3 s per changed file on django.
+CREATE INDEX IF NOT EXISTS idx_pending_src  ON pending_calls(src);
+CREATE INDEX IF NOT EXISTS idx_pending_file ON pending_calls(file_id);
 
 -- Import statements, used by the resolver to scope name matching to what a file
 -- can actually see. Keeping them separate from `edges` lets the resolver read
