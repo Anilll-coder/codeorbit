@@ -23,6 +23,7 @@ from pathlib import Path
 from . import llm
 
 BATCH_LOG_EVERY = 25
+EMBED_BATCH = 32            # texts per Ollama request; keeps a GPU busy
 
 # nomic-embed-text is trained with task prefixes and expects them: stored text
 # is a "document", the thing being asked is a "query". Without these the two
@@ -111,23 +112,39 @@ def build(conn, root: Path, model: str = llm.EMBED_MODEL, progress=None) -> dict
     todo = pending(conn, model)
     done = 0
     failed = 0
+    logged = 0
 
-    for i, row in enumerate(todo, 1):
+    for start in range(0, len(todo), EMBED_BATCH):
+        rows = todo[start:start + EMBED_BATCH]
+        texts = [DOC_PREFIX + symbol_text(row, root) for row in rows]
         try:
-            vec = llm.embed([DOC_PREFIX + symbol_text(row, root)], model=model)[0]
+            vecs = llm.embed(texts, model=model)
         except Exception:
-            failed += 1
-            continue
-        vec = normalize(vec)
-        conn.execute(
-            "INSERT OR REPLACE INTO embeddings(node_id, dim, vec, model) VALUES(?,?,?,?)",
-            (row["id"], len(vec), pack(vec), model),
-        )
-        done += 1
-        if progress and (i % BATCH_LOG_EVERY == 0 or i == len(todo)):
-            progress(i, len(todo))
-        if done % 200 == 0:
-            conn.commit()
+            # One bad text must not cost the whole batch: retry singly.
+            vecs = []
+            for t in texts:
+                try:
+                    vecs.append(llm.embed([t], model=model)[0])
+                except Exception:
+                    vecs.append(None)
+
+        for row, vec in zip(rows, vecs):
+            if vec is None:
+                failed += 1
+                continue
+            vec = normalize(vec)
+            conn.execute(
+                "INSERT OR REPLACE INTO embeddings(node_id, dim, vec, model) "
+                "VALUES(?,?,?,?)",
+                (row["id"], len(vec), pack(vec), model),
+            )
+            done += 1
+        conn.commit()
+
+        seen = start + len(rows)
+        if progress and (seen - logged >= BATCH_LOG_EVERY or seen == len(todo)):
+            progress(seen, len(todo))
+            logged = seen
 
     conn.commit()
     return {"embedded": done, "failed": failed, "total": count(conn, model)}

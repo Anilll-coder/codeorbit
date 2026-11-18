@@ -166,7 +166,22 @@ def stream(prompt: str, model: str = DEFAULT_MODEL, system: str | None = None,
 
 
 def embed(texts: list[str], model: str = EMBED_MODEL) -> list[list[float]]:
-    """Embeddings for semantic symbol search (nomic-embed-text is already local)."""
+    """Embeddings for semantic symbol search (nomic-embed-text is already local).
+
+    One /api/embed request for the whole list: on a GPU, per-request overhead
+    otherwise dominates and the card sits idle. Ollama older than 0.3 lacks
+    that endpoint, so a 404 falls back to one /api/embeddings call per text.
+    The two return the same direction (checked: cosine 1.0), and callers
+    normalise, so vectors from either are interchangeable.
+    """
+    if not texts:
+        return []
+    r = requests.post(f"{OLLAMA_URL}/api/embed",
+                      json={"model": model, "input": texts}, timeout=600)
+    if r.status_code != 404:
+        r.raise_for_status()
+        return r.json()["embeddings"]
+
     out = []
     for t in texts:
         r = requests.post(f"{OLLAMA_URL}/api/embeddings",
