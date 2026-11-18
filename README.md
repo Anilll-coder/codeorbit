@@ -368,7 +368,7 @@ would see - and the stricter *code* - the target's definition itself appears.
 The difference matters: a callers list that names a symbol is not its source.
 
 Results on `rich` 15.0.0, embeddings live, tokens counted with the phi4-mini
-tokenizer ([run record](bench/runs/20261115T130656Z-rich/)):
+tokenizer ([run record](https://github.com/Anilll-coder/codeorbit/tree/8a001d901f6360b2fc77700a0f6b80af27a24858/bench/runs/20261115T130656Z-rich)):
 
 | arm | MRR@10 | Recall@5 | found | code | tokens |
 |---|---|---|---|---|---|
