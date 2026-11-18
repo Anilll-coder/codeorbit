@@ -38,6 +38,9 @@ def load(run: Path) -> tuple[dict, list[dict]]:
     meta = json.loads((run / "meta.json").read_text(encoding="utf-8"))
     rows = [json.loads(line) for line in
             (run / "per_question.jsonl").read_text(encoding="utf-8").splitlines() if line]
+    # SWE-bench tasks whose fix is module-level have no function to rank;
+    # they are file-level only (see scripts/swebench.py).
+    rows = [r for r in rows if r.get("fn_targets", 1)]
     return meta, rows
 
 

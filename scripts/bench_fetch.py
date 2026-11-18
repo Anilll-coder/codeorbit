@@ -32,13 +32,17 @@ def checkout(url: str, commit: str, dest: Path) -> None:
     if not (dest / ".git").exists():
         dest.mkdir(parents=True, exist_ok=True)
         git("init", "-q", cwd=dest)
+        # Exact bytes as committed, so line numbers in a patch match the
+        # checkout; long paths for deep trees on Windows.
+        git("config", "core.autocrlf", "false", cwd=dest)
+        git("config", "core.longpaths", "true", cwd=dest)
         git("remote", "add", "origin", url, cwd=dest)
     current = subprocess.run(["git", "rev-parse", "-q", "--verify", "HEAD"], cwd=dest,
                              capture_output=True, text=True).stdout.strip()
     if current.startswith(commit):
         return
     git("fetch", "-q", "--depth", "1", "origin", commit, cwd=dest)
-    git("checkout", "-q", "--detach", "FETCH_HEAD", cwd=dest)
+    git("checkout", "-q", "-f", "--detach", "FETCH_HEAD", cwd=dest)
     head = git("rev-parse", "HEAD", cwd=dest)
     if not head.startswith(commit):
         sys.exit(f"{url}: fetched {head}, wanted {commit}")

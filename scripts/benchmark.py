@@ -98,6 +98,7 @@ class Unit:
     text: str
     qname: str | None = None
     label: str = ""
+    path: str = ""          # repo-relative file, for file-level scoring
 
 
 def load_dataset(path: Path) -> tuple[dict, list[Question]]:
@@ -156,7 +157,7 @@ def symbol_unit(src: Sources, row) -> Unit:
     head = (f"### {row['kind']} {row['qname']}\n"
             f"defined at {row['path']}:{row['start_line']}-{row['end_line']}")
     return Unit(f"{head}\n```{row['lang']}\n{src.body(row)}\n```",
-                qname=row["qname"], label=row["qname"])
+                qname=row["qname"], label=row["qname"], path=row["path"])
 
 
 def pack(units: list[Unit], budget: int) -> str:
@@ -206,7 +207,7 @@ def grep_units(root: Path, question: str) -> list[Unit]:
             lo, hi = max(0, i - 8), min(len(lines), i + 25)
             body = "\n".join(lines[lo:hi])
             chunks.append((hits, Unit(f"### {rel}:{lo + 1}\n{body}",
-                                      label=f"{rel}:{lo + 1}")))
+                                      label=f"{rel}:{lo + 1}", path=rel)))
 
     # Most keyword hits first - the ranking any grep-based approach would use.
     chunks.sort(key=lambda c: -c[0])
@@ -324,7 +325,8 @@ def run_arm(arm: str, q: Question, root: Path, conn, src: Sources,
                                     neighbours=arm != "graph-noexp")
         secs = time.perf_counter() - t0
         rows = ctxmod.retrieve(conn, q.text, RANK_DEPTH, semantic=semantic)
-        ranked = [Unit("", qname=r["qname"], label=r["qname"]) for r in rows]
+        ranked = [Unit("", qname=r["qname"], label=r["qname"], path=r["path"])
+                  for r in rows]
         return ArmOutput(ranked, text[:budget], secs)
 
     t0 = time.perf_counter()
@@ -626,7 +628,10 @@ def main() -> None:
                     "sha256": hashlib.sha256(Path(args.dataset).read_bytes()).hexdigest()},
         "repository": ident,
         "codeorbit": {"commit": _git("rev-parse", "HEAD", cwd=REPO),
-                      "dirty": bool(_git("status", "--porcelain", cwd=REPO))},
+                      # Untracked files are notes and scratch work, not the
+                      # code that ran; only tracked changes make a run dirty.
+                      "dirty": bool(_git("status", "--porcelain",
+                                         "--untracked-files=no", cwd=REPO))},
         "run": {"utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
                 "arms": arms, "char_budget": args.budget, "rank_depth": RANK_DEPTH,
                 "rrf_k": ctxmod.RRF_K, "semantic_live": live, "semantic_detail": why,

@@ -16,3 +16,5 @@ benchmark-results.json
 requirements.txt
 # Benchmark repositories, checked out at their dataset pin by scripts/bench_fetch.py
 bench/repos/
+# SWE-bench task files, downloaded by scripts/swebench.py
+bench/swebench/

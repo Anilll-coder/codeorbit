@@ -112,3 +112,79 @@ def test_unverified_questions_load_as_unverified(tmp_path):
         {"id": "2", "kind": "named", "text": "q", "target": "m.g"}]}), encoding="utf-8")
     _, qs = bench.load_dataset(p)
     assert [q.verified for q in qs] == [False, True]
+
+
+PATCH = """diff --git a/pkg/mod.py b/pkg/mod.py
+--- a/pkg/mod.py
++++ b/pkg/mod.py
+@@ -1,4 +1,5 @@
+ import os
++import sys
+ 
+ 
+ class Box:
+@@ -6,7 +7,7 @@ class Box:
+     def size(self):
+         def inner():
+-            return 1
++            return 2
+         return inner()
+ 
+     def other(self):
+diff --git a/docs/notes.txt b/docs/notes.txt
+--- a/docs/notes.txt
++++ b/docs/notes.txt
+@@ -1 +1 @@
+-old
++new
+diff --git a/pkg/new.py b/pkg/new.py
+--- /dev/null
++++ b/pkg/new.py
+@@ -0,0 +1 @@
++x = 1
+"""
+
+SOURCE = """import os
+
+
+class Box:
+
+    def size(self):
+        def inner():
+            return 1
+        return inner()
+
+    def other(self):
+        return 3
+"""
+
+
+def test_patched_lines_use_original_line_numbers():
+    swe = _load("swebench")
+    lines = swe.patched_lines(PATCH)
+    assert lines["pkg/mod.py"] == {1, 8}     # insert after line 1; line 8 removed
+    assert "pkg/new.py" not in lines         # new files have no original
+    assert lines["docs/notes.txt"] == {1}
+
+
+def test_gold_targets_roll_nested_functions_up_to_the_method(tmp_path):
+    from codeorbit import db
+    from codeorbit.indexer import index_project
+    from codeorbit.resolve import resolve_project
+
+    swe = _load("swebench")
+    (tmp_path / "pkg").mkdir()
+    (tmp_path / "pkg" / "mod.py").write_text(SOURCE, encoding="utf-8")
+    index_project(tmp_path)
+    resolve_project(tmp_path)
+    conn = db.connect(tmp_path)
+    targets, files = swe.gold_targets(conn, PATCH)
+    conn.close()
+    assert files == ["pkg/mod.py"]                       # notes.txt is not indexed
+    assert len(targets) == 1 and targets[0].endswith("Box.size")   # not .inner
+
+
+def test_question_kind():
+    swe = _load("swebench")
+    assert swe.question_kind("Box.size() crashes", ["pkg.mod.Box.size"]) == "named"
+    assert swe.question_kind("the box is too big", ["pkg.mod.Box.size"]) == "unnamed"
