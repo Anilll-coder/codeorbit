@@ -53,6 +53,16 @@ embeddings off.
 3. Write questions before running any arm, and do not edit them after seeing
    results. Keep a mix of `named` and `unnamed`.
 
+## SWE-bench on a GPU (Google Colab)
+
+Embeddings are the slow step on a CPU - hours for a repository the size of
+django. [`colab_swebench.ipynb`](colab_swebench.ipynb) runs
+`scripts/swebench.py --embed` on Colab's free T4 GPU: open it in Colab
+(`File -> Upload notebook`), pick a T4 runtime, and run the cells top to
+bottom. It clones whatever is pushed to `main`, so push first. Results go
+to `MyDrive/codeorbit-runs` and survive a disconnect (`--resume`); copy a
+run folder into `bench/runs/` here to commit it.
+
 ## Edge accuracy
 
 ```bash
