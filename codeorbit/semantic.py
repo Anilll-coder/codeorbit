@@ -164,6 +164,24 @@ def search(conn, question: str, limit: int = 8,
     except Exception:
         return []
 
+    # Scoring every vector in Python costs ~2.7 s per query at 35k symbols
+    # (django); numpy does it in under 0.1 s. Optional, so no new dependency:
+    # without it the loop below gives the same answer, just slower.
+    try:
+        import numpy as np
+    except ImportError:
+        np = None
+    if np is not None:
+        same = [r for r in rows if r["dim"] == len(q)]  # skip other models' vectors
+        if not same:
+            return []
+        matrix = np.frombuffer(b"".join(r["vec"] for r in same), dtype="<f4")
+        sims = matrix.reshape(len(same), len(q)) @ np.asarray(q, dtype="<f4")
+        k = min(limit, len(same))
+        top = np.argpartition(-sims, k - 1)[:k]
+        top = top[np.argsort(-sims[top], kind="stable")]
+        return [(float(sims[i]), same[i]["node_id"]) for i in top]
+
     scored: list[tuple[float, int]] = []
     for r in rows:
         v = unpack(r["vec"], r["dim"])
