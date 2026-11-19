@@ -124,7 +124,7 @@ def retrieve(conn, question: str, max_symbols: int = 6, semantic: bool = True):
 
 def build(root: Path, conn, question: str, max_symbols: int = 2,
           body_lines: int = 55, semantic: bool = True,
-          neighbours: bool = True) -> tuple[str, list]:
+          neighbours: bool = True, picks: list | None = None) -> tuple[str, list]:
     """Return (context_text, symbols_used).
 
     Bodies are budgeted rather than uniform, and the budget tapers down the
@@ -135,10 +135,16 @@ def build(root: Path, conn, question: str, max_symbols: int = 2,
     `neighbours=False` drops the callers/callees/members lines. Nothing in the
     product turns it off; it exists so the benchmark can measure what graph
     expansion contributes with retrieval held fixed.
+
+    `picks` (node rows, best first) replaces retrieval, so a different ranker
+    can be given the same graph context - again for the benchmark.
     """
     from . import budget as budgetmod
 
-    picks = retrieve(conn, question, max_symbols, semantic=semantic)
+    if picks is None:
+        picks = retrieve(conn, question, max_symbols, semantic=semantic)
+    else:
+        picks = picks[:max_symbols]
     if not picks:
         return "", []
 

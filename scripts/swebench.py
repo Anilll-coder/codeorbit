@@ -24,7 +24,8 @@ counts for file-level scores and is excluded from function-level ones.
     python scripts/swebench.py download --split lite
     python scripts/swebench.py list --split lite
     python scripts/swebench.py run --split lite --repos psf/requests --limit 5
-    python scripts/swebench.py run --split lite --sample 60 --seed 0 --arms bm25,graph-kw,codeorbit
+    python scripts/swebench.py run --split lite --sample 60 --seed 0 --embed
+    python scripts/swebench.py run --split lite --exclude-sample 60 --exclude-seed 0 --embed
     python scripts/swebench.py run --split lite --resume bench/runs/<dir>
 """
 from __future__ import annotations
@@ -240,7 +241,20 @@ def run(args) -> None:
     from codeorbit.indexer import index_project
     from codeorbit.resolve import resolve_project
 
-    tasks = select(load_tasks(args.split), args.repos, args.instances, args.limit,
+    all_tasks = load_tasks(args.split)
+    held_out = 0
+    if args.exclude_sample:
+        # Drop the development sample: the same draw `--sample N --seed S` made
+        # over the whole split, so the tasks looked at while tuning are never
+        # scored again. Assumes that sample was drawn with no --repos filter.
+        seen = {t["instance_id"] for t in
+                select(all_tasks, None, None, None, args.exclude_sample, args.exclude_seed)}
+        held_out = len(seen)
+        all_tasks = [t for t in all_tasks if t["instance_id"] not in seen]
+        print(f"excluding the {held_out} development tasks "
+              f"(--sample {args.exclude_sample} --seed {args.exclude_seed}); "
+              f"{len(all_tasks)} remain")
+    tasks = select(all_tasks, args.repos, args.instances, args.limit,
                    args.sample, args.seed)
     if not tasks:
         sys.exit("no tasks selected")
@@ -267,7 +281,10 @@ def run(args) -> None:
                             (CACHE / f"{args.split}.jsonl").read_bytes()).hexdigest(),
                         "selection": {"repos": args.repos, "instances": args.instances,
                                       "limit": args.limit, "sample": args.sample,
-                                      "seed": args.seed}},
+                                      "seed": args.seed,
+                                      "exclude_sample": args.exclude_sample,
+                                      "exclude_seed": args.exclude_seed,
+                                      "excluded": held_out}},
             "codeorbit": {"commit": bench._git("rev-parse", "HEAD", cwd=REPO),
                           "dirty": bool(bench._git("status", "--porcelain",
                                                    "--untracked-files=no", cwd=REPO))},
@@ -322,7 +339,8 @@ def run(args) -> None:
         kind = question_kind(task["problem_statement"], targets)
         q = bench.Question(iid, text, targets[0] if targets else "", kind)
         src = bench.Sources(dest)
-        bm25 = bench.BM25(conn, src) if {"bm25", "hybrid"} & set(task_arms) else None
+        bm25 = (bench.BM25(conn, src)
+                if {"bm25", "hybrid", "hybrid-graph"} & set(task_arms) else None)
 
         marks = []
         for arm in task_arms:
@@ -404,7 +422,11 @@ def main() -> None:
     r.add_argument("--limit", type=int, help="first N tasks after filtering")
     r.add_argument("--sample", type=int, help="random N tasks after filtering")
     r.add_argument("--seed", type=int, default=0, help="seed for --sample")
-    r.add_argument("--arms", default=",".join(bench.ALL_ARMS))
+    r.add_argument("--exclude-sample", type=int, metavar="N",
+                   help="leave out the tasks --sample N --exclude-seed S would pick "
+                        "(the development set), for a held-out final run")
+    r.add_argument("--exclude-seed", type=int, default=0)
+    r.add_argument("--arms", default=",".join(bench.DEFAULT_ARMS))
     r.add_argument("--budget", type=int, default=bench.CHAR_BUDGET)
     r.add_argument("--tokenizer", default="chars4",
                    help="chars4 | tiktoken:<encoding> | hf:<model-id>")

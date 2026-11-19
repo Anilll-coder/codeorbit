@@ -35,6 +35,10 @@ THE ARMS
                the context (ablation: graph expansion). Its ranking is
                identical to `codeorbit` by construction; only context differs.
   codeorbit    the product as shipped.
+  hybrid-graph the hybrid ranking with CodeOrbit's graph context on top: tests
+               whether expansion helps once ranking is as good as hybrid.
+
+grep is not run unless named with --arms.
 
 Every arm gets the same budget. Ranking metrics for the graph arms use
 retrieve(max_symbols=10); the context uses the product's own 4-symbol build.
@@ -79,8 +83,13 @@ from codeorbit.scanner import scan, sha1         # noqa: E402
 
 CHAR_BUDGET = 6000          # identical for every arm
 RANK_DEPTH = 10             # candidates scored by the ranking metrics
-ALL_ARMS = ["grep", "bm25", "dense", "hybrid", "graph-kw", "graph-noexp", "codeorbit"]
-SEMANTIC_ARMS = {"dense", "hybrid"}
+ALL_ARMS = ["grep", "bm25", "dense", "hybrid", "graph-kw", "graph-noexp", "codeorbit",
+            "hybrid-graph"]
+# grep is still runnable by name (the README's rich pilot reports it), but it
+# lost every comparison - 2% top-5 recall on SWE-bench - so it is not run by
+# default and its whole-repository scan no longer slows every task.
+DEFAULT_ARMS = [a for a in ALL_ARMS if a != "grep"]
+SEMANTIC_ARMS = {"dense", "hybrid", "hybrid-graph"}
 
 
 @dataclass
@@ -329,6 +338,19 @@ def run_arm(arm: str, q: Question, root: Path, conn, src: Sources,
                   for r in rows]
         return ArmOutput(ranked, text[:budget], secs)
 
+    if arm == "hybrid-graph":
+        # The hybrid ranking, given CodeOrbit's graph context: what SWE-bench
+        # suggested - hybrid ranks best, expansion names the answer more often.
+        t0 = time.perf_counter()
+        ids = rrf([bm25.search(q.text, pool), dense_ids(conn, q.text, pool)], pool)
+        rows = [r for r in (query.get_node(conn, i) for i in ids[:RANK_DEPTH]) if r]
+        text, _picks = ctxmod.build(root, conn, q.text, max_symbols=4, body_lines=60,
+                                    picks=rows)
+        secs = time.perf_counter() - t0
+        ranked = [Unit("", qname=r["qname"], label=r["qname"], path=r["path"])
+                  for r in rows]
+        return ArmOutput(ranked, text[:budget], secs)
+
     t0 = time.perf_counter()
     if arm == "grep":
         units = grep_units(root, q.text)
@@ -537,7 +559,7 @@ def main() -> None:
     ap.add_argument("root", nargs="?", help="repository to benchmark "
                     "(default: the dataset's default_path)")
     ap.add_argument("--dataset", default=str(REPO / "bench/datasets/rich.json"))
-    ap.add_argument("--arms", default=",".join(ALL_ARMS),
+    ap.add_argument("--arms", default=",".join(DEFAULT_ARMS),
                     help=f"comma-separated subset of {','.join(ALL_ARMS)}")
     ap.add_argument("--budget", type=int, default=CHAR_BUDGET)
     ap.add_argument("--tokenizer", default="chars4",
@@ -590,7 +612,7 @@ def main() -> None:
 
     src = Sources(root)
     bm25, bm25_secs = None, None
-    if {"bm25", "hybrid"} & set(arms):
+    if {"bm25", "hybrid", "hybrid-graph"} & set(arms):
         t0 = time.perf_counter()
         bm25 = BM25(conn, src)
         bm25_secs = time.perf_counter() - t0
