@@ -23,10 +23,21 @@ COLS = [("mrr@10", "MRR"), ("recall@5", "R@5"), ("ndcg@10", "nDCG"),
         ("hit_ctx", "found"), ("def_ctx", "code"), ("avg_tokens", "tokens")]
 
 
+def finished(run: Path) -> bool:
+    """An interrupted run has no meta.json (older runs) or complete: false."""
+    try:
+        meta = json.loads((run / "meta.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return meta["run"].get("complete", True)
+
+
 def latest_runs(runs_dir: Path) -> list[Path]:
     """The newest clean run of each dataset; dirty runs are not reportable."""
     best: dict[str, Path] = {}
     for d in sorted(runs_dir.glob("*/")):
+        if not finished(d):
+            continue
         meta = json.loads((d / "meta.json").read_text(encoding="utf-8"))
         if meta["codeorbit"].get("dirty"):
             continue
@@ -83,6 +94,10 @@ def main() -> None:
     args = ap.parse_args()
 
     runs = [Path(r) for r in args.runs] or latest_runs(REPO / "bench/runs")
+    for r in [r for r in runs if not finished(r)]:
+        print(f"skipping {r}: interrupted run (resume it, or delete the folder)",
+              file=sys.stderr)
+    runs = [r for r in runs if finished(r)]
     if not runs:
         sys.exit("no clean runs found in bench/runs")
 

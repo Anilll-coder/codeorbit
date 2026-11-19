@@ -259,7 +259,28 @@ def run(args) -> None:
         out = Path(args.out) / f"{stamp}-swebench-{args.split}"
         out.mkdir(parents=True, exist_ok=True)
         done = set()
-        meta = None
+        # Written now, not at the end: a run that is interrupted must still say
+        # what it was, and --resume needs it. `complete` flips at the end.
+        meta = {
+            "dataset": {"name": f"swebench-{args.split}", "source": SPLITS[args.split],
+                        "sha256": hashlib.sha256(
+                            (CACHE / f"{args.split}.jsonl").read_bytes()).hexdigest(),
+                        "selection": {"repos": args.repos, "instances": args.instances,
+                                      "limit": args.limit, "sample": args.sample,
+                                      "seed": args.seed}},
+            "codeorbit": {"commit": bench._git("rev-parse", "HEAD", cwd=REPO),
+                          "dirty": bool(bench._git("status", "--porcelain",
+                                                   "--untracked-files=no", cwd=REPO))},
+            "run": {"utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                    "arms": arms, "char_budget": args.budget,
+                    "rank_depth": bench.RANK_DEPTH, "question_chars": QUESTION_CHARS,
+                    "tokenizer": tok_name, "tokenizer_exact": tok_exact,
+                    "embed": args.embed, "tasks_selected": len(tasks), "complete": False},
+            "environment": {"python": sys.version.split()[0],
+                            "platform": platform.platform(),
+                            "packages": bench.package_versions()},
+        }
+        (out / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
 
     log = (out / "per_question.jsonl").open("a", encoding="utf-8")
     live_seen = set()
@@ -328,25 +349,11 @@ def run(args) -> None:
         sys.exit("nothing was scored")
     arms_run = [a for a in arms if any(r["arm"] == a for r in rows)]
 
-    meta = meta or {
-        "dataset": {"name": f"swebench-{args.split}", "source": SPLITS[args.split],
-                    "sha256": hashlib.sha256(
-                        (CACHE / f"{args.split}.jsonl").read_bytes()).hexdigest(),
-                    "selection": {"repos": args.repos, "instances": args.instances,
-                                  "limit": args.limit, "sample": args.sample,
-                                  "seed": args.seed}},
-        "codeorbit": {"commit": bench._git("rev-parse", "HEAD", cwd=REPO),
-                      "dirty": bool(bench._git("status", "--porcelain", "--untracked-files=no",
-                                               cwd=REPO))},
-        "run": {"utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-                "arms": arms, "char_budget": args.budget, "rank_depth": bench.RANK_DEPTH,
-                "question_chars": QUESTION_CHARS, "tokenizer": tok_name,
-                "tokenizer_exact": tok_exact, "embed": args.embed},
-        "environment": {"python": sys.version.split()[0], "platform": platform.platform(),
-                        "packages": bench.package_versions()},
-    }
-    meta["run"]["semantic_live"] = live_seen == {True} if live_seen else meta["run"].get(
-        "semantic_live", False)
+    # Live only if it was live for every task, across every resumed session.
+    before = meta["run"].get("semantic_live")
+    now = live_seen == {True} if live_seen else before
+    meta["run"]["semantic_live"] = bool(now if before is None else before and now)
+    meta["run"]["complete"] = True
     meta["run"]["tasks_scored"] = len({r["question_id"] for r in rows})
     meta["run"]["wall_s"] = round(time.perf_counter() - t_start, 1)
     (out / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
