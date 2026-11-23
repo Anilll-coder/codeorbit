@@ -294,12 +294,40 @@ class BM25:
 
 # --------------------------------------------------------------- fusion
 
-def rrf(lists: list[list[int]], limit: int) -> list[int]:
-    fused: dict[int, float] = {}
-    for ids in lists:
-        for rank, nid in enumerate(ids):
-            fused[nid] = fused.get(nid, 0.0) + 1.0 / (ctxmod.RRF_K + rank + 1)
+def rrf(lists: list[list], limit: int, weights: list[float] | None = None,
+        depths: list[int | None] | None = None) -> list:
+    """Reciprocal rank fusion. A list's vote is scaled by its weight and stops
+    after its depth, so a noisy list can break ties without outvoting the rest."""
+    fused: dict = {}
+    for i, ids in enumerate(lists):
+        w = weights[i] if weights else 1.0
+        d = depths[i] if depths and depths[i] else len(ids)
+        for rank, nid in enumerate(ids[:d]):
+            fused[nid] = fused.get(nid, 0.0) + w / (ctxmod.RRF_K + rank + 1)
     return [nid for nid, _ in sorted(fused.items(), key=lambda p: -p[1])[:limit]]
+
+
+# The fusion arm's name-search vote. Equal weight, full depth is where it
+# started; scripts/tune_fusion.py measures alternatives on the development
+# tasks from saved lists, and the chosen setting is frozen here.
+FUSION = {"name_weight": 1.0, "name_depth": None, "only_coded": False}
+
+_CODED = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+"
+                    r"|\b[a-z]+_[a-z_0-9]+\b|\b[a-z]+[A-Z][A-Za-z0-9]*\b")
+
+
+def names_code(text: str) -> bool:
+    """Does the text name something the way code does (a.b, snake_case, camelCase)?"""
+    return bool(_CODED.search(text))
+
+
+def fuse(name: list, bm25_ids: list, dense: list, text: str, limit: int,
+         settings: dict = FUSION) -> list:
+    use_name = not settings["only_coded"] or names_code(text)
+    lists = ([name] if use_name else []) + [bm25_ids, dense]
+    weights = ([settings["name_weight"]] if use_name else []) + [1.0, 1.0]
+    depths = ([settings["name_depth"]] if use_name else []) + [None, None]
+    return rrf(lists, limit, weights, depths)
 
 
 def node_units(conn, src: Sources, ids: list[int]) -> list[Unit]:
@@ -323,6 +351,7 @@ class ArmOutput:
     ranked: list[Unit]
     context: str
     seconds: float          # time to produce the context a model would see
+    lists: dict | None = None   # fusion's input rankings (qnames), for offline tuning
 
 
 def run_arm(arm: str, q: Question, root: Path, conn, src: Sources,
@@ -355,15 +384,28 @@ def run_arm(arm: str, q: Question, root: Path, conn, src: Sources,
         # lacks: it ranks a function first when the issue names it, where BM25
         # over bodies can bury it. One RRF over all three lists.
         t0 = time.perf_counter()
-        lists = [bm25.search(q.text, pool), dense_ids(conn, q.text, pool)]
+        b_ids, d_ids = bm25.search(q.text, pool), dense_ids(conn, q.text, pool)
+        saved = None
         if arm == "fusion":
-            lists.insert(0, ctxmod.keyword_ranking(conn, q.text, pool))
-        ids = rrf(lists, pool)
+            n_ids = ctxmod.keyword_ranking(conn, q.text, pool)
+            ids = fuse(n_ids, b_ids, d_ids, q.text, pool)
+            saved = (n_ids, b_ids, d_ids)
+        else:
+            ids = rrf([b_ids, d_ids], pool)
         rows = [r for r in (query.get_node(conn, i) for i in ids[:READ_DEPTH]) if r]
         text, _picks = ctxmod.build(root, conn, q.text, max_symbols=4, body_lines=60,
                                     picks=rows)
         secs = time.perf_counter() - t0
-        return ArmOutput([graph_unit(r) for r in rows], text[:budget], secs)
+        lists = None
+        if saved:
+            # Saved by qname: ids are per index, names survive a re-index.
+            every = sorted(set().union(*saved))
+            qname = {r["id"]: r["qname"] for r in conn.execute(
+                f"SELECT id, qname FROM nodes WHERE id IN ({','.join('?' * len(every))})",
+                every)} if every else {}
+            lists = {k: [qname[i] for i in v if i in qname]
+                     for k, v in zip(("name", "bm25", "dense"), saved)}
+        return ArmOutput([graph_unit(r) for r in rows], text[:budget], secs, lists)
 
     t0 = time.perf_counter()
     if arm == "grep":

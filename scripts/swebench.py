@@ -490,7 +490,8 @@ def run(args) -> None:
                     "arms": arms, "char_budget": args.budget,
                     "rank_depth": bench.RANK_DEPTH, "question_chars": QUESTION_CHARS,
                     "tokenizer": tok_name, "tokenizer_exact": tok_exact,
-                    "embed": args.embed, "tasks_selected": len(tasks), "complete": False},
+                    "embed": args.embed, "tasks_selected": len(tasks), "complete": False,
+                    "fusion": dict(bench.FUSION)},
             "environment": {"python": sys.version.split()[0],
                             "platform": platform.platform(),
                             "packages": bench.package_versions()},
@@ -574,6 +575,7 @@ def run(args) -> None:
                 "chars": len(o.context), "tokens": count_tokens(o.context),
                 "ms": round(1000 * o.seconds, 2), "index_s": round(index_s, 2),
                 "top5": [u.label for u in o.ranked[:5]],
+                **({"lists": o.lists} if o.lists else {}),
             }
             if targets:
                 row["tok_symbols"] = tokens_symbols(o, targets, files, conn, src,

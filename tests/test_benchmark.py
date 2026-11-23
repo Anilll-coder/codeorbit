@@ -215,3 +215,34 @@ def test_with_without_pairs_grep_files_against_codeorbit():
     assert w["avg_with"] == 2_000
     assert w["without_within_32k"] == 0.5 and w["with_within_2k"] == 0.5
     assert w["fewer_tokens_with_conservative"] == 2
+
+
+def test_rrf_weights_and_depths_limit_a_lists_vote():
+    lists = [["x", "a"], ["a", "b"], ["a", "c"]]
+    assert bench.rrf(lists, 3)[0] == "a"
+    # A half-weight list cannot put its own top pick above a two-list consensus...
+    assert bench.rrf([["x"], ["a"], ["a"]], 2, weights=[0.5, 1, 1])[0] == "a"
+    # ...and with depth 1 the first list votes for nothing below its top.
+    assert "a" not in bench.rrf([["x", "a"]], 5, depths=[1])
+
+
+def test_fuse_with_zero_name_weight_is_hybrid():
+    name, b, d = ["n1", "n2"], ["a", "b", "c"], ["b", "a", "d"]
+    off = {"name_weight": 0.0, "name_depth": None, "only_coded": False}
+    assert bench.fuse(name, b, d, "text", 5, off)[:4] == bench.rrf([b, d], 5)[:4]
+
+
+def test_only_coded_drops_the_name_list_for_prose_issues():
+    s = {"name_weight": 1.0, "name_depth": None, "only_coded": True}
+    prose, coded = "the page loads slowly", "Session.resolve_redirects loops"
+    assert bench.names_code(coded) and not bench.names_code(prose)
+    assert bench.fuse(["n"], ["a"], ["a"], prose, 5, s) == ["a"]
+    assert "n" in bench.fuse(["n"], ["a"], ["a"], coded, 5, s)
+
+
+def test_tune_scores_saved_lists():
+    tune = _load("tune_fusion")
+    tasks = [{"targets": {"a"}, "text": "",
+              "lists": {"name": ["x"], "bm25": ["a", "x"], "dense": ["a"]}}]
+    off = {"name_weight": 0.0, "name_depth": None, "only_coded": False}
+    assert tune.score(tasks, off) == {"R@1": 1.0, "R@5": 1.0, "MRR": 1.0}
