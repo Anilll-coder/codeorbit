@@ -400,8 +400,25 @@ def test_prepare_refuses_an_empty_diff(repo, monkeypatch):
         pr.prepare(repo, 7)
 
 
-def test_prepare_without_a_token_explains_rather_than_failing(repo, monkeypatch):
+def test_prepare_without_a_token_reads_anonymously(repo, monkeypatch):
+    """A public PR needs no token to read; only posting does."""
     git(repo, "remote", "add", "origin", "https://github.com/o/n.git")
     monkeypatch.setattr(github, "token", lambda: None)
-    with pytest.raises(GitHubError, match="GITHUB_TOKEN"):
-        pr.prepare(repo, 7)
+    seen = []
+
+    def get_pull(repo_, n, tok, with_comments=True):
+        seen.append(tok)
+        return a_pr(head_sha="1" * 40)
+
+    monkeypatch.setattr(github, "get_pull", get_pull)
+    monkeypatch.setattr(github, "get_diff", lambda *a: "")
+    steps = []
+    with pytest.raises(pr.PRError, match="empty diff"):     # got past the token
+        pr.prepare(repo, 7, progress=steps.append)
+    assert seen == [None]
+    assert any("anonymously" in s for s in steps)
+
+
+def test_anonymous_requests_send_no_authorization_header():
+    assert "Authorization" not in github._headers(None)
+    assert github._headers("t")["Authorization"] == "Bearer t"

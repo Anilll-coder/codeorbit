@@ -122,24 +122,26 @@ def token() -> str | None:
 
 
 NO_TOKEN = (
-    "No GitHub token found. Reviewing a pull request reads it from the API, "
-    "which needs one.\n"
+    "No GitHub token found. Public pull requests are read without one; a "
+    "private repository, or posting a review, needs one.\n"
     "  Set GITHUB_TOKEN (or GH_TOKEN) to a token with 'repo' read access, or\n"
     "  run `gh auth login` if you use the GitHub CLI.\n"
     "A fine-grained token needs 'Pull requests: read'. Posting also needs write."
 )
 
 
-def _headers(tok: str) -> dict:
-    return {
-        "Authorization": f"Bearer {tok}",
+def _headers(tok: str | None) -> dict:
+    h = {
         "Accept": "application/vnd.github+json",
         "X-GitHub-Api-Version": "2022-11-28",
         "User-Agent": "codeorbit",
     }
+    if tok:
+        h["Authorization"] = f"Bearer {tok}"
+    return h
 
 
-def _request(method: str, url: str, tok: str, **kw):
+def _request(method: str, url: str, tok: str | None, **kw):
     try:
         r = requests.request(method, url, headers=_headers(tok),
                              timeout=TIMEOUT, **kw)
@@ -151,13 +153,17 @@ def _request(method: str, url: str, tok: str, **kw):
         raise GitHubError("GitHub rejected the token (401). It may be expired "
                           "or missing the scopes this needs.")
     if r.status_code == 403 and "rate limit" in r.text.lower():
-        raise GitHubError("GitHub rate limit reached. Try again later.")
+        raise GitHubError("GitHub rate limit reached. Try again later."
+                          + ("" if tok else "\n" + NO_TOKEN))
     if r.status_code == 403:
         raise GitHubError("GitHub refused (403). The token is probably missing "
-                          "access to this repository.")
+                          "access to this repository." if tok else
+                          "GitHub refused (403) an anonymous request.\n" + NO_TOKEN)
     if r.status_code == 404:
         raise GitHubError("Not found (404). Either it does not exist or the "
-                          "token cannot see it.")
+                          "token cannot see it." if tok else
+                          "Not found (404). It does not exist, or it is private "
+                          "and needs a token.\n" + NO_TOKEN)
     if r.status_code >= 400:
         detail = ""
         try:
@@ -168,7 +174,7 @@ def _request(method: str, url: str, tok: str, **kw):
     return r
 
 
-def get_pull(repo: Repo, number: int, tok: str,
+def get_pull(repo: Repo, number: int, tok: str | None,
              with_comments: bool = True) -> PullRequest:
     r = _request("GET", f"{API}/repos/{repo.slug}/pulls/{number}", tok)
     d = r.json()
@@ -194,7 +200,7 @@ def get_pull(repo: Repo, number: int, tok: str,
     return pr
 
 
-def get_review_comments(repo: Repo, number: int, tok: str,
+def get_review_comments(repo: Repo, number: int, tok: str | None,
                         limit: int = 40) -> list[dict]:
     """Existing inline review comments, so a review can avoid repeating them."""
     out: list[dict] = []
@@ -212,7 +218,7 @@ def get_review_comments(repo: Repo, number: int, tok: str,
     return out[:limit]
 
 
-def get_diff(repo: Repo, number: int, tok: str) -> str:
+def get_diff(repo: Repo, number: int, tok: str | None) -> str:
     """The PR's diff, as GitHub computes it (three-dot, against the base)."""
     headers = _headers(tok) | {"Accept": "application/vnd.github.v3.diff"}
     try:

@@ -209,7 +209,11 @@ def prepare(root: Path, number: int, repo_slug: str | None = None,
 
     tok = github.token()
     if not tok:
-        raise GitHubError(github.NO_TOKEN)
+        # A public pull request can be read without one; demanding a token just
+        # to try the feature was the first thing anyone hit. A private one
+        # fails below with a 404 that says a token is the likely fix.
+        say("no GitHub token: reading anonymously (public repositories only, "
+            "60 requests an hour)")
 
     say(f"reading {repo.slug}#{number}")
     pr = github.get_pull(repo, number, tok)
