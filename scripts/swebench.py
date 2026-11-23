@@ -261,6 +261,17 @@ def run(args) -> None:
     arms = [a.strip() for a in args.arms.split(",") if a.strip()]
     tok_name, count_tokens, tok_exact = bench.make_tokenizer(args.tokenizer)
 
+    if args.embed:
+        # Before any checkout or run folder: a dead Ollama otherwise surfaced
+        # only after a clone and an index, or never (the arms were just dropped).
+        from codeorbit import llm
+        try:
+            llm.embed(["probe"])
+        except Exception as e:      # noqa: BLE001 - any failure means not usable
+            sys.exit(f"--embed needs Ollama with {llm.EMBED_MODEL}, and embedding "
+                     f"failed: {type(e).__name__}.\nStart it (ollama serve), pull the "
+                     f"model (ollama pull {llm.EMBED_MODEL}), then run this again.")
+
     if args.resume:
         out = Path(args.resume)
         meta = json.loads((out / "meta.json").read_text(encoding="utf-8"))
@@ -303,6 +314,7 @@ def run(args) -> None:
     live_seen = set()
     t_start = time.perf_counter()
     stopped_early = False
+    warned = False
 
     for n, task in enumerate(tasks, 1):
         iid = task["instance_id"]
@@ -334,7 +346,21 @@ def run(args) -> None:
 
         live, why = bench.semantic_probe(conn)
         live_seen.add(live)
-        task_arms = [a for a in arms if live or a not in bench.SEMANTIC_ARMS]
+        skipped = [a for a in arms if a in bench.SEMANTIC_ARMS] if not live else []
+        if skipped and args.embed:
+            # Asked for embeddings and they are not working: stop now. Carrying
+            # on silently dropped dense/hybrid from every task of a run that
+            # took hours, and nothing said so.
+            conn.close()
+            log.close()
+            sys.exit(f"\nembeddings are not working: {why}\n"
+                     f"--embed was given, so stopping rather than running without "
+                     f"{', '.join(skipped)}.\nIs Ollama running? Check: "
+                     f"curl http://127.0.0.1:11434/api/version")
+        if skipped and not warned:
+            print(f"    note: no embeddings ({why}) - skipping {', '.join(skipped)}")
+            warned = True
+        task_arms = [a for a in arms if a not in skipped]
 
         targets, files = gold_targets(conn, task["patch"])
         if not files:

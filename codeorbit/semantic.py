@@ -20,6 +20,8 @@ import math
 import struct
 from pathlib import Path
 
+import requests
+
 from . import llm
 
 BATCH_LOG_EVERY = 25
@@ -119,6 +121,12 @@ def build(conn, root: Path, model: str = llm.EMBED_MODEL, progress=None) -> dict
         texts = [DOC_PREFIX + symbol_text(row, root) for row in rows]
         try:
             vecs = llm.embed(texts, model=model)
+        except (requests.ConnectionError, requests.Timeout):
+            # Ollama itself is gone. Retrying every text singly turned this into
+            # ~2 s of refused connections per symbol - half an hour of silence
+            # on a mid-sized repo - before anything said what was wrong.
+            conn.commit()
+            raise
         except Exception:
             # One bad text must not cost the whole batch: retry singly.
             vecs = []

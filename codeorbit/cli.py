@@ -6,6 +6,7 @@ import contextlib
 import sys
 from pathlib import Path
 
+import requests
 import typer
 from rich.console import Console
 from rich.panel import Panel
@@ -820,7 +821,17 @@ def embed(
     with console.status("embedding...") as status:
         def tick(done, total):
             status.update(f"embedding... {done}/{total}")
-        st = sem.build(conn, root, model, progress=tick)
+        try:
+            st = sem.build(conn, root, model, progress=tick)
+        except (requests.ConnectionError, requests.Timeout):
+            # Everything embedded before Ollama went away is kept; running this
+            # again continues from there.
+            done = sem.count(conn, model)
+            conn.close()
+            console.print(f"[red]Lost the connection to Ollama[/red] - {done} symbol(s) "
+                          "embedded so far are kept. Start it again and re-run "
+                          "`codeorbit embed` to continue.")
+            raise typer.Exit(1)
 
     console.print(f"  [green]{st['embedded']}[/green] embedded"
                   + (f", [red]{st['failed']}[/red] failed" if st["failed"] else ""))
