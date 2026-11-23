@@ -80,10 +80,11 @@ def main() -> None:
         s = {"name_weight": w, "name_depth": d, "only_coded": c}
         results.append((s, score(tasks, s)))
 
-    # Keep hybrid's top-5 and gain at rank 1: those first, best MRR within.
+    # Ranked by MRR, the one score over all ranks; settings that also keep
+    # hybrid's top-5 and fusion's top-1 are marked. Putting top-5 first chose
+    # a setting that gave up top-1 and MRR on the development set.
     def key(item):
-        m = item[1]
-        return (m["R@5"] >= hybrid["R@5"], m["R@1"] >= current["R@1"], m["MRR"])
+        return item[1]["MRR"]
 
     results.sort(key=key, reverse=True)
     print(f"{len(tasks)} tasks\n")
@@ -99,7 +100,13 @@ def main() -> None:
         label = f"w={s['name_weight']} depth={s['name_depth']} coded={s['only_coded']}"
         print(f"{label:<44}{m['R@1']:>7.0%}{m['R@5']:>7.0%}{m['MRR']:>7.3f}{mark}")
     best = results[0][0]
-    print(f"\nbest: {best}\nfreeze it in scripts/benchmark.py: FUSION = {best}")
+    if best == bench.FUSION or results[0][1] == current:
+        print(f"\nbest by MRR: the current setting {bench.FUSION} - keep it")
+    else:
+        print(f"\nbest by MRR: {best}\nfreeze it in scripts/benchmark.py: FUSION = {best}")
+    if not any(m["R@5"] >= hybrid["R@5"] and m["R@1"] >= current["R@1"]
+               for _, m in results):
+        print("no setting keeps both hybrid's top-5 and fusion's top-1 on these tasks")
 
 
 if __name__ == "__main__":
