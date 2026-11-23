@@ -202,6 +202,10 @@ function startLayout(n, mass) {
       invalidate();
     } else if (m.type === "settled") {
       state.settled = true;
+      // A small project can cool below the follow threshold before the fifth
+      // tick, so the camera above never framed it: the page opened on a blank
+      // canvas with the graph off-screen until Fit was pressed.
+      if (!state.userMoved) fit();
       updateHud();
     }
   };
