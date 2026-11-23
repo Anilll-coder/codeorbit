@@ -202,11 +202,11 @@ def test_versus_counts_overlap_and_the_either_ceiling():
     assert k5 == ["5", "1", "1", "1", "1", "75%"]
 
 
-def test_with_without_pairs_bm25_files_against_codeorbit():
+def test_with_without_pairs_grep_files_against_codeorbit():
     swe = _load("swebench")
     rows = []
     for qid, files, cons, outl in [("t1", 10_000, 4_000, 1_000), ("t2", None, 50_000, 3_000)]:
-        rows += [{"question_id": qid, "arm": "bm25", "fn_targets": 1, "tok_files": files},
+        rows += [{"question_id": qid, "arm": "grep", "fn_targets": 1, "tok_files": files},
                  {"question_id": qid, "arm": "codeorbit", "fn_targets": 1,
                   "tok_symbols": outl, "tok_symbols_conservative": cons}]
     w = swe.with_without(rows)

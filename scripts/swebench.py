@@ -218,7 +218,7 @@ def score(o: bench.ArmOutput, targets: list[str], files: list[str]) -> dict:
 #            what an agent does today (tok_files)
 #   with     CodeOrbit's context, a few next function bodies, then file outlines
 #            and the one function that matters (tok_symbols)
-# Both are computed for every arm; the headline pairs bm25 files (without)
+# Both are computed for every arm; the headline pairs grep files (without)
 # against codeorbit (with). Not found within TOKEN_CAP: None.
 
 TOKEN_CAP = 100_000
@@ -344,15 +344,16 @@ def token_summary(rows: list[dict]) -> dict:
     return out
 
 
-WITHOUT = "bm25"        # search without CodeOrbit, then read the files it points to
+WITHOUT = "grep"        # how agents search today, then read the files it points to
 WITH = "codeorbit"      # CodeOrbit's context, then its next functions
 
 
 def with_without(rows: list[dict]) -> dict | None:
     """Tokens to locate the fix, with CodeOrbit vs without, task by task.
 
-    'Without' is BM25 - stronger than the grep an agent usually starts with,
-    so the comparison favours it - followed by reading whole files.
+    'Without' is what a coding agent does by default: grep the issue's terms,
+    then open the matching files in order of hits. 'With' is the product as
+    shipped. Needs both arms in the run (grep is not a default arm).
     """
     a = {r["question_id"]: r for r in rows if r["arm"] == WITHOUT and r["fn_targets"]}
     b = {r["question_id"]: r for r in rows if r["arm"] == WITH and r["fn_targets"]}
@@ -643,7 +644,7 @@ def print_summary(s: dict, arms: list[str], rows: list[dict]) -> None:
     print("-" * 96)
     print(f"{'':<40}{'found within':^24}{'tokens per task':^20}{'saving':>8}")
     print(f"{'':<40}{'2k':>8}{'8k':>8}{'32k':>8}{'average':>10}{'median':>10}{'(avg)':>8}")
-    for label, key in (("without (BM25 search + read files)", "without"),
+    for label, key in (("without (grep search + read files)", "without"),
                        ("with CodeOrbit - conservative", "with_conservative"),
                        ("with CodeOrbit - outline", "with")):
         saving = (f"{1 - w[f'avg_{key}'] / w['avg_without']:>8.0%}"
