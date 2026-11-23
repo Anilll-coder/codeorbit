@@ -60,7 +60,8 @@ read, and do not re-open those files.
 Typical order: codeorbit_overview on an unfamiliar project, codeorbit_explore
 for any "how does X work" question, codeorbit_node for one symbol in full,
 codeorbit_impact before changing something, codeorbit_path for "how does A reach
-B".
+B". When explore has not found it, codeorbit_outline shows what a file holds
+for a fraction of reading it - outline first, then node, never the whole file.
 
 Edges marked [uncertain] were resolved by name rather than by an import, so
 treat them as likely rather than certain. Static parsing cannot see dynamic
@@ -104,38 +105,42 @@ def _fmt_symbol(root: Path, conn, row, body_lines: int = MAX_BODY_LINES,
     a flat 120 lines per symbol times four symbols per call is not obviously
     cheaper than just opening one file.
     """
+    body = _body(root, row, body_lines, ledger) if source else ""
     out = [
         f"## {row['kind']} {row['qname']}",
         f"{row['path']}:{row['start_line']}-{row['end_line']}  ({row['lang']})",
     ]
-    if row["signature"]:
+    # Not repeated when the body below already carries them (the def line, a
+    # Python docstring). An elided body is a citation, so they stay then.
+    if row["signature"] and row["signature"].strip() not in body:
         out.append(f"signature: {row['signature']}")
-    if row["docstring"]:
+    if row["docstring"] and row["docstring"].strip()[:60] not in body:
         out.append(f"doc: {row['docstring'][:400]}")
 
-    callers = query.callers(conn, row["id"], limit=10)
+    # One line per neighbour with all its call lines, not one per call site.
+    callers = ctxmod.group_neighbours(query.callers(conn, row["id"], limit=40), 10)
     if callers:
         out.append("\ncalled by:")
         for c in callers:
             flag = "" if c["resolution"] == "exact" else "  [uncertain]"
-            out.append(f"  {c['qname']}  ({c['path']}:{c['call_line']}){flag}")
+            out.append(f"  {c['qname']}  ({c['path']}:{ctxmod.call_lines(c)}){flag}")
     else:
         out.append("\ncalled by: nothing in this project")
 
-    callees = query.callees(conn, row["id"], limit=12)
+    callees = ctxmod.group_neighbours(query.callees(conn, row["id"], limit=48), 12)
     if callees:
         out.append("\ncalls:")
         for c in callees:
             flag = "" if c["resolution"] == "exact" else "  [uncertain]"
-            out.append(f"  {c['qname']}  (line {c['call_line']}){flag}")
+            out.append(f"  {c['qname']}  (line {ctxmod.call_lines(c)}){flag}")
 
     if row["kind"] == "class":
         members = query.members(conn, row["id"])
         if members:
             out.append("\nmembers: " + ", ".join(m["name"] for m in members[:25]))
 
-    if source:
-        out.append(_body(root, row, body_lines, ledger))
+    if body:
+        out.append(body)
     return "\n".join(out)
 
 
@@ -331,6 +336,27 @@ def codeorbit_node(root, conn, name: str, detail: str = "auto") -> str:
         parts += [f"  {h['kind']} {h['qname']} ({h['path']}:{h['start_line']})"
                   for h in hits[1:5]]
     return _clip("\n".join(parts))
+
+
+@mcp.tool()
+@graph_tool
+def codeorbit_outline(root, conn, path: str) -> str:
+    """What is in one file - every function and class with its lines and signature, no code.
+
+    Use it INSTEAD of opening a file to find out what is in it: it costs a small
+    fraction of reading the file. Then call codeorbit_node on the one you need.
+    `path` can be repo-relative or any unambiguous tail, e.g. "models.py".
+    """
+    found, rows = query.outline(conn, path)
+    if found is None:
+        if rows:
+            return f"{path!r} matches several files - give more of the path:\n" + \
+                "\n".join(f"  {p}" for p in rows)
+        return (f"No indexed file {path!r}. codeorbit_search finds a symbol's file; "
+                "codeorbit_overview lists the main ones.")
+    if not rows:
+        return f"{found}: no functions or classes - only module-level code."
+    return _clip(ctxmod.format_outline(found, rows))
 
 
 @mcp.tool()

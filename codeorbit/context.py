@@ -153,29 +153,42 @@ def build(root: Path, conn, question: str, max_symbols: int = 2,
 
     parts: list[str] = []
     for row, lines in zip(picks, budgets):
+        # A class and one of its own methods are both plausible picks, and
+        # their bodies overlap exactly. Printing the inner one again spends
+        # context on code already above it.
+        span = (row["path"], row["start_line"], min(row["end_line"],
+                                                    row["start_line"] + lines))
+        covered = any(p == span[0] and s <= span[1] and span[2] <= e
+                      for p, s, e in seen_spans)
+        body = "" if covered else query.source_of(root, row, max_lines=lines)
+
         head = (
             f"### {row['kind']} {row['qname']}\n"
             f"defined at {row['path']}:{row['start_line']}"
             f"-{row['end_line']} ({row['lang']})"
         )
-        if row["signature"]:
+        # Signature and docstring only when the source below will not already
+        # show them - the def line and a Python docstring are inside the body.
+        if row["signature"] and row["signature"].strip() not in body:
             head += f"\nsignature: {row['signature']}"
-        if row["docstring"]:
+        if row["docstring"] and row["docstring"].strip()[:60] not in body:
             head += f"\ndoc: {row['docstring'][:280]}"
         parts.append(head)
 
-        ins = query.callers(conn, row["id"], limit=6) if neighbours else []
+        ins = (group_neighbours(query.callers(conn, row["id"], limit=24), 6)
+               if neighbours else [])
         if ins:
             parts.append("called by:\n" + "\n".join(
-                f"  - {c['qname']} ({c['path']}:{c['call_line']})"
+                f"  - {c['qname']} ({c['path']}:{call_lines(c)})"
                 f"{' [uncertain]' if c['resolution'] != 'exact' else ''}"
                 for c in ins
             ))
 
-        outs = query.callees(conn, row["id"], limit=8) if neighbours else []
+        outs = (group_neighbours(query.callees(conn, row["id"], limit=32), 8)
+                if neighbours else [])
         if outs:
             parts.append("calls:\n" + "\n".join(
-                f"  - {c['qname']} (line {c['call_line']})"
+                f"  - {c['qname']} (line {call_lines(c)})"
                 f"{' [uncertain]' if c['resolution'] != 'exact' else ''}"
                 for c in outs
             ))
@@ -185,16 +198,8 @@ def build(root: Path, conn, question: str, max_symbols: int = 2,
             if mem:
                 parts.append("members: " + ", ".join(m["name"] for m in mem[:20]))
 
-        # A class and one of its own methods are both plausible picks, and
-        # their bodies overlap exactly. Printing the inner one again spends
-        # context on code already above it.
-        span = (row["path"], row["start_line"], min(row["end_line"],
-                                                    row["start_line"] + lines))
-        covered = any(p == span[0] and s <= span[1] and span[2] <= e
-                      for p, s, e in seen_spans)
         if not covered:
             seen_spans.append(span)
-            body = query.source_of(root, row, max_lines=lines)
             if body:
                 parts.append(f"source:\n```{row['lang']}\n"
                              f"{budgetmod.trim_source(body)}\n```")
@@ -202,6 +207,47 @@ def build(root: Path, conn, question: str, max_symbols: int = 2,
         parts.append("")
 
     return "\n".join(parts), picks
+
+
+def group_neighbours(rows, limit: int) -> list[dict]:
+    """One entry per neighbour, with all its call lines.
+
+    The graph has an edge per call SITE, so a function called three times was
+    listed three times - the same name and path paid for again on every line.
+    """
+    out: dict[tuple, dict] = {}
+    for r in rows:
+        key = (r["qname"], r["path"])
+        if key not in out:
+            if len(out) == limit:
+                continue
+            out[key] = {"qname": r["qname"], "path": r["path"], "lines": [],
+                        "resolution": r["resolution"]}
+        out[key]["lines"].append(r["call_line"])
+        if r["resolution"] == "exact":
+            out[key]["resolution"] = "exact"
+    return list(out.values())
+
+
+def call_lines(c: dict) -> str:
+    return ", ".join(str(n) for n in sorted(set(c["lines"])))
+
+
+def format_outline(path: str, rows) -> str:
+    """A file's definitions - line, kind, signature - and none of its code.
+
+    What is in a file costs a few hundred tokens this way; reading the file to
+    find out costs tens of thousands on a large one.
+    """
+    out = [f"{path}: {len(rows)} definition(s)"]
+    for r in rows:
+        label = r["signature"] or r["name"]
+        if r["name"] not in label:
+            label = f"{r['name']}{label}"
+        indent = "  " if r["kind"] == "method" else ""
+        out.append(f"{r['start_line']:>5}-{r['end_line']:<5} {indent}{r['kind']} "
+                   f"{' '.join(label.split())[:140]}")
+    return "\n".join(out)
 
 
 def prompt_for(question: str, context: str) -> str:
