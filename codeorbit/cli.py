@@ -834,6 +834,7 @@ def embed(
             raise typer.Exit(1)
 
     console.print(f"  [green]{st['embedded']}[/green] embedded"
+                  + (f" ({st['reused']} unchanged, reused)" if st.get("reused") else "")
                   + (f", [red]{st['failed']}[/red] failed" if st["failed"] else ""))
     console.print(f"  {st['total']} symbols now searchable by meaning")
     conn.close()

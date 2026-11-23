@@ -86,4 +86,16 @@ CREATE TABLE IF NOT EXISTS embeddings (
   model   TEXT NOT NULL
 );
 
+-- Vectors by the exact text embedded, outliving the nodes they came from.
+-- Re-indexing a changed file drops every node in it, and with them the
+-- vectors of functions that did not change; a git pull or checkout then
+-- re-embedded all of them. Same text, same model: same vector, reused.
+CREATE TABLE IF NOT EXISTS embed_cache (
+  key   TEXT NOT NULL,            -- sha1 of the text sent to the model
+  model TEXT NOT NULL,
+  dim   INTEGER NOT NULL,
+  vec   BLOB NOT NULL,
+  PRIMARY KEY (key, model)
+);
+
 

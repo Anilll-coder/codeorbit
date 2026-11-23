@@ -16,6 +16,7 @@ generation call - so there is no index to keep correct.
 """
 from __future__ import annotations
 
+import hashlib
 import math
 import struct
 from pathlib import Path
@@ -23,6 +24,7 @@ from pathlib import Path
 import requests
 
 from . import llm
+from .scanner import sha1
 
 BATCH_LOG_EVERY = 25
 EMBED_BATCH = 32            # texts per Ollama request; keeps a GPU busy
@@ -107,18 +109,85 @@ def count(conn, model: str | None = None) -> int:
     return conn.execute("SELECT count(*) FROM embeddings").fetchone()[0]
 
 
+def _seed_cache(conn, root: Path, model: str) -> None:
+    """Fill an empty cache from vectors embedded before the cache existed.
+
+    Hashing their text costs no model calls, and without it the first re-index
+    after upgrading would re-embed every changed file in full, as before.
+    """
+    if conn.execute("SELECT 1 FROM embed_cache WHERE model = ? LIMIT 1",
+                    (model,)).fetchone():
+        return
+    rows = conn.execute(
+        "SELECT n.id, n.name, n.qname, n.kind, n.signature, n.docstring, "
+        "n.start_line, n.end_line, f.path AS path, f.hash AS hash, e.dim, e.vec "
+        "FROM embeddings e JOIN nodes n ON n.id = e.node_id "
+        "JOIN files f ON f.id = n.file_id WHERE e.model = ?", (model,)).fetchall()
+
+    # The key is recomputed from the file as it is NOW. A file edited since it
+    # was indexed would pair an old vector with new text, and a later re-index
+    # could hand that wrong vector to the edited function - so only files that
+    # still match the index are used. The rest are simply not cached.
+    fresh: dict[str, bool] = {}
+
+    def is_fresh(path: str, indexed_hash: str) -> bool:
+        if path not in fresh:
+            try:
+                fresh[path] = sha1((root / path).read_bytes()) == indexed_hash
+            except OSError:
+                fresh[path] = False
+        return fresh[path]
+
+    for r in rows:
+        if not is_fresh(r["path"], r["hash"]):
+            continue
+        key = hashlib.sha1((DOC_PREFIX + symbol_text(r, root)).encode("utf-8")).hexdigest()
+        conn.execute("INSERT OR IGNORE INTO embed_cache(key, model, dim, vec) "
+                     "VALUES(?,?,?,?)", (key, model, r["dim"], r["vec"]))
+    conn.commit()
+
+
 def build(conn, root: Path, model: str = llm.EMBED_MODEL, progress=None) -> dict:
     """Embed every symbol that does not yet have a vector. Resumable."""
     # Vectors whose node is gone, or whose file changed and was re-parsed,
     # cascade away with the node - so this only ever sees live symbols.
+    _seed_cache(conn, root, model)
     todo = pending(conn, model)
     done = 0
     failed = 0
+    reused = 0
     logged = 0
 
     for start in range(0, len(todo), EMBED_BATCH):
         rows = todo[start:start + EMBED_BATCH]
         texts = [DOC_PREFIX + symbol_text(row, root) for row in rows]
+        keys = [hashlib.sha1(t.encode("utf-8")).hexdigest() for t in texts]
+
+        # Whatever was embedded before - this file before an edit, this repo
+        # at another commit - comes from the cache; only new text goes out.
+        cached = {r["key"]: (r["dim"], r["vec"]) for r in conn.execute(
+            f"SELECT key, dim, vec FROM embed_cache WHERE model = ? "
+            f"AND key IN ({','.join('?' * len(keys))})", (model, *keys))}
+        for row, key in zip(rows, keys):
+            if key in cached:
+                dim, blob = cached[key]
+                conn.execute(
+                    "INSERT OR REPLACE INTO embeddings(node_id, dim, vec, model) "
+                    "VALUES(?,?,?,?)", (row["id"], dim, blob, model))
+                reused += 1
+                done += 1
+        miss = [i for i, k in enumerate(keys) if k not in cached]
+        rows = [rows[i] for i in miss]
+        texts = [texts[i] for i in miss]
+        keys = [keys[i] for i in miss]
+        if not rows:
+            conn.commit()
+            seen = start + EMBED_BATCH
+            if progress and (seen - logged >= BATCH_LOG_EVERY or seen >= len(todo)):
+                progress(min(seen, len(todo)), len(todo))
+                logged = seen
+            continue
+
         try:
             vecs = llm.embed(texts, model=model)
         except (requests.ConnectionError, requests.Timeout):
@@ -136,26 +205,31 @@ def build(conn, root: Path, model: str = llm.EMBED_MODEL, progress=None) -> dict
                 except Exception:
                     vecs.append(None)
 
-        for row, vec in zip(rows, vecs):
+        for row, key, vec in zip(rows, keys, vecs):
             if vec is None:
                 failed += 1
                 continue
             vec = normalize(vec)
+            blob = pack(vec)
             conn.execute(
                 "INSERT OR REPLACE INTO embeddings(node_id, dim, vec, model) "
                 "VALUES(?,?,?,?)",
-                (row["id"], len(vec), pack(vec), model),
+                (row["id"], len(vec), blob, model),
             )
+            conn.execute(
+                "INSERT OR REPLACE INTO embed_cache(key, model, dim, vec) "
+                "VALUES(?,?,?,?)", (key, model, len(vec), blob))
             done += 1
         conn.commit()
 
-        seen = start + len(rows)
+        seen = min(start + EMBED_BATCH, len(todo))
         if progress and (seen - logged >= BATCH_LOG_EVERY or seen == len(todo)):
             progress(seen, len(todo))
             logged = seen
 
     conn.commit()
-    return {"embedded": done, "failed": failed, "total": count(conn, model)}
+    return {"embedded": done, "reused": reused, "failed": failed,
+            "total": count(conn, model)}
 
 
 def search(conn, question: str, limit: int = 8,
