@@ -188,3 +188,15 @@ def test_question_kind():
     swe = _load("swebench")
     assert swe.question_kind("Box.size() crashes", ["pkg.mod.Box.size"]) == "named"
     assert swe.question_kind("the box is too big", ["pkg.mod.Box.size"]) == "unnamed"
+
+
+def test_versus_counts_overlap_and_the_either_ceiling():
+    report = _load("bench_report")
+    rows = []
+    for qid, a, b in [("t1", 1, 1), ("t2", 1, None), ("t3", None, 2), ("t4", None, None)]:
+        rows += [{"question_id": qid, "arm": "A", "rank": a},
+                 {"question_id": qid, "arm": "B", "rank": b}]
+    k1 = report.versus(rows, "A", "B").splitlines()[2].split()
+    assert k1 == ["1", "1", "1", "0", "2", "50%"]      # k both onlyA onlyB neither either
+    k5 = report.versus(rows, "A", "B").splitlines()[3].split()
+    assert k5 == ["5", "1", "1", "1", "1", "75%"]

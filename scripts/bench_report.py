@@ -91,6 +91,9 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
     ap.add_argument("runs", nargs="*", help="run directories (default: latest per dataset)")
     ap.add_argument("--markdown", action="store_true")
+    ap.add_argument("--versus", action="append", metavar="A,B",
+                    help="per-task overlap of two arms' top-k hits, e.g. "
+                         "codeorbit,hybrid (repeatable)")
     args = ap.parse_args()
 
     runs = [Path(r) for r in args.runs] or latest_runs(REPO / "bench/runs")
@@ -124,7 +127,37 @@ def main() -> None:
         common = [a for a in arms_seen
                   if all(a in load(r)[0]["run"]["arms"] for r in runs)]
         out.append(table("pooled", pooled, common, args.markdown))
+    for pair in args.versus or []:
+        out.append(versus(pooled, *pair.split(",")))
     print("\n\n".join(out))
+
+
+def versus(rows: list[dict], a: str, b: str) -> str:
+    """Per task, which of two arms ranked the answer within k - and the ceiling.
+
+    'either' is what a perfect combination of the two could reach: if it is
+    well above both, they find different answers and fusing them can gain; if
+    it barely beats the better one, they find the same ones and it cannot.
+    """
+    by_task: dict[str, dict[str, int | None]] = {}
+    for r in rows:
+        if r["arm"] in (a, b):
+            by_task.setdefault(r["question_id"], {})[r["arm"]] = r["rank"]
+    tasks = [t for t, v in by_task.items() if a in v and b in v]
+    if not tasks:
+        return f"{a} vs {b}: no task has both arms"
+    lines = [f"{a} vs {b} ({len(tasks)} tasks)",
+             f"{'k':>4}{'both':>7}{'only ' + a:>{len(a) + 7}}{'only ' + b:>{len(b) + 7}}"
+             f"{'neither':>9}{'either':>9}"]
+    for k in (1, 5, 10):
+        hit = {t: ((by_task[t][a] or 99) <= k, (by_task[t][b] or 99) <= k) for t in tasks}
+        both = sum(x and y for x, y in hit.values())
+        only_a = sum(x and not y for x, y in hit.values())
+        only_b = sum(y and not x for x, y in hit.values())
+        either = both + only_a + only_b
+        lines.append(f"{k:>4}{both:>7}{only_a:>{len(a) + 7}}{only_b:>{len(b) + 7}}"
+                     f"{len(tasks) - either:>9}{either / len(tasks):>9.0%}")
+    return "\n".join(lines)
 
 
 if __name__ == "__main__":

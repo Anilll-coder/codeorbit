@@ -37,6 +37,8 @@ THE ARMS
   codeorbit    the product as shipped.
   hybrid-graph the hybrid ranking with CodeOrbit's graph context on top: tests
                whether expansion helps once ranking is as good as hybrid.
+  fusion       one RRF over CodeOrbit's name search, BM25 and dense, with the
+               graph context on top: each ranker's strength in one list.
 
 grep is not run unless named with --arms.
 
@@ -84,12 +86,12 @@ from codeorbit.scanner import scan, sha1         # noqa: E402
 CHAR_BUDGET = 6000          # identical for every arm
 RANK_DEPTH = 10             # candidates scored by the ranking metrics
 ALL_ARMS = ["grep", "bm25", "dense", "hybrid", "graph-kw", "graph-noexp", "codeorbit",
-            "hybrid-graph"]
+            "hybrid-graph", "fusion"]
 # grep is still runnable by name (the README's rich pilot reports it), but it
 # lost every comparison - 2% top-5 recall on SWE-bench - so it is not run by
 # default and its whole-repository scan no longer slows every task.
 DEFAULT_ARMS = [a for a in ALL_ARMS if a != "grep"]
-SEMANTIC_ARMS = {"dense", "hybrid", "hybrid-graph"}
+SEMANTIC_ARMS = {"dense", "hybrid", "hybrid-graph", "fusion"}
 
 
 @dataclass
@@ -338,11 +340,17 @@ def run_arm(arm: str, q: Question, root: Path, conn, src: Sources,
                   for r in rows]
         return ArmOutput(ranked, text[:budget], secs)
 
-    if arm == "hybrid-graph":
-        # The hybrid ranking, given CodeOrbit's graph context: what SWE-bench
-        # suggested - hybrid ranks best, expansion names the answer more often.
+    if arm in ("hybrid-graph", "fusion"):
+        # hybrid-graph: the hybrid ranking, given CodeOrbit's graph context -
+        # hybrid ranked best, expansion named the answer more often.
+        # fusion: also fuses in CodeOrbit's own name search, which hybrid-graph
+        # lacks: it ranks a function first when the issue names it, where BM25
+        # over bodies can bury it. One RRF over all three lists.
         t0 = time.perf_counter()
-        ids = rrf([bm25.search(q.text, pool), dense_ids(conn, q.text, pool)], pool)
+        lists = [bm25.search(q.text, pool), dense_ids(conn, q.text, pool)]
+        if arm == "fusion":
+            lists.insert(0, ctxmod.keyword_ranking(conn, q.text, pool))
+        ids = rrf(lists, pool)
         rows = [r for r in (query.get_node(conn, i) for i in ids[:RANK_DEPTH]) if r]
         text, _picks = ctxmod.build(root, conn, q.text, max_symbols=4, body_lines=60,
                                     picks=rows)
@@ -612,7 +620,7 @@ def main() -> None:
 
     src = Sources(root)
     bm25, bm25_secs = None, None
-    if {"bm25", "hybrid", "hybrid-graph"} & set(arms):
+    if {"bm25", "hybrid", "hybrid-graph", "fusion"} & set(arms):
         t0 = time.perf_counter()
         bm25 = BM25(conn, src)
         bm25_secs = time.perf_counter() - t0

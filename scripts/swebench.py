@@ -372,8 +372,8 @@ def run(args) -> None:
         kind = question_kind(task["problem_statement"], targets)
         q = bench.Question(iid, text, targets[0] if targets else "", kind)
         src = bench.Sources(dest)
-        bm25 = (bench.BM25(conn, src)
-                if {"bm25", "hybrid", "hybrid-graph"} & set(task_arms) else None)
+        needs_bm25 = {"bm25", "hybrid", "hybrid-graph", "fusion"}
+        bm25 = bench.BM25(conn, src) if needs_bm25 & set(task_arms) else None
 
         marks = []
         for arm in task_arms:
