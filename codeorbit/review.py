@@ -35,6 +35,7 @@ class ChangedSymbol:
     callers: list = field(default_factory=list)
     blast: int = 0
     tests: list = field(default_factory=list)
+    signature_change: tuple[str, str] | None = None     # (before, after) lines
 
 
 def _git(root: Path, *args: str) -> str:
@@ -68,29 +69,111 @@ def diff_text(root: Path, base: str | None, staged: bool) -> str:
 
 
 def changed_ranges(diff: str) -> dict[str, list[tuple[int, int]]]:
-    """Per-file line ranges touched on the NEW side of the diff.
+    """Per-file line ranges actually changed, numbered on the NEW side.
 
-    --unified=0 is not required: hunk headers already carry the new-side start
-    and length, which is all we need to intersect against symbol spans.
+    Only added and removed lines count. A hunk header's range also spans the
+    three context lines git prints around an edit, and using it flagged the
+    function *next to* the change: editing a def line marked the previous
+    function as touched because its last line was context.
+
+    A replaced line is its replacement. A pure deletion has no new-side line;
+    it is pinned to the line above the gap, the code it was removed from.
     """
     out: dict[str, list[tuple[int, int]]] = {}
     current: str | None = None
+    lines: list[int] = []
+    new_ln = 0
+    deleted = False             # a run of '-' not (yet) followed by '+'
+
+    def settle():
+        nonlocal deleted
+        if deleted:
+            lines.append(max(1, new_ln - 1))
+            deleted = False
+
+    def flush():
+        settle()
+        if current is not None and lines:
+            spans = out.setdefault(current, [])
+            for ln in sorted(set(lines)):
+                if spans and ln <= spans[-1][1] + 1:
+                    spans[-1] = (spans[-1][0], max(spans[-1][1], ln))
+                else:
+                    spans.append((ln, ln))
+        lines.clear()
+
     for line in diff.splitlines():
-        if line.startswith("+++ b/"):
-            current = line[6:].strip()
-            out.setdefault(current, [])
+        if line.startswith("diff --git"):
+            flush()
+            current = None
             continue
-        if line.startswith("+++ /dev/null"):
-            current = None          # file deleted; nothing on the new side
+        if line.startswith("+++ "):
+            flush()
+            current = line[6:].strip() if line.startswith("+++ b/") else None
+            continue                # /dev/null: deleted, nothing on the new side
+        if line.startswith("--- "):
             continue
-        if current and line.startswith("@@"):
-            m = HUNK.match(line)
-            if m:
-                start = int(m.group(1))
-                length = int(m.group(2) or 1)
-                if length > 0:
-                    out[current].append((start, start + length - 1))
+        m = HUNK.match(line)
+        if m:
+            settle()
+            new_ln = int(m.group(1))
+            continue
+        if current is None:
+            continue
+        # A blank context line is " " in git's output, but editors, mail and
+        # copy-paste strip it to "" - still context, or every later line drifts.
+        tag = line[0] if line else " "
+        if tag == "+":
+            deleted = False     # the removed lines were replaced, here
+            lines.append(new_ln)
+            new_ln += 1
+        elif tag == "-":
+            deleted = True
+        elif tag == " ":
+            settle()
+            new_ln += 1
+    flush()
     return {k: v for k, v in out.items() if v}
+
+
+def _changed_lines(diff: str) -> dict[str, dict[str, list[str]]]:
+    """Per file, the removed ('-') and added ('+') lines' text."""
+    out: dict[str, dict[str, list[str]]] = {}
+    current = None
+    for line in diff.splitlines():
+        if line.startswith("+++ "):
+            current = line[6:].strip() if line.startswith("+++ b/") else None
+            if current:
+                out.setdefault(current, {"-": [], "+": []})
+        elif line.startswith("--- ") or line.startswith("diff --git"):
+            continue
+        elif current and line[:1] in ("-", "+"):
+            out[current][line[0]].append(line[1:].strip())
+    return out
+
+
+_DEF_KEYWORDS = r"(?:def|function|func|fn|fun|sub|async\s+def|async\s+function)"
+
+
+def signature_change(lines: dict[str, list[str]] | None,
+                     name: str) -> tuple[str, str] | None:
+    """(before, after) when the diff rewrites `name`'s definition line.
+
+    Found from the diff rather than the index: the index usually predates the
+    edit under review, so its stored signature is the OLD one. A definition
+    line is `def name(` and its kin, or - for brace languages - a line that
+    declares `name(...)` and opens a body.
+    """
+    if not lines:
+        return None
+    pat = re.compile(
+        rf"(?:\b{_DEF_KEYWORDS}\s+{re.escape(name)}\s*\(|"
+        rf"\b{re.escape(name)}\s*\([^;]*\)\s*(?:->\s*[^{{]+)?\{{\s*$)")
+    old = next((l for l in lines["-"] if pat.search(l)), None)
+    new = next((l for l in lines["+"] if pat.search(l)), None)
+    if old and new and old != new:
+        return old, new
+    return None
 
 
 def diff_stats(diff: str) -> dict[str, tuple[int, int]]:
@@ -159,6 +242,7 @@ def collect_from_diff(root: Path, conn, diff: str,
 
     ranges = changed_ranges(diff)
     stats = diff_stats(diff)
+    text = _changed_lines(diff)
 
     known = {r["path"] for r in conn.execute("SELECT path FROM files")}
     unindexed = [p for p in ranges if p not in known]
@@ -172,10 +256,13 @@ def collect_from_diff(root: Path, conn, diff: str,
             cs.callers = query.callers(conn, row["id"], limit=8)
             cs.blast = len(query.impact(conn, row["id"], max_depth=3))
             cs.tests = query.affected_tests(conn, row["id"], max_depth=4)
+            cs.signature_change = signature_change(text.get(path), row["name"])
             found.append(cs)
 
-    # Riskiest first: what a change reaches matters more than how big it is.
-    found.sort(key=lambda c: (-c.blast, -len(c.callers)))
+    # Riskiest first: a changed signature with callers breaks them outright;
+    # after that, what a change reaches matters more than how big it is.
+    found.sort(key=lambda c: (not (c.signature_change and c.callers),
+                              -c.blast, -len(c.callers)))
 
     summary = {
         "files": len(ranges),
@@ -203,6 +290,20 @@ SYSTEM = (
     "diff. If the change looks fine, say so briefly.\n"
     "Format: a short verdict line, then bullets ordered most to least serious."
 )
+
+
+def _line(root: Path, path: str, line: int | None) -> str:
+    """One source line, stripped - the call itself, so the model sees arguments."""
+    if not line:
+        return ""
+    try:
+        with open(root / path, encoding="utf-8", errors="replace") as f:
+            for i, text in enumerate(f, 1):
+                if i == line:
+                    return text.strip()[:200]
+    except OSError:
+        pass
+    return ""
 
 
 def build_prompt(root: Path, diff: str, changed: list[ChangedSymbol],
@@ -234,15 +335,27 @@ def build_prompt(root: Path, diff: str, changed: list[ChangedSymbol],
         parts.append(
             f"\n### {r['kind']} {r['qname']}  ({r['path']}:{r['start_line']}-{r['end_line']})"
         )
-        if r["signature"]:
+        if cs.signature_change:
+            # Stated outright, before anything else: a small model given only a
+            # callers list and a diff read past exactly this breakage in testing.
+            before, after = cs.signature_change
+            parts += [
+                "SIGNATURE CHANGED by this diff:",
+                f"  before: {before}",
+                f"  after:  {after}",
+                "Check every direct caller below against the NEW signature.",
+            ]
+        elif r["signature"]:
             parts.append(f"signature: {r['signature']}")
         parts.append(f"blast radius: {cs.blast} symbol(s) transitively reach this")
 
         if cs.callers:
-            parts.append("direct callers:")
+            parts.append("direct callers (with the calling line):")
             for c in cs.callers:
                 mark = "" if c["resolution"] == "exact" else "  [uncertain]"
-                parts.append(f"  - {c['qname']} ({c['path']}:{c['call_line']}){mark}")
+                code = _line(root, c["path"], c["call_line"])
+                parts.append(f"  - {c['qname']} ({c['path']}:{c['call_line']}){mark}"
+                             + (f"\n      {code}" if code else ""))
         else:
             parts.append("direct callers: none in the index")
 

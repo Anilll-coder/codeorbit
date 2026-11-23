@@ -464,15 +464,24 @@ def review(
     )
 
     if changed:
-        t = Table("symbol", "blast", "callers", "tests", title="what the change reaches")
+        t = Table("symbol", "signature", "blast", "callers", "tests",
+                  title="what the change reaches")
         for cs in changed:
             t.add_row(
                 cs.row["qname"],
+                ("[red]changed[/red]" if cs.callers else "changed")
+                if cs.signature_change else "",
                 str(cs.blast),
                 str(len(cs.callers)),
                 str(len(cs.tests)) if cs.tests else "[red]none[/red]",
             )
         console.print(t)
+        for cs in changed:
+            if cs.signature_change and cs.callers:
+                console.print(
+                    f"[red]![/red] {cs.row['qname']}: signature changed and "
+                    f"{len(cs.callers)} caller(s) may not match - "
+                    + ", ".join(f"{c['path']}:{c['call_line']}" for c in cs.callers[:4]))
 
     if summary["unindexed"]:
         console.print(

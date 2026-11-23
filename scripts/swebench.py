@@ -140,9 +140,9 @@ def patched_lines(patch: str) -> dict[str, set[int]]:
         if m:
             line = int(m.group(1))
             continue
-        if path is None or not raw:
+        if path is None:
             continue
-        tag = raw[0]
+        tag = raw[0] if raw else " "    # a stripped blank context line
         if tag == " ":
             line += 1
         elif tag == "-":
