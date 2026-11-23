@@ -85,6 +85,7 @@ from codeorbit.scanner import scan, sha1         # noqa: E402
 
 CHAR_BUDGET = 6000          # identical for every arm
 RANK_DEPTH = 10             # candidates scored by the ranking metrics
+READ_DEPTH = 50             # candidates kept for the tokens-to-locate simulation
 ALL_ARMS = ["grep", "bm25", "dense", "hybrid", "graph-kw", "graph-noexp", "codeorbit",
             "hybrid-graph", "fusion"]
 # grep is still runnable by name (the README's rich pilot reports it), but it
@@ -110,6 +111,7 @@ class Unit:
     qname: str | None = None
     label: str = ""
     path: str = ""          # repo-relative file, for file-level scoring
+    node_id: int | None = None   # graph symbol, so its body can be read later
 
 
 def load_dataset(path: Path) -> tuple[dict, list[Question]]:
@@ -168,7 +170,8 @@ def symbol_unit(src: Sources, row) -> Unit:
     head = (f"### {row['kind']} {row['qname']}\n"
             f"defined at {row['path']}:{row['start_line']}-{row['end_line']}")
     return Unit(f"{head}\n```{row['lang']}\n{src.body(row)}\n```",
-                qname=row["qname"], label=row["qname"], path=row["path"])
+                qname=row["qname"], label=row["qname"], path=row["path"],
+                node_id=row["id"])
 
 
 def pack(units: list[Unit], budget: int) -> str:
@@ -336,8 +339,13 @@ def run_arm(arm: str, q: Question, root: Path, conn, src: Sources,
                                     neighbours=arm != "graph-noexp")
         secs = time.perf_counter() - t0
         rows = ctxmod.retrieve(conn, q.text, RANK_DEPTH, semantic=semantic)
-        ranked = [Unit("", qname=r["qname"], label=r["qname"], path=r["path"])
-                  for r in rows]
+        # The top RANK_DEPTH stay exactly what the ranking metrics have always
+        # scored (retrieve's order depends on its limit); deeper candidates are
+        # only appended, for the reading simulation.
+        seen = {r["id"] for r in rows}
+        rows += [r for r in ctxmod.retrieve(conn, q.text, READ_DEPTH, semantic=semantic)
+                 if r["id"] not in seen]
+        ranked = [graph_unit(r) for r in rows]
         return ArmOutput(ranked, text[:budget], secs)
 
     if arm in ("hybrid-graph", "fusion"):
@@ -351,13 +359,11 @@ def run_arm(arm: str, q: Question, root: Path, conn, src: Sources,
         if arm == "fusion":
             lists.insert(0, ctxmod.keyword_ranking(conn, q.text, pool))
         ids = rrf(lists, pool)
-        rows = [r for r in (query.get_node(conn, i) for i in ids[:RANK_DEPTH]) if r]
+        rows = [r for r in (query.get_node(conn, i) for i in ids[:READ_DEPTH]) if r]
         text, _picks = ctxmod.build(root, conn, q.text, max_symbols=4, body_lines=60,
                                     picks=rows)
         secs = time.perf_counter() - t0
-        ranked = [Unit("", qname=r["qname"], label=r["qname"], path=r["path"])
-                  for r in rows]
-        return ArmOutput(ranked, text[:budget], secs)
+        return ArmOutput([graph_unit(r) for r in rows], text[:budget], secs)
 
     t0 = time.perf_counter()
     if arm == "grep":
@@ -372,7 +378,12 @@ def run_arm(arm: str, q: Question, root: Path, conn, src: Sources,
     else:
         raise ValueError(arm)
     text = pack(units, budget)
-    return ArmOutput(units[:RANK_DEPTH], text, time.perf_counter() - t0)
+    return ArmOutput(units[:READ_DEPTH], text, time.perf_counter() - t0)
+
+
+def graph_unit(row) -> Unit:
+    return Unit("", qname=row["qname"], label=row["qname"], path=row["path"],
+                node_id=row["id"])
 
 
 # --------------------------------------------------------------- tokenizers

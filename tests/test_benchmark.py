@@ -200,3 +200,18 @@ def test_versus_counts_overlap_and_the_either_ceiling():
     assert k1 == ["1", "1", "1", "0", "2", "50%"]      # k both onlyA onlyB neither either
     k5 = report.versus(rows, "A", "B").splitlines()[3].split()
     assert k5 == ["5", "1", "1", "1", "1", "75%"]
+
+
+def test_with_without_pairs_bm25_files_against_codeorbit():
+    swe = _load("swebench")
+    rows = []
+    for qid, files, cons, outl in [("t1", 10_000, 4_000, 1_000), ("t2", None, 50_000, 3_000)]:
+        rows += [{"question_id": qid, "arm": "bm25", "fn_targets": 1, "tok_files": files},
+                 {"question_id": qid, "arm": "codeorbit", "fn_targets": 1,
+                  "tok_symbols": outl, "tok_symbols_conservative": cons}]
+    w = swe.with_without(rows)
+    assert w["n"] == 2
+    assert w["avg_without"] == (10_000 + swe.TOKEN_CAP) // 2    # not found costs the cap
+    assert w["avg_with"] == 2_000
+    assert w["without_within_32k"] == 0.5 and w["with_within_2k"] == 0.5
+    assert w["fewer_tokens_with_conservative"] == 2

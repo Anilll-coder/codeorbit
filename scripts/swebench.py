@@ -50,6 +50,8 @@ sys.path.insert(0, str(REPO / "scripts"))
 
 import benchmark as bench                       # noqa: E402
 from bench_fetch import checkout                # noqa: E402
+from codeorbit import context as ctxmod         # noqa: E402
+from codeorbit import query                     # noqa: E402
 
 SPLITS = {
     "lite": "princeton-nlp/SWE-bench_Lite",
@@ -208,6 +210,185 @@ def score(o: bench.ArmOutput, targets: list[str], files: list[str]) -> dict:
     }
 
 
+# --------------------------------------------------------------- tokens to locate
+#
+# How many tokens a reader spends before the code that needed fixing has passed
+# in front of it:
+#   without  a search's results, then the whole files they point to, in order -
+#            what an agent does today (tok_files)
+#   with     CodeOrbit's context, a few next function bodies, then file outlines
+#            and the one function that matters (tok_symbols)
+# Both are computed for every arm; the headline pairs bm25 files (without)
+# against codeorbit (with). Not found within TOKEN_CAP: None.
+
+TOKEN_CAP = 100_000
+
+
+READ_BODIES = 5     # function bodies read past the context before switching to outlines
+
+
+def tokens_symbols(o: bench.ArmOutput, targets: list[str], files: list[str], conn,
+                   src, count, outlines: dict[str, int],
+                   whole_file: dict[str, int] | None = None) -> int | None:
+    """With CodeOrbit, used as its tools describe: the context; then the next few
+    ranked function bodies; then each file's outline (codeorbit_outline) in the
+    same order, and in a file that holds the fix, that function's body.
+
+    That assumes the fix is recognised from its outline line, where the file
+    reader sees real code - optimistic. With `whole_file` (path -> tokens) the
+    right file, once reached, is read in full instead: a conservative bound."""
+    spent = count(o.context)
+    if any(bench.defines(o.context, t) for t in targets):
+        return spent
+    read = 0
+    for u in o.ranked:
+        if read == READ_BODIES:
+            break
+        body = _unread_body(o, u, conn, src)
+        if body is None:
+            continue
+        read += 1
+        spent += count(body)
+        if any(bench.unit_matches(u, t) for t in targets):
+            return spent
+
+    seen = set()
+    for u in o.ranked:
+        if not u.path or u.path in seen:
+            continue
+        seen.add(u.path)
+        if u.path not in outlines:
+            path, rows = query.outline(conn, u.path)
+            outlines[u.path] = count(ctxmod.format_outline(path, rows)) if path else 0
+        spent += outlines[u.path]
+        if spent > TOKEN_CAP:
+            return None
+        if u.path in files:
+            if whole_file is not None:
+                spent += whole_file[u.path]
+                return spent if spent <= TOKEN_CAP else None
+            body = _target_body(conn, src, targets, u.path)
+            if body is not None:
+                spent += count(body)
+                return spent if spent <= TOKEN_CAP else None
+    return None
+
+
+def _target_body(conn, src, targets: list[str], path: str) -> str | None:
+    for t in targets:
+        row = conn.execute(
+            "SELECT n.id, n.start_line, n.end_line, f.path AS path FROM nodes n "
+            "JOIN files f ON f.id = n.file_id WHERE n.qname = ? AND f.path = ?",
+            (t, path)).fetchone()
+        if row:
+            return src.body(row)
+    return None
+
+
+def _unread_body(o, u, conn, src) -> str | None:
+    """A ranked function's body, or None if it is not a symbol or already shown."""
+    if u.node_id is None:
+        return None
+    row = conn.execute(
+        "SELECT n.id, n.start_line, n.end_line, f.path AS path FROM nodes n "
+        "JOIN files f ON f.id = n.file_id WHERE n.id = ?", (u.node_id,)).fetchone()
+    if row is None:
+        return None
+    body = src.body(row)
+    first = body.strip().splitlines()[0] if body.strip() else ""
+    if first and first in o.context:
+        return None                     # already shown in the context
+    return body
+
+
+def tokens_files(o: bench.ArmOutput, files: list[str], root: Path, count,
+                 cache: dict[str, int]) -> int | None:
+    spent, seen = 0, set()
+    for u in o.ranked:
+        if not u.path or u.path in seen:
+            continue
+        seen.add(u.path)
+        if u.path not in cache:
+            try:
+                cache[u.path] = count((root / u.path).read_text(
+                    encoding="utf-8", errors="replace"))
+            except OSError:
+                cache[u.path] = 0
+        spent += cache[u.path]
+        if spent > TOKEN_CAP:
+            return None
+        if u.path in files:
+            return spent
+    return None
+
+
+def token_summary(rows: list[dict]) -> dict:
+    """Located-within-budget rates, and medians over tasks both readers located."""
+    def within(key, cap):
+        return sum(1 for r in rows if r.get(key) is not None and r[key] <= cap) / len(rows)
+
+    both = [r for r in rows
+            if r.get("tok_symbols") is not None and r.get("tok_files") is not None]
+    out = {"n": len(rows)}
+    for cap in (2_000, 8_000, 32_000):
+        out[f"symbols_within_{cap // 1000}k"] = within("tok_symbols", cap)
+        out[f"files_within_{cap // 1000}k"] = within("tok_files", cap)
+    if both:
+        sym = sorted(r["tok_symbols"] for r in both)
+        fil = sorted(r["tok_files"] for r in both)
+        ratio = sorted(r["tok_symbols"] / r["tok_files"] for r in both if r["tok_files"])
+        out.update({"paired_n": len(both),
+                    "median_symbols": sym[len(sym) // 2],
+                    "median_files": fil[len(fil) // 2],
+                    "median_saving": 1 - ratio[len(ratio) // 2] if ratio else None})
+    return out
+
+
+WITHOUT = "bm25"        # search without CodeOrbit, then read the files it points to
+WITH = "codeorbit"      # CodeOrbit's context, then its next functions
+
+
+def with_without(rows: list[dict]) -> dict | None:
+    """Tokens to locate the fix, with CodeOrbit vs without, task by task.
+
+    'Without' is BM25 - stronger than the grep an agent usually starts with,
+    so the comparison favours it - followed by reading whole files.
+    """
+    a = {r["question_id"]: r for r in rows if r["arm"] == WITHOUT and r["fn_targets"]}
+    b = {r["question_id"]: r for r in rows if r["arm"] == WITH and r["fn_targets"]}
+    tasks = [t for t in a if t in b and "tok_files" in a[t]
+             and "tok_symbols_conservative" in b[t]]
+    if not tasks:
+        return None
+    series = {
+        "without": [a[t]["tok_files"] for t in tasks],
+        "with_conservative": [b[t]["tok_symbols_conservative"] for t in tasks],
+        "with": [b[t]["tok_symbols"] for t in tasks],
+    }
+
+    def within(xs, cap):
+        return sum(1 for x in xs if x is not None and x <= cap) / len(xs)
+
+    def avg(xs):                # not found within the cap costs the cap
+        return round(sum(x if x is not None else TOKEN_CAP for x in xs) / len(xs))
+
+    def median(xs):
+        xs = sorted(x if x is not None else TOKEN_CAP for x in xs)
+        return xs[len(xs) // 2]
+
+    out = {"n": len(tasks), "cap": TOKEN_CAP, "without_arm": WITHOUT, "with_arm": WITH}
+    for key, xs in series.items():
+        out[f"avg_{key}"] = avg(xs)
+        out[f"median_{key}"] = median(xs)
+        for cap in (2_000, 8_000, 32_000):
+            out[f"{key}_within_{cap // 1000}k"] = within(xs, cap)
+        if key != "without":
+            out[f"fewer_tokens_{key}"] = sum(
+                1 for w, c in zip(series["without"], xs)
+                if (c if c is not None else TOKEN_CAP) < (w if w is not None else TOKEN_CAP))
+    return out
+
+
 def summarise(rows: list[dict], arms: list[str]) -> dict:
     out = {}
     for arm in arms:
@@ -230,7 +411,12 @@ def summarise(rows: list[dict], arms: list[str]) -> dict:
                 "recall@10": sum(1 for k in ranks if k) / len(fl),
                 "file_ctx": sum(r["file_ctx"] for r in fl) / len(fl),
             }
+        if fn and any("tok_symbols" in r for r in fn):
+            m["tokens_to_locate"] = token_summary(fn)
         out[arm] = m
+    ww = with_without(rows)
+    if ww:
+        out["with_vs_without_codeorbit"] = ww
     return out
 
 
@@ -376,6 +562,8 @@ def run(args) -> None:
         bm25 = bench.BM25(conn, src) if needs_bm25 & set(task_arms) else None
 
         marks = []
+        file_tokens: dict[str, int] = {}
+        outline_tokens: dict[str, int] = {}
         for arm in task_arms:
             o = bench.run_arm(arm, q, dest, conn, src, bm25, args.budget, live)
             row = {
@@ -386,6 +574,17 @@ def run(args) -> None:
                 "ms": round(1000 * o.seconds, 2), "index_s": round(index_s, 2),
                 "top5": [u.label for u in o.ranked[:5]],
             }
+            if targets:
+                row["tok_symbols"] = tokens_symbols(o, targets, files, conn, src,
+                                                    count_tokens, outline_tokens)
+                row["tok_files"] = tokens_files(o, files, dest, count_tokens, file_tokens)
+                for f in files:     # whole-file sizes for the conservative bound
+                    if f not in file_tokens:
+                        tokens_files(bench.ArmOutput([bench.Unit("", path=f)], "", 0),
+                                     [f], dest, count_tokens, file_tokens)
+                row["tok_symbols_conservative"] = tokens_symbols(
+                    o, targets, files, conn, src, count_tokens, outline_tokens,
+                    whole_file=file_tokens)
             log.write(json.dumps(row) + "\n")
             marks.append(f"{arm}={row['rank'] or '-'}/{row['file_rank'] or '-'}")
         log.flush()
@@ -436,6 +635,26 @@ def print_summary(s: dict, arms: list[str], rows: list[dict]) -> None:
         tok = f.get("avg_tokens", "-")
         ms = f.get("ms_p50", "-")
         print(f"{arm:<12}{fn}{fi}{tok:>8}{ms:>8}")
+
+    w = s.get("with_vs_without_codeorbit")
+    if not w:
+        return
+    print(f"\ntokens to locate the fix - with vs without CodeOrbit ({w['n']} tasks)")
+    print("-" * 96)
+    print(f"{'':<40}{'found within':^24}{'tokens per task':^20}{'saving':>8}")
+    print(f"{'':<40}{'2k':>8}{'8k':>8}{'32k':>8}{'average':>10}{'median':>10}{'(avg)':>8}")
+    for label, key in (("without (BM25 search + read files)", "without"),
+                       ("with CodeOrbit - conservative", "with_conservative"),
+                       ("with CodeOrbit - outline", "with")):
+        saving = (f"{1 - w[f'avg_{key}'] / w['avg_without']:>8.0%}"
+                  if key != "without" and w["avg_without"] else f"{'':>8}")
+        print(f"{label:<40}" + "".join(f"{w[f'{key}_within_{k}k']:>8.0%}" for k in (2, 8, 32))
+              + f"{w[f'avg_{key}']:>10,}{w[f'median_{key}']:>10,}{saving}")
+    print(f"\nconservative: once the right file is reached it is read in full. outline: the"
+          f" fix is\nrecognised from its outline line. The truth is between. Not found "
+          f"within {w['cap']:,}\ntokens counts as {w['cap']:,}. CodeOrbit used fewer "
+          f"tokens on {w['fewer_tokens_with_conservative']} (conservative) and "
+          f"{w['fewer_tokens_with']} (outline) of {w['n']} tasks.")
 
 
 def main() -> None:
