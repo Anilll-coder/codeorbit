@@ -63,6 +63,15 @@ bottom. It clones whatever is pushed to `main`, so push first. Results go
 to `MyDrive/codeorbit-runs` and survive a disconnect (`--resume`); copy a
 run folder into `bench/runs/` here to commit it.
 
+### Unattended on Kaggle
+
+[`kaggle_swebench.ipynb`](kaggle_swebench.ipynb) does the same on a Kaggle GPU
+with no browser open: upload it as a Kaggle notebook, set Accelerator to a GPU
+and Internet on, choose `MODE`, then Save Version -> Save & Run All. It stops
+itself after `MAX_HOURS` (Kaggle allows 12) and resumes from a previous
+version's output via `RESUME_FROM`. Results: the Output tab's
+`codeorbit-runs.zip`.
+
 ## Edge accuracy
 
 ```bash

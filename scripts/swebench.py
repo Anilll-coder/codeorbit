@@ -302,11 +302,18 @@ def run(args) -> None:
     log = (out / "per_question.jsonl").open("a", encoding="utf-8")
     live_seen = set()
     t_start = time.perf_counter()
+    stopped_early = False
 
     for n, task in enumerate(tasks, 1):
         iid = task["instance_id"]
         if iid in done:
             continue
+        if args.max_hours and time.perf_counter() - t_start > args.max_hours * 3600:
+            # Stop between tasks, before a hosted session's hard limit kills the
+            # process mid-write; --resume picks up from here.
+            print(f"stopping after {args.max_hours} h (--max-hours); resume to continue")
+            stopped_early = True
+            break
         owner, name = task["repo"].split("/")
         dest = Path(args.checkouts) / f"{owner}__{name}"
         print(f"[{n}/{len(tasks)}] {iid}", flush=True)
@@ -371,7 +378,7 @@ def run(args) -> None:
     before = meta["run"].get("semantic_live")
     now = live_seen == {True} if live_seen else before
     meta["run"]["semantic_live"] = bool(now if before is None else before and now)
-    meta["run"]["complete"] = True
+    meta["run"]["complete"] = not stopped_early
     meta["run"]["tasks_scored"] = len({r["question_id"] for r in rows})
     meta["run"]["wall_s"] = round(time.perf_counter() - t_start, 1)
     (out / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
@@ -438,6 +445,9 @@ def main() -> None:
                         "synced folder (OneDrive, Google Drive): several GB of files")
     r.add_argument("--out", default=str(REPO / "bench" / "runs"),
                    help="where run folders are written, e.g. a mounted Drive on Colab")
+    r.add_argument("--max-hours", type=float,
+                   help="stop cleanly between tasks after this long (hosted sessions "
+                        "with a hard limit, e.g. Kaggle's 12 h); resume to continue")
     args = ap.parse_args()
 
     if args.cmd == "download":
