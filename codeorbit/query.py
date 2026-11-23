@@ -98,6 +98,29 @@ def members(conn, node_id: int):
     )
 
 
+def outline(conn, path: str) -> tuple[str | None, list]:
+    """(indexed path, its definitions in line order) for a file, or (None, []).
+
+    `path` may be the repo-relative path or any unambiguous tail of it, since
+    an agent often has only what a stack trace or another response printed.
+    """
+    path = path.replace("\\", "/").lstrip("./")
+    found = conn.execute("SELECT path FROM files WHERE path = ?", (path,)).fetchone()
+    if found is None:
+        tails = conn.execute("SELECT path FROM files WHERE path LIKE ?",
+                             (f"%/{path}",)).fetchall()
+        if len(tails) != 1:
+            return None, [r["path"] for r in tails[:8]]
+        found = tails[0]
+    rows = _rows(
+        conn,
+        f"SELECT {NODE_COLS} FROM nodes n JOIN files f ON f.id = n.file_id "
+        "WHERE f.path = ? AND n.kind != 'module' ORDER BY n.start_line",
+        (found["path"],),
+    )
+    return found["path"], rows
+
+
 def impact(conn, node_id: int, max_depth: int = 3) -> list[tuple[int, sqlite3.Row]]:
     """Everything that transitively calls this symbol - the blast radius.
 

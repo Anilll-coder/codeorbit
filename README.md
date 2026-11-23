@@ -703,8 +703,11 @@ starts one with the gate off, which tells you whether approval was the problem.
 Treat it as a diagnostic rather than a fix: it approves **every** MCP server the
 project configures, not just CodeOrbit, and only for that run.
 
-Seven tools are exposed: `explore` (the primary one), `search`, `node`,
-`impact`, `path`, `audit`, `overview`.
+Eight tools are exposed: `explore` (the primary one), `search`, `node`,
+`outline`, `impact`, `path`, `audit`, `overview`. `outline` lists a file's
+functions and classes with their lines and signatures but no code - about 7%
+of the file's tokens - so an agent can see what a file holds before reading
+any of it.
 
 **This is the one path where your code can leave the machine.** CodeOrbit still
 makes no outbound call of its own — it speaks stdio to a client on the same

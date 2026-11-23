@@ -134,6 +134,18 @@ async def test_audit_ranks_by_reach(project: Path):
     assert "MD5" in out or "finding" in out.lower()
 
 
+async def test_outline_lists_definitions_without_code(project: Path):
+    out = await call(project, "codeorbit_outline", {"path": "core.py"})   # a tail
+    assert "pkg/core.py: 3 definition(s)" in out
+    assert "function helper(value)" in out and "function engine(value)" in out
+    assert "strip()" not in out                                         # no bodies
+
+
+async def test_outline_of_an_unknown_file_is_guidance(project: Path):
+    out = await call(project, "codeorbit_outline", {"path": "nope.py"})
+    assert "No indexed file" in out
+
+
 async def test_overview_names_the_most_depended_on(project: Path):
     out = await call(project, "codeorbit_overview", {})
     assert "symbols" in out
