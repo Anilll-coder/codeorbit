@@ -98,6 +98,27 @@ def extract(tree, src: bytes, module_qname: str) -> Extraction:
                     walk(val, q, False)
                     continue
 
+            # `module.exports = function httpAdapter() {...}`, `exports.f = ...`,
+            # `Foo.prototype.bar = function () {...}`: CommonJS and pre-class code
+            # define most of their functions this way. Missing them left a whole
+            # 450-line adapter with no symbol for its body.
+            if t == "assignment_expression":
+                left = child.child_by_field_name("left")
+                val = child.child_by_field_name("right")
+                if left is not None and val is not None and val.type in FUNCEXPR:
+                    own = val.child_by_field_name("name")
+                    parts = [p for p in text(left, src).split(".") if p]
+                    nm = text(own, src) if own is not None else (parts[-1] if parts else "(anonymous)")
+                    kind = "function"
+                    q = scope + "." + nm
+                    if "prototype" in parts[:-1]:
+                        owner = parts[parts.index("prototype") - 1] if parts.index("prototype") else ""
+                        if owner:
+                            q, kind = f"{scope}.{owner}.{nm}", "method"
+                    add(nm, q, kind, child, scope, nm + _params(val, src))
+                    walk(val, q, False)
+                    continue
+
             if t == "pair":
                 key = child.child_by_field_name("key")
                 val = child.child_by_field_name("value")
