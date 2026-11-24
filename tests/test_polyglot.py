@@ -316,3 +316,76 @@ def test_a_polyglot_repo_indexes_and_resolves(tmp_path: Path):
             "a Python caller here would be a coincidence, not a call"
     finally:
         conn.close()
+
+
+# ---------------------------------------------------------------- C++ shapes
+# Found by running the extractor over every file the SWE-bench Multilingual
+# fixes touch (fmt, nlohmann/json): each of these broke real targets.
+
+def test_cpp_out_of_line_definitions_belong_to_their_class():
+    got = kinds(ex('''
+        namespace fmt { namespace detail {
+        class buffer { public: void push(char c); };
+        void buffer::push(char c) {}
+        } }
+        S::S() {}
+        S::~S() {}
+        template <typename T> void vec<T>::grow() {}
+    ''', "cpp", "f.cc"))
+    assert got.get("f.fmt.detail.buffer.push") == "method"
+    assert got.get("f.S.S") == "method" and got.get("f.S.~S") == "method"
+    assert got.get("f.vec.grow") == "method"
+    assert not any("::" in q for q in got)
+
+
+def test_cpp_declarator_noise_is_not_part_of_the_name():
+    got = kinds(ex('''
+        template <typename T, typename Char>
+        struct formatter<T, Char,
+                         enable_if_t<is_int<T>::value>> {
+          auto format(T v) const -> int { return static_cast<int>(v); }
+        };
+        class json {
+          const binary_t& get_binary() const { return *m; }
+          FMT_CONSTEXPR json(int x) : n(x) {}
+          bool operator()(int a) const { return a; }
+        };
+    ''', "cpp", "j.hpp"))
+    assert got.get("j.formatter") == "class"
+    assert got.get("j.formatter.format") == "method"
+    assert got.get("j.json.get_binary") == "method"
+    assert got.get("j.json.json") == "method"
+    assert got.get("j.json.operator()") == "method"
+    assert not any("static_cast" in q for q in got)
+
+
+def test_a_cpp_header_named_h_is_read_as_cpp():
+    got = kinds(ex('''
+        namespace fmt {
+        template <typename Char> class basic_string_view {
+         public:
+          auto size() const -> size_t { return n; }
+        };
+        }
+    ''', "c", "include/fmt/base.h"))
+    assert got.get("include.fmt.base.fmt.basic_string_view.size") == "method"
+    assert "include.fmt.base.fmt" not in got     # not a "function" named fmt
+
+
+def test_a_plain_c_header_stays_c():
+    got = kinds(ex("int jv_get_refcnt(jv j) { return 1; }\nstruct jv_refcnt { int n; };\n",
+                   "c", "src/jv.h"))
+    assert got.get("src.jv.jv_get_refcnt") == "function"
+
+
+def test_a_bare_macro_line_does_not_swallow_the_class_after_it():
+    src = '''
+        FMT_BEGIN_NAMESPACE
+        class plain { public: int f() { return 1; } };
+        FMT_END_NAMESPACE
+        int after() { return 2; }
+    '''
+    e = ex(src, "cpp", "m.h")
+    got = kinds(e)
+    assert got.get("m.plain.f") == "method" and got.get("m.after") == "function"
+    assert {s.qname: s.start_line for s in e.symbols}["m.after"] == 4

@@ -25,9 +25,40 @@ not know or care which extractor produced them.
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from .base import CallSite, Extraction, ImportStmt, Symbol, line_of, text
+
+# `vector<T>::push` -> `vector::push`; innermost first so nested args go too.
+_TEMPLATE_ARGS = re.compile(r"<[^<>]*>")
+_C_FAMILY = {"c", "cpp", "cuda", "objc"}
+
+
+def _c_name(nm: str) -> str:
+    """A C/C++ declarator's text reduced to the name it declares.
+
+    The name field is a declarator, so its text can carry the return type's
+    `&`/`*`, the parameter list, `const`, a leading macro
+    (`FMT_CONSTEXPR width_checker`) or template arguments
+    (`formatter<T, Char>`, cut off mid-line). Operators keep their symbol.
+    """
+    op = ""
+    i = nm.find("operator")
+    if i >= 0 and not re.match(r"[\w]", nm[i + 8:i + 9] or " "):
+        nm, op = nm[:i], nm[i:]
+        op = ("operator()" if re.match(r"operator\s*\(\s*\)", op)
+              else re.split(r"\s*\(", op, maxsplit=1)[0])
+        op = re.sub(r"\s+", "", op)
+    else:
+        nm = nm.split("(")[0]
+    while _TEMPLATE_ARGS.search(nm):
+        nm = _TEMPLATE_ARGS.sub("", nm)
+    nm = nm.split("<")[0].strip()
+    if " " in nm:
+        nm = nm.split()[-1]
+    nm = nm.lstrip("*&").strip()
+    return nm + op
 
 
 @dataclass(frozen=True)
@@ -246,7 +277,10 @@ TUNED: dict[str, Spec] = {
         imports=("preproc_include",),
     ),
     "cpp": _s(
-        funcs=("function_definition", "template_function", "template_method"),
+        # Not template_function/template_method: those are uses such as
+        # `static_cast<int>(x)`; a template's definition wraps an ordinary
+        # function_definition, which this already finds.
+        funcs=("function_definition",),
         classes=("class_specifier", "struct_specifier", "union_specifier",
                  "enum_specifier", "concept_definition"),
         namespaces=("namespace_definition",),
@@ -621,7 +655,23 @@ def extract(tree, src: bytes, module_qname: str, lang: str, spec: Spec) -> Extra
                 if nm is None:
                     walk(child, scope, in_class)
                     continue
+                if lang in _C_FAMILY:
+                    nm = _c_name(nm)
+                    if not nm:
+                        walk(child, scope, in_class)
+                        continue
                 owner = _receiver_type(child, src, spec)
+                if "::" in nm:
+                    # C++ defines methods out of line: `void buffer::push()`,
+                    # `S::~S()`, `ns::f()`. The qualifier is scope, not name,
+                    # or name search for `push` and the call graph miss it.
+                    bare = nm
+                    while _TEMPLATE_ARGS.search(bare):
+                        bare = _TEMPLATE_ARGS.sub("", bare)
+                    parts = [p for p in bare.split("::") if p]
+                    if len(parts) > 1:
+                        nm = parts[-1]
+                        owner = ".".join(parts[:-1])
                 # A Go method is declared at top level and belongs to its type
                 # only through the receiver. Without this every method in the
                 # package lands beside the functions, `Server.Start` does not
@@ -649,6 +699,8 @@ def extract(tree, src: bytes, module_qname: str, lang: str, spec: Spec) -> Extra
 
             if t in spec.classes:
                 nm = _name_of(child, src, spec)
+                if nm is not None and lang in _C_FAMILY:
+                    nm = _c_name(nm).rsplit("::", 1)[-1] or None
                 if nm is None:
                     walk(child, scope, in_class)
                     continue

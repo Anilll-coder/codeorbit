@@ -20,6 +20,7 @@ that parses one file - or none, in the case of `codeorbit mcp`.
 from __future__ import annotations
 
 import functools
+import re
 from pathlib import Path
 
 from .. import langs
@@ -59,11 +60,35 @@ def module_qname(rel_path: str) -> str:
     return ".".join(parts) if parts else p.stem
 
 
+_CPP_MARKERS = re.compile(
+    rb"^[ \t]*(?:namespace[ \t]+\w|template[ \t]*<|using[ \t]+namespace\b"
+    rb"|(?:public|private|protected)[ \t]*:|class[ \t]+\w+[^;\n]*[{:])", re.M)
+
+# A line that is only an upper-case macro: `FMT_BEGIN_NAMESPACE`,
+# `Q_OBJECT`, `END_EXTERN_C`. No semicolon follows, so tree-sitter reads it
+# as the start of a declaration and the whole block after it parses as an
+# error - a class body vanishes and its methods come out as free functions.
+_BARE_MACRO = re.compile(rb"^[ \t]*[A-Z][A-Z0-9_]{2,}[ \t]*(?:\r?\n|\Z)", re.M)
+
+
+def _blank_bare_macros(source: bytes) -> bytes:
+    """Replace bare macro lines with spaces; byte offsets and lines unchanged."""
+    return _BARE_MACRO.sub(
+        lambda m: re.sub(rb"[^\r\n]", b" ", m.group(0)), source)
+
+
 def parse_and_extract(source: bytes, lang: str, rel_path: str) -> Extraction:
     qname = module_qname(rel_path)
 
     if lang in langs.EMBEDDED:
         return _embedded(source, lang, qname)
+
+    if lang == "c" and _CPP_MARKERS.search(source):
+        # `.h` is shared by C and C++; a C++ header read as C turns its
+        # namespace into a "function" and loses every class and method.
+        lang = "cpp" if langs.parser("cpp") is not None else lang
+    if lang in ("c", "cpp"):
+        source = _blank_bare_macros(source)
 
     parser = langs.parser(lang)
     if parser is None:
