@@ -453,6 +453,49 @@ tokenizer
   issues with this context is what [`scripts/agent_eval.py`](scripts/agent_eval.py)
   measures; see [`bench/README.md`](bench/README.md).
 
+### Beyond Python: SWE-bench Multilingual
+
+[SWE-bench Multilingual](https://www.swebench.com/multilingual.html) is 300
+issues from 41 projects in eight other languages: C/C++, Go, Java, JavaScript,
+TypeScript, PHP, Ruby and Rust. Nothing was tuned on it - fusion keeps the
+settings chosen on Lite's development tasks - so all 300 are held out. 299 were
+scored (one, `uutils__coreutils-6377`, did not finish setup) and 289 have a
+function target
+([run](https://github.com/Anilll-coder/codeorbit/tree/e597d6a1573583d58436610aa6ab840b2263fbdc/bench/runs/20261124T100541Z-swebench-multilingual)):
+
+| arm | R@1 | R@5 | MRR@10 | found (95% CI) | code | tokens |
+|---|---|---|---|---|---|---|
+| hybrid - BM25 + dense, RRF | 17% | 34% | 0.238 | 28% (24-34%) | 30% | 1,137 |
+| hybrid-graph - hybrid's ranking + CodeOrbit's graph context | 17% | 34% | 0.238 | 40% (35-46%) | 33% | 1,400 |
+| **fusion** - CodeOrbit's name search + BM25 + dense, with graph context | 17% | **36%** | **0.244** | **43% (37-48%)** | **35%** | 1,314 |
+
+Found, by the language of the files the fix changed:
+
+| | C/C++ | Go | Java | JS/TS | PHP | Ruby | Rust |
+|---|---|---|---|---|---|---|---|
+| tasks | 42 | 37 | 43 | 41 | 43 | 43 | 40 |
+| hybrid | 24% | 27% | 33% | 22% | 21% | 44% | 28% |
+| hybrid-graph | 50% | 43% | 47% | 22% | 33% | 47% | 42% |
+| fusion | 55% | 41% | 40% | 22% | 47% | 51% | 45% |
+
+- **The graph-context result holds outside Python.** Found goes from 28% to
+  40% with graph context alone: 39 tasks gained, 4 lost (exact McNemar
+  p < 10⁻⁷). With fusion it is 43% (47 gained, 5 lost).
+- **It holds in six of the seven language groups - not JavaScript/TypeScript**,
+  where every arm finds 22% and graph context adds nothing. That is the weak
+  spot this benchmark exposes, not yet explained.
+- **Ranking barely moves overall:** fusion's top-5 is 36% vs 34%, not
+  significant. **On issues that name the code (87 tasks) it is:** fusion's top 5
+  holds a target hybrid's misses in 12 tasks and the reverse in 2 (p = 0.013),
+  and the target is in context for 20 more tasks against 2 fewer. On Lite the
+  same direction was too small to be significant.
+- Every number is lower than on Lite. These projects are larger and the issues
+  are as often about behaviour as about named code (202 of 289 name no target).
+- Gold targets come from CodeOrbit's own parse of each language, so they are
+  only as good as its extraction. Every file these fixes touch was parsed and
+  checked against git's own view of which function each change is in before
+  this run; the C++ and JavaScript extraction bugs it turned up were fixed first.
+
 ### Performance on constrained hardware
 
 Measured on 7.3 GB RAM with **no usable GPU** — `ollama ps` reports phi4-mini
