@@ -64,10 +64,6 @@ SPLITS = {
 CACHE = REPO / "bench" / "swebench"             # downloaded task files, not committed
 CHECKOUTS = REPO / "bench" / "repos" / "swe"
 QUESTION_CHARS = 4000       # issue text given to every arm; long issues are cut here
-# Tasks whose setup hung for over an hour on two separate Kaggle runs. Skipped
-# up front instead of burning an hour of GPU quota each time; recorded in
-# meta.json so a reported result says which tasks it leaves out.
-KNOWN_HANGS = {"apache__druid-15402"}
 
 
 
@@ -542,7 +538,6 @@ def run(args) -> None:
                     "rank_depth": bench.RANK_DEPTH, "question_chars": QUESTION_CHARS,
                     "tokenizer": tok_name, "tokenizer_exact": tok_exact,
                     "embed": args.embed, "tasks_selected": len(tasks), "complete": False,
-                    "skipped_known_hangs": sorted(KNOWN_HANGS & {t["instance_id"] for t in tasks}),
                     "fusion": dict(bench.FUSION)},
             "environment": {"python": sys.version.split()[0],
                             "platform": platform.platform(),
@@ -559,9 +554,6 @@ def run(args) -> None:
     for n, task in enumerate(tasks, 1):
         iid = task["instance_id"]
         if iid in done:
-            continue
-        if iid in KNOWN_HANGS:
-            print(f"[{n}/{len(tasks)}] {iid}\n    skipped: known to hang (KNOWN_HANGS)", flush=True)
             continue
         if args.max_hours and time.perf_counter() - t_start > args.max_hours * 3600:
             # Stop between tasks, before a hosted session's hard limit kills the
