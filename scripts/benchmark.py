@@ -263,7 +263,7 @@ def run_arm(arm: str, q: Question, root: Path, conn, src: Sources,
         # text, from a fresh session - not clipped to the shared budget, because
         # the agent is not clipped either. "found" and "tokens" are then the
         # tool's own reach and cost; explore-classic is the previous shape.
-        from codeorbit import budget as budgetmod, mcp_server, rank
+        from codeorbit import budget as budgetmod, mcp_server
         mcp_server.LEDGER = budgetmod.Ledger()
         style = "classic" if arm == "explore-classic" else "compact"
         t0 = time.perf_counter()
@@ -273,8 +273,7 @@ def run_arm(arm: str, q: Question, root: Path, conn, src: Sources,
         if style == "classic":
             rows = ctxmod.retrieve(conn, q.text, READ_DEPTH, semantic=semantic_live)
         else:
-            rows = [r for r in (query.get_node(conn, i) for i in
-                                rank.fusion_ranking(root, conn, q.text, READ_DEPTH)) if r]
+            rows = mcp_server.explore_rows(root, conn, q.text, READ_DEPTH)
         return ArmOutput([graph_unit(r) for r in rows], text, secs)
 
     if arm in ("hybrid-graph", "fusion"):

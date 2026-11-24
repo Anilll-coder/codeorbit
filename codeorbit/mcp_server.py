@@ -53,9 +53,11 @@ INSTRUCTIONS = """\
 CodeOrbit serves a structural knowledge graph of this repository: its symbols,
 their call relationships, and the real source behind them.
 
-Prefer codeorbit_explore over reading files. It returns verbatim source together
-with who calls each symbol and what it calls - treat what comes back as already
-read, and do not re-open those files.
+Prefer codeorbit_explore over reading files. It returns verbatim source for the
+best matches, with who calls each symbol and what it calls, and lists the next
+likely candidates one line each - treat what comes back as already read, and do
+not re-open those files. To check a listed candidate, call codeorbit_node on
+its name rather than reading its file.
 
 Typical order: codeorbit_overview on an unfamiliar project, codeorbit_explore
 for any "how does X work" question, codeorbit_node for one symbol in full,
@@ -97,7 +99,8 @@ def _not_indexed(root: Path) -> str:
 
 def _fmt_symbol(root: Path, conn, row, body_lines: int = MAX_BODY_LINES,
                 ledger: budgetmod.Ledger | None = None, source: bool = True,
-                neighbours: tuple[int, int] = (10, 12)) -> str:
+                neighbours: tuple[int, int] = (10, 12),
+                focus: set[str] | None = None) -> str:
     """One symbol: what it is, what touches it, and its body.
 
     `body_lines` is a budget rather than a constant, and `ledger` is what keeps
@@ -106,7 +109,7 @@ def _fmt_symbol(root: Path, conn, row, body_lines: int = MAX_BODY_LINES,
     a flat 120 lines per symbol times four symbols per call is not obviously
     cheaper than just opening one file.
     """
-    body = _body(root, row, body_lines, ledger) if source else ""
+    body = _body(root, row, body_lines, ledger, focus) if source else ""
     out = [
         f"## {row['kind']} {row['qname']}",
         f"{row['path']}:{row['start_line']}-{row['end_line']}  ({row['lang']})",
@@ -145,8 +148,47 @@ def _fmt_symbol(root: Path, conn, row, body_lines: int = MAX_BODY_LINES,
     return "\n".join(out)
 
 
-def _body(root: Path, row, body_lines: int, ledger: budgetmod.Ledger | None) -> str:
-    """The source, a pointer to it, or nothing."""
+def _focus(lines: list[str], budget: int, terms: set[str],
+           head: int = 3, radius: int = 5) -> list[str]:
+    """At most `budget` of a long body's lines: its first `head` (the
+    signature), then the stretches around the lines that share the most words
+    with the question, in source order, with the gaps marked.
+
+    The first N lines of a 300-line function are rarely where an issue lives;
+    the lines that mention what the issue mentions usually are.
+    """
+    from .rank import code_tokens
+    n = len(lines)
+    if n <= budget:
+        return lines
+    score = [sum(t in terms for t in code_tokens(l.split("|", 1)[-1])) for l in lines]
+    keep = set(range(min(head, n)))
+    for i in sorted(range(n), key=lambda i: (-score[i], i)):
+        if score[i] == 0 or len(keep) >= budget:
+            break
+        for j in range(max(0, i - radius), min(n, i + radius + 1)):
+            if len(keep) >= budget:
+                break
+            keep.add(j)
+    for j in range(n):                      # nothing matched well: plain top
+        if len(keep) >= budget:
+            break
+        keep.add(j)
+    out, prev = [], -1
+    for i in sorted(keep):
+        if i != prev + 1:
+            out.append("   ...")
+        out.append(lines[i])
+        prev = i
+    if prev < n - 1:
+        out.append("   ...")
+    return out
+
+
+def _body(root: Path, row, body_lines: int, ledger: budgetmod.Ledger | None,
+          focus: set[str] | None = None) -> str:
+    """The source, a pointer to it, or nothing. With `focus`, a body longer
+    than the budget keeps the lines that match those words, not its top."""
     start, end = row["start_line"], row["end_line"]
     cite = f"{row['path']}:{start}-{end}"
 
@@ -159,15 +201,20 @@ def _body(root: Path, row, body_lines: int, ledger: budgetmod.Ledger | None) -> 
                     f"({cite}), unchanged since. If it is no longer in your "
                     f"context, call codeorbit_node with detail=\"full\".")
 
-    src = query.source_of(root, row, max_lines=body_lines)
+    truncated = (end - start + 1) > body_lines
+    if focus and truncated:
+        whole = query.source_of(root, row, max_lines=end - start + 1)
+        src = "\n".join(_focus(whole.split("\n"), body_lines, focus)) if whole else ""
+    else:
+        src = query.source_of(root, row, max_lines=body_lines)
     if not src:
         return ""
     if ledger is not None:
         ledger.record(row["id"])
 
-    truncated = (end - start + 1) > body_lines
-    tail = (f"\n[body continues to line {end}; "
-            f"codeorbit_node with detail=\"full\" returns all of it]"
+    tail = ((f"\n[{body_lines} of {end - start + 1} lines, chosen by the question; "
+             if focus else f"\n[body continues to line {end}; ")
+            + "codeorbit_node with detail=\"full\" returns all of it]"
             if truncated else "")
     return f"\n```{row['lang']}\n{budgetmod.trim_source(src)}\n```{tail}"
 
@@ -289,7 +336,7 @@ def codeorbit_explore(root, conn, query_text: str, max_symbols: int = 2,
 # explore's shape. Measured, not guessed: the classic shape (four bodies of up
 # to 120 lines, ten callers and twelve callees each) was most of the ~10k tool
 # tokens per task in the agent pilot. More candidates, fewer bodies.
-EXPLORE_BODY_LINES = 80     # shared by the symbols that get source, tapered
+EXPLORE_BODY_LINES = 80     # the best match's source; the next gets about half
 EXPLORE_MORE = 6            # further candidates, one line each
 EXPLORE_NEIGHBOURS = (5, 6)  # callers, callees per symbol
 
@@ -302,11 +349,20 @@ def explore_text(root: Path, conn, query_text: str, max_symbols: int = 2,
         picks, more = ctxmod.retrieve(conn, query_text, max_symbols=max_symbols), []
         budget, near = MAX_BODY_LINES, (10, 12)
     else:
-        from . import rank
-        ids = rank.fusion_ranking(root, conn, query_text,
-                                  limit=max_symbols + EXPLORE_MORE)
-        rows = [r for r in (query.get_node(conn, i) for i in ids) if r is not None]
-        picks, more = rows[:max_symbols], rows[max_symbols:]
+        rows = explore_rows(root, conn, query_text, max_symbols + EXPLORE_MORE)
+        # Source goes to functions and methods: a class's "body" is its first
+        # lines - attributes, a docstring - while the method that matters is
+        # cut off. Classes stay in the list, with their members named.
+        # A function nested in one already chosen is inside its source.
+        picks = []
+        for r in rows:
+            if len(picks) >= max_symbols:
+                break
+            if r["kind"] in ("function", "method") and not any(
+                    r["qname"].startswith(p["qname"] + ".") for p in picks):
+                picks.append(r)
+        picks = picks or rows[:max_symbols]
+        more = [r for r in rows if r not in picks][:EXPLORE_MORE]
         budget, near = EXPLORE_BODY_LINES, EXPLORE_NEIGHBOURS
     if not picks:
         return (f"Nothing in the graph matched: {query_text!r}\n\n"
@@ -315,16 +371,45 @@ def explore_text(root: Path, conn, query_text: str, max_symbols: int = 2,
 
     ledger = _ledger_for(detail, [r["id"] for r in picks])
     budgets = budgetmod.allocate(len(picks), budget)
+    focus = None
+    if style != "classic":
+        from .rank import code_tokens
+        focus = {t for t in code_tokens(query_text) if t not in ctxmod.STOP and len(t) > 2}
     header = f"Retrieved {len(picks)} symbol(s) for: {query_text[:200]}\n"
     body = "\n\n".join(
         _fmt_symbol(root, conn, r, body_lines=lines, ledger=ledger,
-                    source=detail != "signatures", neighbours=near)
+                    source=detail != "signatures", neighbours=near, focus=focus)
         for r, lines in zip(picks, budgets))
     if more:
         body += "\n\nAlso likely (codeorbit_node <name> for any one):\n" + "\n".join(
-            f"  {r['kind']} {r['qname']}  ({r['path']}:{r['start_line']}-{r['end_line']})"
-            for r in more)
+            _one_line(conn, r) for r in more)
     return _clip(header + "\n\n" + body)
+
+
+def _one_line(conn, row) -> str:
+    line = f"  {row['kind']} {row['qname']}  ({row['path']}:{row['start_line']}-{row['end_line']})"
+    if row["kind"] == "class":
+        names = [m["name"] for m in query.members(conn, row["id"])]
+        if names:
+            line += "  members: " + ", ".join(names[:8]) + (" ..." if len(names) > 8 else "")
+    return line
+
+
+def explore_rows(root: Path, conn, query_text: str, limit: int) -> list:
+    """explore's ranking: fusion, with test code after the code it tests
+    unless the question is about tests. An agent asked where a bug lives
+    wants the implementation; a test helper that repeats the issue's words
+    otherwise takes a slot."""
+    import re as _re
+    from . import rank
+    from .rules import is_test_path
+    ids = rank.fusion_ranking(root, conn, query_text, limit=limit + 12)
+    rows = [r for r in (query.get_node(conn, i) for i in ids) if r is not None]
+    if not _re.search(r"\btests?\b|\btesting\b|pytest|unittest", query_text, _re.I):
+        is_test = [is_test_path(r["path"] or "") for r in rows]
+        rows = ([r for r, t in zip(rows, is_test) if not t]
+                + [r for r, t in zip(rows, is_test) if t])
+    return rows[:limit]
 
 
 @mcp.tool()

@@ -1,0 +1,105 @@
+"""codeorbit_explore's compact shape: what gets source, what is listed, and
+which lines of a long body are kept."""
+from __future__ import annotations
+
+import textwrap
+from pathlib import Path
+
+import pytest
+
+from codeorbit import budget, db, mcp_server as ms
+from codeorbit.indexer import index_project
+from codeorbit.resolve import resolve_project
+
+
+@pytest.fixture(scope="module")
+def project(tmp_path_factory) -> Path:
+    root = tmp_path_factory.mktemp("explore")
+    (root / "pkg").mkdir()
+    long_body = "\n".join(f"    x{i} = {i}" for i in range(150))
+    (root / "pkg" / "proxy.py").write_text(textwrap.dedent('''
+        class ProxyManager:
+            """Keeps proxies."""
+            def rebuild_proxy_auth(self, request):
+                return strip_proxy_header(request)
+
+        def strip_proxy_header(request):
+            def inner_proxy_header():
+                return request
+            return inner_proxy_header()
+    ''') + "\n\ndef send_request(request):\n" + long_body
+        + "\n    proxy_header = request.proxy_header\n    return proxy_header\n",
+        encoding="utf-8")
+    (root / "tests").mkdir()
+    (root / "tests" / "test_proxy.py").write_text(
+        "def test_proxy_header_is_stripped_from_proxy_auth():\n"
+        "    proxy_header = 'proxy auth header'\n    assert proxy_header\n",
+        encoding="utf-8")
+    index_project(root)
+    resolve_project(root)
+    return root
+
+
+def explore(root: Path, q: str) -> str:
+    ms.LEDGER = budget.Ledger()
+    conn = db.connect(root)
+    try:
+        return ms.explore_text(root, conn, q, max_symbols=2)
+    finally:
+        conn.close()
+
+
+def headers(text: str) -> list[str]:
+    return [l[3:] for l in text.splitlines() if l.startswith("## ")]
+
+
+def test_test_code_comes_after_the_code_it_tests(project):
+    conn = db.connect(project)
+    rows = ms.explore_rows(project, conn, "proxy header stripped from proxy auth", 10)
+    conn.close()
+    paths = [r["path"] for r in rows]
+    tests = [i for i, p in enumerate(paths) if p.startswith("tests/")]
+    code = [i for i, p in enumerate(paths) if not p.startswith("tests/")]
+    assert tests and code and max(code) < min(tests)
+
+
+def test_a_question_about_tests_keeps_them_in_place(project):
+    conn = db.connect(project)
+    rows = ms.explore_rows(project, conn, "which test checks the proxy header", 10)
+    conn.close()
+    assert rows[0]["path"].startswith("tests/")
+
+
+def test_source_goes_to_functions_not_classes_or_nested_ones(project):
+    out = explore(project, "ProxyManager rebuild_proxy_auth strip_proxy_header")
+    got = headers(out)
+    assert all(h.split()[0] in ("function", "method") for h in got)
+    assert not any("inner_proxy_header" in h for h in got)     # inside a pick
+    assert "class pkg.proxy.ProxyManager" in out                # listed instead
+    assert "members: rebuild_proxy_auth" in out
+
+
+def test_a_long_body_keeps_the_lines_the_question_is_about():
+    lines = [f"{i:>4} | x{i} = {i}" for i in range(1, 201)]
+    lines[149] = " 150 | proxy_header = request.proxy_header"
+    kept = ms._focus(lines, 30, {"proxy", "header"})
+    assert len([l for l in kept if "|" in l]) <= 30
+    assert kept[0].startswith("   1 |")                         # signature first
+    assert any("proxy_header" in l for l in kept)
+    assert "   ..." in kept
+
+
+def test_a_short_body_is_untouched():
+    lines = [f"{i} | y" for i in range(10)]
+    assert ms._focus(lines, 30, {"y"}) == lines
+
+
+def test_source_is_capped_and_lands_on_the_matching_lines(project):
+    # Not "always smaller than classic": on a small project classic can return
+    # four tiny wrong functions. What compact guarantees is a cap on source
+    # lines, spent on the lines the question names.
+    out = explore(project, "send_request proxy header")
+    assert "pkg.proxy.send_request" in out
+    source = [l for l in out.splitlines() if " | " in l]
+    assert len(source) <= sum(budget.allocate(2, ms.EXPLORE_BODY_LINES))
+    assert any("proxy_header = request.proxy_header" in l for l in source)
