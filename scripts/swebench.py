@@ -31,11 +31,13 @@ counts for file-level scores and is excluded from function-level ones.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import json
 import platform
 import random
 import re
+import signal
 import sys
 import time
 from collections import Counter
@@ -63,6 +65,25 @@ CACHE = REPO / "bench" / "swebench"             # downloaded task files, not com
 CHECKOUTS = REPO / "bench" / "repos" / "swe"
 QUESTION_CHARS = 4000       # issue text given to every arm; long issues are cut here
 
+
+
+@contextlib.contextmanager
+def task_deadline(seconds: int):
+    """Raise TimeoutError in the block after `seconds` (SIGALRM; no-op elsewhere)."""
+    if not seconds or not hasattr(signal, "SIGALRM"):
+        yield
+        return
+
+    def fire(signum, frame):
+        raise TimeoutError(f"task took over {seconds}s")
+
+    old = signal.signal(signal.SIGALRM, fire)
+    signal.alarm(seconds)
+    try:
+        yield
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, old)
 
 
 # --------------------------------------------------------------- dataset
@@ -544,18 +565,24 @@ def run(args) -> None:
         dest = Path(args.checkouts) / f"{owner}__{name}"
         print(f"[{n}/{len(tasks)}] {iid}", flush=True)
 
+        conn = None
         try:
-            t0 = time.perf_counter()
-            checkout(f"https://github.com/{task['repo']}", task["base_commit"], dest)
-            index_project(dest)
-            resolve_project(dest)
-            index_s = time.perf_counter() - t0
-            conn = db.connect(dest)
-            if args.embed:
-                from codeorbit import semantic
-                semantic.build(conn, dest)
+            # A stalled fetch or embedding request hung a Kaggle run for hours
+            # on one task; give up on the task instead (POSIX only).
+            with task_deadline(args.task_timeout):
+                t0 = time.perf_counter()
+                checkout(f"https://github.com/{task['repo']}", task["base_commit"], dest)
+                index_project(dest)
+                resolve_project(dest)
+                index_s = time.perf_counter() - t0
+                conn = db.connect(dest)
+                if args.embed:
+                    from codeorbit import semantic
+                    semantic.build(conn, dest)
         except Exception as e:      # noqa: BLE001 - one bad task must not end the run
-            print(f"    skipped: {type(e).__name__}: {e}")
+            print(f"    skipped: {type(e).__name__}: {e}", flush=True)
+            if conn is not None:
+                conn.close()
             continue
 
         live, why = bench.semantic_probe(conn)
@@ -720,6 +747,9 @@ def main() -> None:
                         "synced folder (OneDrive, Google Drive): several GB of files")
     r.add_argument("--out", default=str(REPO / "bench" / "runs"),
                    help="where run folders are written, e.g. a mounted Drive on Colab")
+    r.add_argument("--task-timeout", type=int, default=3600, metavar="S",
+                   help="skip a task whose checkout, index and embedding take longer "
+                        "(0 = no limit; POSIX only)")
     r.add_argument("--max-hours", type=float,
                    help="stop cleanly between tasks after this long (hosted sessions "
                         "with a hard limit, e.g. Kaggle's 12 h); resume to continue")

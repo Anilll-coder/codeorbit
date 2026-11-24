@@ -23,8 +23,9 @@ sys.path.insert(0, str(REPO))
 
 
 def git(*args: str, cwd: Path | None = None) -> str:
+    # A fetch that stalls on the network must fail, not hang the run.
     return subprocess.run(["git", *args], cwd=cwd, check=True,
-                          capture_output=True, text=True).stdout.strip()
+                          capture_output=True, text=True, timeout=900).stdout.strip()
 
 
 def checkout(url: str, commit: str, dest: Path) -> None:
