@@ -96,7 +96,8 @@ def _not_indexed(root: Path) -> str:
 
 
 def _fmt_symbol(root: Path, conn, row, body_lines: int = MAX_BODY_LINES,
-                ledger: budgetmod.Ledger | None = None, source: bool = True) -> str:
+                ledger: budgetmod.Ledger | None = None, source: bool = True,
+                neighbours: tuple[int, int] = (10, 12)) -> str:
     """One symbol: what it is, what touches it, and its body.
 
     `body_lines` is a budget rather than a constant, and `ledger` is what keeps
@@ -118,7 +119,7 @@ def _fmt_symbol(root: Path, conn, row, body_lines: int = MAX_BODY_LINES,
         out.append(f"doc: {row['docstring'][:400]}")
 
     # One line per neighbour with all its call lines, not one per call site.
-    callers = ctxmod.group_neighbours(query.callers(conn, row["id"], limit=40), 10)
+    callers = ctxmod.group_neighbours(query.callers(conn, row["id"], limit=40), neighbours[0])
     if callers:
         out.append("\ncalled by:")
         for c in callers:
@@ -127,7 +128,7 @@ def _fmt_symbol(root: Path, conn, row, body_lines: int = MAX_BODY_LINES,
     else:
         out.append("\ncalled by: nothing in this project")
 
-    callees = ctxmod.group_neighbours(query.callees(conn, row["id"], limit=48), 12)
+    callees = ctxmod.group_neighbours(query.callees(conn, row["id"], limit=48), neighbours[1])
     if callees:
         out.append("\ncalls:")
         for c in callees:
@@ -261,7 +262,7 @@ mcp = MCPServer(name="codeorbit", instructions=INSTRUCTIONS)
 
 @mcp.tool()
 @graph_tool
-def codeorbit_explore(root, conn, query_text: str, max_symbols: int = 4,
+def codeorbit_explore(root, conn, query_text: str, max_symbols: int = 2,
                       detail: str = "auto") -> str:
     """PRIMARY TOOL. Answer a question about this codebase from its call graph.
 
@@ -271,25 +272,59 @@ def codeorbit_explore(root, conn, query_text: str, max_symbols: int = 4,
     (including qualified ones like Class.method) sharpens the result. Treat the
     source it returns as already read - do not open those files again.
 
+    max_symbols: how many of the best matches arrive with source (default 2).
+    The next ones are listed one line each - kind, name, file:lines - so a
+    candidate is visible without paying for its body; call codeorbit_node on
+    one to read it.
+
     detail: "auto" spends the most lines on the best match and tapers, and
     omits a body this session has already sent you. "full" resends everything
     - use it if the earlier response has fallen out of your context.
     "signatures" returns names, docs and call relationships with no bodies at
     all, which is the cheapest way to see the shape of an area.
     """
-    picks = ctxmod.retrieve(conn, query_text, max_symbols=max_symbols)
+    return explore_text(root, conn, query_text, max_symbols, detail)
+
+
+# explore's shape. Measured, not guessed: the classic shape (four bodies of up
+# to 120 lines, ten callers and twelve callees each) was most of the ~10k tool
+# tokens per task in the agent pilot. More candidates, fewer bodies.
+EXPLORE_BODY_LINES = 80     # shared by the symbols that get source, tapered
+EXPLORE_MORE = 6            # further candidates, one line each
+EXPLORE_NEIGHBOURS = (5, 6)  # callers, callees per symbol
+
+
+def explore_text(root: Path, conn, query_text: str, max_symbols: int = 2,
+                 detail: str = "auto", style: str = "compact") -> str:
+    """explore's response. `style="classic"` is the previous shape and ranking,
+    kept so the benchmark can score both on the same tasks."""
+    if style == "classic":
+        picks, more = ctxmod.retrieve(conn, query_text, max_symbols=max_symbols), []
+        budget, near = MAX_BODY_LINES, (10, 12)
+    else:
+        from . import rank
+        ids = rank.fusion_ranking(root, conn, query_text,
+                                  limit=max_symbols + EXPLORE_MORE)
+        rows = [r for r in (query.get_node(conn, i) for i in ids) if r is not None]
+        picks, more = rows[:max_symbols], rows[max_symbols:]
+        budget, near = EXPLORE_BODY_LINES, EXPLORE_NEIGHBOURS
     if not picks:
         return (f"Nothing in the graph matched: {query_text!r}\n\n"
                 "Try codeorbit_search with a single identifier to see what "
                 "exists, or codeorbit_overview for the project's main symbols.")
 
     ledger = _ledger_for(detail, [r["id"] for r in picks])
-    budgets = budgetmod.allocate(len(picks), MAX_BODY_LINES)
-    header = f"Retrieved {len(picks)} symbol(s) for: {query_text}\n"
-    return _clip(header + "\n\n" + "\n\n".join(
+    budgets = budgetmod.allocate(len(picks), budget)
+    header = f"Retrieved {len(picks)} symbol(s) for: {query_text[:200]}\n"
+    body = "\n\n".join(
         _fmt_symbol(root, conn, r, body_lines=lines, ledger=ledger,
-                    source=detail != "signatures")
-        for r, lines in zip(picks, budgets)))
+                    source=detail != "signatures", neighbours=near)
+        for r, lines in zip(picks, budgets))
+    if more:
+        body += "\n\nAlso likely (codeorbit_node <name> for any one):\n" + "\n".join(
+            f"  {r['kind']} {r['qname']}  ({r['path']}:{r['start_line']}-{r['end_line']})"
+            for r in more)
+    return _clip(header + "\n\n" + body)
 
 
 @mcp.tool()

@@ -80,6 +80,8 @@ REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
 
 from codeorbit import context as ctxmod          # noqa: E402
+from codeorbit.rank import (  # noqa: E402,F401 - moved to the product, re-exported
+    BM25, FUSION, Sources, code_tokens, dense_ids, fuse, names_code, rrf)
 from codeorbit import db, query                  # noqa: E402
 from codeorbit.scanner import scan, sha1         # noqa: E402
 
@@ -87,12 +89,12 @@ CHAR_BUDGET = 6000          # identical for every arm
 RANK_DEPTH = 10             # candidates scored by the ranking metrics
 READ_DEPTH = 50             # candidates kept for the tokens-to-locate simulation
 ALL_ARMS = ["grep", "bm25", "dense", "hybrid", "graph-kw", "graph-noexp", "codeorbit",
-            "hybrid-graph", "fusion"]
+            "hybrid-graph", "fusion", "explore-classic", "explore"]
 # grep is still runnable by name (the README's rich pilot reports it), but it
 # lost every comparison - 2% top-5 recall on SWE-bench - so it is not run by
 # default and its whole-repository scan no longer slows every task.
-DEFAULT_ARMS = [a for a in ALL_ARMS if a != "grep"]
-SEMANTIC_ARMS = {"dense", "hybrid", "hybrid-graph", "fusion"}
+DEFAULT_ARMS = [a for a in ALL_ARMS if a not in ("grep", "explore-classic", "explore")]
+SEMANTIC_ARMS = {"dense", "hybrid", "hybrid-graph", "fusion", "explore"}
 
 
 @dataclass
@@ -149,25 +151,6 @@ def unit_matches(u: Unit, target: str) -> bool:
 
 
 # --------------------------------------------------------------- source access
-
-class Sources:
-    """File lines, read once. Symbol bodies are sliced from here."""
-
-    def __init__(self, root: Path):
-        self.root = root
-        self._lines: dict[str, list[str]] = {}
-
-    def body(self, row) -> str:
-        lines = self._lines.get(row["path"])
-        if lines is None:
-            try:
-                lines = (self.root / row["path"]).read_text(
-                    encoding="utf-8", errors="replace").splitlines()
-            except OSError:
-                lines = []
-            self._lines[row["path"]] = lines
-        return "\n".join(lines[row["start_line"] - 1:row["end_line"]])
-
 
 def symbol_unit(src: Sources, row) -> Unit:
     head = (f"### {row['kind']} {row['qname']}\n"
@@ -233,106 +216,6 @@ def grep_units(root: Path, question: str) -> list[Unit]:
 
 # --------------------------------------------------------------- bm25 arm
 
-_IDENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
-_CAMEL = re.compile(r"[A-Z]+(?=[A-Z][a-z])|[A-Z]?[a-z]+|[A-Z]+|[0-9]+")
-
-
-def code_tokens(text: str) -> list[str]:
-    """Identifiers, plus their snake_case / camelCase parts, lower-cased."""
-    out = []
-    for ident in _IDENT.findall(text):
-        low = ident.lower()
-        out.append(low)
-        parts = [p.lower() for piece in ident.split("_") for p in _CAMEL.findall(piece)]
-        if len(parts) > 1:
-            out.extend(p for p in parts if len(p) > 1)
-    return out
-
-
-class BM25:
-    """Okapi BM25 over function/class/method chunks.
-
-    Module nodes are left out: a whole file is a chunk no code-RAG would use,
-    and it would win every query on term frequency alone.
-    """
-
-    def __init__(self, conn, src: Sources, k1: float = 1.2, b: float = 0.75):
-        self.k1, self.b = k1, b
-        self.ids: list[int] = []
-        self.lengths: list[int] = []
-        self.postings: dict[str, list[tuple[int, int]]] = {}
-        rows = conn.execute(
-            f"SELECT {query.NODE_COLS} FROM nodes n JOIN files f ON f.id = n.file_id "
-            "WHERE n.kind != 'module'").fetchall()
-        for row in rows:
-            doc = " ".join(filter(None, [
-                row["kind"], row["name"], row["qname"], row["signature"],
-                row["docstring"], src.body(row)]))
-            toks = code_tokens(doc)
-            tf: dict[str, int] = {}
-            for t in toks:
-                tf[t] = tf.get(t, 0) + 1
-            d = len(self.ids)
-            self.ids.append(row["id"])
-            self.lengths.append(len(toks))
-            for t, n in tf.items():
-                self.postings.setdefault(t, []).append((d, n))
-        self.n = len(self.ids)
-        self.avgdl = (sum(self.lengths) / self.n) if self.n else 1.0
-
-    def search(self, question: str, limit: int) -> list[int]:
-        terms = {t for t in code_tokens(question) if t not in ctxmod.STOP}
-        scores: dict[int, float] = {}
-        for t in terms:
-            post = self.postings.get(t)
-            if not post:
-                continue
-            idf = math.log(1 + (self.n - len(post) + 0.5) / (len(post) + 0.5))
-            for d, tf in post:
-                norm = tf + self.k1 * (1 - self.b + self.b * self.lengths[d] / self.avgdl)
-                scores[d] = scores.get(d, 0.0) + idf * tf * (self.k1 + 1) / norm
-        best = sorted(scores.items(), key=lambda p: -p[1])[:limit]
-        return [self.ids[d] for d, _ in best]
-
-
-# --------------------------------------------------------------- fusion
-
-def rrf(lists: list[list], limit: int, weights: list[float] | None = None,
-        depths: list[int | None] | None = None) -> list:
-    """Reciprocal rank fusion. A list's vote is scaled by its weight and stops
-    after its depth, so a noisy list can break ties without outvoting the rest."""
-    fused: dict = {}
-    for i, ids in enumerate(lists):
-        w = weights[i] if weights else 1.0
-        d = depths[i] if depths and depths[i] else len(ids)
-        for rank, nid in enumerate(ids[:d]):
-            fused[nid] = fused.get(nid, 0.0) + w / (ctxmod.RRF_K + rank + 1)
-    return [nid for nid, _ in sorted(fused.items(), key=lambda p: -p[1])[:limit]]
-
-
-# The fusion arm's name-search vote. Equal weight, full depth is where it
-# started; scripts/tune_fusion.py measures alternatives on the development
-# tasks from saved lists, and the chosen setting is frozen here.
-FUSION = {"name_weight": 1.0, "name_depth": None, "only_coded": False}
-
-_CODED = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)+"
-                    r"|\b[a-z]+_[a-z_0-9]+\b|\b[a-z]+[A-Z][A-Za-z0-9]*\b")
-
-
-def names_code(text: str) -> bool:
-    """Does the text name something the way code does (a.b, snake_case, camelCase)?"""
-    return bool(_CODED.search(text))
-
-
-def fuse(name: list, bm25_ids: list, dense: list, text: str, limit: int,
-         settings: dict = FUSION) -> list:
-    use_name = not settings["only_coded"] or names_code(text)
-    lists = ([name] if use_name else []) + [bm25_ids, dense]
-    weights = ([settings["name_weight"]] if use_name else []) + [1.0, 1.0]
-    depths = ([settings["name_depth"]] if use_name else []) + [None, None]
-    return rrf(lists, limit, weights, depths)
-
-
 def node_units(conn, src: Sources, ids: list[int]) -> list[Unit]:
     out = []
     for nid in ids:
@@ -340,11 +223,6 @@ def node_units(conn, src: Sources, ids: list[int]) -> list[Unit]:
         if row is not None:
             out.append(symbol_unit(src, row))
     return out
-
-
-def dense_ids(conn, question: str, limit: int) -> list[int]:
-    from codeorbit import semantic as sem
-    return [nid for _, nid in sem.search(conn, question, limit=limit)]
 
 
 # --------------------------------------------------------------- arms
@@ -379,6 +257,25 @@ def run_arm(arm: str, q: Question, root: Path, conn, src: Sources,
                  if r["id"] not in seen]
         ranked = [graph_unit(r) for r in rows]
         return ArmOutput(ranked, text[:budget], secs)
+
+    if arm in ("explore", "explore-classic"):
+        # Exactly what an agent's codeorbit_explore call returns for the issue
+        # text, from a fresh session - not clipped to the shared budget, because
+        # the agent is not clipped either. "found" and "tokens" are then the
+        # tool's own reach and cost; explore-classic is the previous shape.
+        from codeorbit import budget as budgetmod, mcp_server, rank
+        mcp_server.LEDGER = budgetmod.Ledger()
+        style = "classic" if arm == "explore-classic" else "compact"
+        t0 = time.perf_counter()
+        text = mcp_server.explore_text(root, conn, q.text, style=style,
+                                       max_symbols=4 if style == "classic" else 2)
+        secs = time.perf_counter() - t0
+        if style == "classic":
+            rows = ctxmod.retrieve(conn, q.text, READ_DEPTH, semantic=semantic_live)
+        else:
+            rows = [r for r in (query.get_node(conn, i) for i in
+                                rank.fusion_ranking(root, conn, q.text, READ_DEPTH)) if r]
+        return ArmOutput([graph_unit(r) for r in rows], text, secs)
 
     if arm in ("hybrid-graph", "fusion"):
         # hybrid-graph: the hybrid ranking, given CodeOrbit's graph context -
