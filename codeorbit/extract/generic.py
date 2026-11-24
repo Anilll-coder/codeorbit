@@ -1,23 +1,10 @@
-"""One extractor for every language CodeOrbit has a grammar for.
+"""One table-driven extractor for every language without a hand-written one.
 
 Writing a hand-tuned extractor per language does not scale past about three.
 This one is driven by a `Spec` - which node types are definitions, which are
-calls, which are imports - so a new language is a table entry, and a language
-with no entry at all still works because `infer_spec` reads the node types out
-of the grammar itself and classifies them by name.
-
-That inference is the part worth defending. Tree-sitter grammars are written by
-different people over a decade and they still converge hard on naming:
-`function_definition`, `function_declaration`, `function_item`, `method_declaration`,
-`class_declaration`, `struct_item`, `call_expression`, `import_declaration`. So
-matching on the node-type name recovers most of the structure of a language
-nobody here has ever looked at. It is not as good as a tuned spec - which is why
-the twenty-odd languages people actually run this on have one - but the
-alternative for the long tail is indexing nothing at all.
-
-The deny list matters as much as the allow list. `class_body`, `function_type`,
-`call_argument` and `enum_variant` all match the allow patterns and none of them
-is a definition or a call, so a suffix deny list runs first.
+calls, which are imports - so a new language is a table entry. Only languages
+with a table entry that was checked on real code are read; there is no
+fallback that guesses node types from a grammar.
 
 What comes out is the same `Extraction` the Python and JavaScript extractors
 produce: symbols, call sites, imports, base types. Resolution downstream does
@@ -32,7 +19,7 @@ from .base import CallSite, Extraction, ImportStmt, Symbol, line_of, text
 
 # `vector<T>::push` -> `vector::push`; innermost first so nested args go too.
 _TEMPLATE_ARGS = re.compile(r"<[^<>]*>")
-_C_FAMILY = {"c", "cpp", "cuda", "objc"}
+_C_FAMILY = {"c", "cpp"}
 
 
 def _c_name(nm: str) -> str:
@@ -108,120 +95,6 @@ IDENT_TYPES = frozenset({
     "value_identifier", "label_name", "var_name", "shorthand_property_identifier",
 })
 
-# Node types that match an allow pattern but are never a definition or a call.
-DENY_SUFFIXES = (
-    "_body", "_block", "_list", "_type", "_types", "_parameter", "_parameters",
-    "_argument", "_arguments", "_clause", "_modifier", "_modifiers", "_name",
-    "_names", "_identifier", "_path", "_pattern", "_constraint", "_bound",
-    "_bounds", "_field", "_fields", "_member", "_members", "_variant",
-    "_constant", "_suffix", "_qualifier", "_reference", "_alias", "_literal",
-    "_case", "_entry", "_value", "_spec_list", "_declarations", "_signature_item",
-)
-
-FUNC_PATTERNS = (
-    "function_definition", "function_declaration", "function_item",
-    "function_statement", "function_specification",
-    "method_definition", "method_declaration", "method_spec", "method_elem",
-    "subroutine_declaration_statement", "procedure_declaration",
-    "procedure_definition", "constructor_declaration", "constructor_definition",
-    "local_function_statement", "singleton_method", "macro_definition",
-    "modifier_definition", "operator_declaration", "func_declaration",
-    "fn_declaration", "create_function", "create_procedure",
-    "function_signature", "secondary_constructor", "primary_constructor",
-    # `_def` spellings: Crystal's method_def, Nim's proc, Scheme's define.
-    "method_def", "func_def", "proc_def", "fun_def", "sub_def",
-    "function_def", "macro_def", "routine_def", "define_function",
-)
-FUNC_EXACT = frozenset({"function", "method", "subroutine", "procedure", "def",
-                        "function_clause", "FnProto", "routine", "proc", "fun",
-                        "fn", "defun", "func", "define", "lambda"})
-
-CLASS_PATTERNS = (
-    "class_declaration", "class_definition", "class_specifier",
-    "class_interface", "class_implementation", "struct_item",
-    "struct_specifier", "struct_declaration", "struct_definition",
-    "interface_declaration", "interface_definition", "trait_item",
-    "trait_declaration", "trait_definition", "enum_item", "enum_declaration",
-    "enum_specifier", "enum_definition", "object_declaration",
-    "object_definition", "protocol_declaration", "impl_item",
-    "module_definition", "record_declaration", "mixin_declaration",
-    "union_specifier", "actor_declaration", "namespace_definition",
-    "abstract_class_declaration",
-    "class_def", "struct_def", "module_def", "enum_def", "trait_def",
-    "object_def", "record_def", "protocol_def", "union_def", "actor_def",
-    "interface_def",
-)
-CLASS_EXACT = frozenset({"class", "module", "struct", "interface", "trait",
-                         "enum", "protocol", "object", "record", "type_spec"})
-
-CALL_PATTERNS = (
-    "call_expression", "call_statement", "function_call",
-    "function_call_expression", "method_invocation", "invocation_expression",
-    "method_call_expression", "member_call_expression",
-    "scoped_call_expression", "macro_invocation", "macrocall_expression",
-    "object_creation_expression", "new_expression", "constructor_invocation",
-    "command_invocation", "procedure_call", "call_instruction",
-)
-CALL_EXACT = frozenset({"call", "invocation", "application", "command"})
-
-IMPORT_PATTERNS = (
-    "import_statement", "import_declaration", "import_from_statement",
-    "import_header", "import_spec", "import_directive", "import_attribute",
-    "foreign_import", "library_import", "module_import", "import_or_export",
-    "use_declaration", "use_statement", "using_directive", "using_declaration",
-    "preproc_include", "pp_include", "include_expression", "require_expression",
-    "namespace_use_declaration", "open_module", "include_module",
-    "import_or_export_statement", "package_import",
-)
-IMPORT_EXACT = frozenset({"import", "use", "require", "include", "open",
-                          "using", "imports"})
-
-
-def _classify(kind: str) -> str | None:
-    """Which bucket a node type falls in, by its name alone."""
-    if kind.endswith(DENY_SUFFIXES):
-        return None
-    if kind in FUNC_EXACT or any(p in kind for p in FUNC_PATTERNS):
-        return "func"
-    if kind in CLASS_EXACT or any(p in kind for p in CLASS_PATTERNS):
-        return "class"
-    if kind in IMPORT_EXACT or any(p in kind for p in IMPORT_PATTERNS):
-        return "import"
-    if kind in CALL_EXACT or any(p in kind for p in CALL_PATTERNS):
-        return "call"
-    return None
-
-
-def infer_spec(language) -> Spec:
-    """Build a Spec by reading the node types out of a grammar.
-
-    The fallback for every language nobody has written a table entry for.
-    """
-    buckets: dict[str, set[str]] = {"func": set(), "class": set(),
-                                    "call": set(), "import": set()}
-    try:
-        count = language.node_kind_count
-    except Exception:      # noqa: BLE001 - a grammar that will not introspect
-        return Spec()
-    for i in range(count):
-        try:
-            if not language.node_kind_is_named(i):
-                continue
-            kind = language.node_kind_for_id(i)
-        except Exception:  # noqa: BLE001
-            continue
-        bucket = _classify(kind)
-        if bucket:
-            buckets[bucket].add(kind)
-
-    return Spec(
-        funcs=frozenset(buckets["func"]),
-        classes=frozenset(buckets["class"]),
-        calls=frozenset(buckets["call"]),
-        imports=frozenset(buckets["import"]),
-    )
-
-
 # ------------------------------------------------------------ tuned specs
 #
 # Hand-checked against a real file per language. Inference gets most of these
@@ -288,25 +161,6 @@ TUNED: dict[str, Spec] = {
         imports=("preproc_include", "using_declaration"),
         heritage=("base_class_clause",),
     ),
-    "objc": _s(
-        funcs=("function_definition", "method_definition", "method_declaration"),
-        classes=("class_interface", "class_implementation", "protocol_declaration",
-                 "struct_specifier", "enum_specifier"),
-        calls=("call_expression", "message_expression"),
-        imports=("preproc_include", "module_import"),
-    ),
-    "csharp": _s(
-        funcs=("method_declaration", "constructor_declaration",
-               "local_function_statement", "destructor_declaration",
-               "operator_declaration"),
-        classes=("class_declaration", "interface_declaration",
-                 "struct_declaration", "record_declaration",
-                 "enum_declaration"),
-        namespaces=("namespace_declaration", "file_scoped_namespace_declaration"),
-        calls=("invocation_expression", "object_creation_expression"),
-        imports=("using_directive",),
-        heritage=("base_list",),
-    ),
     "ruby": _s(
         funcs=("method", "singleton_method"),
         classes=("class", "module", "singleton_class"),
@@ -364,71 +218,6 @@ TUNED: dict[str, Spec] = {
         imports=("import_or_export", "library_import"),
         heritage=("superclass", "interfaces"),
     ),
-    "lua": _s(
-        funcs=("function_declaration", "function_definition"),
-        classes=(),
-        calls=("function_call",),
-        imports=(),
-        import_calls=("require",),
-    ),
-    "julia": _s(
-        funcs=("function_definition", "macro_definition", "short_function_definition"),
-        classes=("struct_definition", "abstract_definition", "module_definition"),
-        calls=("call_expression", "macrocall_expression", "broadcast_call_expression"),
-        imports=("import_statement", "using_statement"),
-    ),
-    "r": _s(
-        funcs=("function_definition",),
-        calls=("call",),
-        import_calls=("library", "require", "source"),
-    ),
-    "perl": _s(
-        funcs=("subroutine_declaration_statement", "method_declaration_statement"),
-        classes=("package_statement", "class_statement"),
-        calls=("function_call_expression", "method_call_expression",
-               "ambiguous_function_call_expression"),
-        imports=("use_statement", "require_expression"),
-    ),
-    "haskell": _s(
-        funcs=("function", "bind"),
-        classes=("class", "data_type", "newtype"),
-        calls=("apply",),
-        imports=("import",),
-        skip=("signature", "type_alias", "data_type"),
-    ),
-    "erlang": _s(
-        funcs=("fun_decl", "function_clause"),
-        classes=(),
-        calls=("call",),
-        imports=("import_attribute", "pp_include", "pp_include_lib"),
-    ),
-    "elixir": _s(calls=("call",), hook="elixir"),
-    "bash": _s(funcs=("function_definition",), calls=("command",),
-               import_calls=("source", ".")),
-    "zsh": _s(funcs=("function_definition",), calls=("command",)),
-    "solidity": _s(
-        funcs=("function_definition", "constructor_definition",
-               "modifier_definition", "fallback_receive_definition"),
-        classes=("contract_declaration", "interface_declaration",
-                 "library_declaration", "struct_declaration", "enum_declaration"),
-        calls=("call_expression",),
-        imports=("import_directive",),
-        heritage=("inheritance_specifier",),
-    ),
-    "zig": _s(funcs=("FnProto",), classes=("ContainerDecl",),
-              calls=("SuffixExpr",), name_fields=("name",)),
-    "elm": _s(funcs=("value_declaration",), classes=("type_declaration",),
-              calls=("function_call_expr",), imports=("import_clause",)),
-    "ocaml": _s(funcs=("let_binding", "method_definition"),
-                classes=("class_definition", "module_definition", "type_definition"),
-                calls=("application_expression",),
-                imports=("open_module", "include_module")),
-    "gdscript": _s(funcs=("function_definition",), classes=("class_definition",),
-                   calls=("call",), imports=("extends_statement",)),
-    "groovy": _s(funcs=("function_definition",), classes=("class_definition",),
-                 calls=("function_call", "juxt_function_call")),
-    "terraform": _s(classes=("block",), calls=("function_call",)),
-    "hcl": _s(classes=("block",), calls=("function_call",)),
 }
 
 
@@ -735,95 +524,5 @@ def extract(tree, src: bytes, module_qname: str, lang: str, spec: Spec) -> Extra
 
             walk(child, scope, in_class)
 
-    if spec.hook == "elixir":
-        _elixir(root, src, out, module_qname, unique)
-    else:
-        walk(root, module_qname, False)
-    return out
-
-
-# ---------------------------------------------------------------- elixir
-#
-# Elixir has no definition node at all: `defmodule`, `def` and `defp` are
-# ordinary calls to macros, so the generic walk sees a file of function calls
-# and no functions. Matching on the macro name is the only way in.
-
-_ELIXIR_DEF = {"def", "defp", "defmacro", "defmacrop", "defdelegate", "defn"}
-_ELIXIR_MOD = {"defmodule", "defprotocol", "defimpl"}
-_ELIXIR_IMPORT = {"import", "alias", "require", "use"}
-
-
-def _elixir(root, src: bytes, out: Extraction, module_qname: str, unique) -> None:
-    def call_target(node) -> str | None:
-        fn = node.child_by_field_name("target")
-        if fn is None:
-            fn = node.named_children[0] if node.named_children else None
-        return (text(fn, src).strip()
-                if fn is not None and fn.type == "identifier" else None)
-
-    def first_arg_name(node) -> str | None:
-        args = next((c for c in node.named_children if c.type == "arguments"), None)
-        if args is None or not args.named_children:
-            return None
-        first = args.named_children[0]
-        if first.type == "call":                 # def go(x) -> call go(x)
-            inner = first.child_by_field_name("target") or (
-                first.named_children[0] if first.named_children else None)
-            return text(inner, src).strip()[:120] if inner is not None else None
-        if first.type == "binary_operator":      # def go(x) when is_int(x)
-            left = first.named_children[0] if first.named_children else None
-            if left is not None and left.type == "call":
-                inner = left.child_by_field_name("target")
-                if inner is not None:
-                    return text(inner, src).strip()[:120]
-        return text(first, src).strip()[:120] or None
-
-    def walk(node, scope: str, in_module: bool) -> None:
-        for child in node.named_children:
-            if child.type != "call":
-                walk(child, scope, in_module)
-                continue
-
-            target = call_target(child)
-
-            if target in _ELIXIR_MOD:
-                nm = (first_arg_name(child) or "?").lstrip(":")
-                q = unique(f"{scope}.{nm}")
-                out.symbols.append(Symbol(
-                    name=nm.rsplit(".", 1)[-1], qname=q, kind="class",
-                    start_line=line_of(child), end_line=child.end_point[0] + 1,
-                    parent=scope,
-                ))
-                walk(child, q, True)
-                continue
-
-            if target in _ELIXIR_DEF:
-                nm = first_arg_name(child)
-                if nm:
-                    q = unique(f"{scope}.{nm}")
-                    out.symbols.append(Symbol(
-                        name=nm, qname=q,
-                        kind="method" if in_module else "function",
-                        start_line=line_of(child), end_line=child.end_point[0] + 1,
-                        parent=scope,
-                    ))
-                    walk(child, q, False)
-                    continue
-
-            if target in _ELIXIR_IMPORT:
-                out.imports.append(ImportStmt(
-                    (first_arg_name(child) or "?"), None, None, line_of(child)))
-                continue
-
-            if target:
-                out.calls.append(CallSite(scope, target, None, line_of(child)))
-            else:
-                # `Mod.fun(x)` - the callee is a dot expression, not an identifier.
-                fn = child.named_children[0] if child.named_children else None
-                if fn is not None:
-                    name, recv = _split_qualified(text(fn, src))
-                    if name:
-                        out.calls.append(CallSite(scope, name, recv, line_of(child)))
-            walk(child, scope, in_module)
-
     walk(root, module_qname, False)
+    return out

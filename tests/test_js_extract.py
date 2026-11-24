@@ -27,3 +27,20 @@ def test_prototype_assignment_is_a_method_of_its_owner():
 
 def test_plain_value_assignment_is_not_a_symbol():
     assert set(symbols("module.exports = { a: 1 };\nx.y = 3;\n")) == {"m"}
+
+
+def test_a_named_function_expression_anywhere_is_a_symbol():
+    # axios lib/adapters/http.js: the whole adapter is an expression operand.
+    got = symbols('''
+export default isSupported && function httpAdapter(config) {
+  return wrapAsync(async function dispatchHttpRequest(resolve) {
+    function abort() {}
+    req.on("error", function handleRequestError(err) {});
+  });
+};
+[1].map(function (x) { return x; });
+''')
+    assert got["m.httpAdapter"] == "function"
+    assert "m.httpAdapter.dispatchHttpRequest" in got
+    assert "m.httpAdapter.dispatchHttpRequest.abort" in got
+    assert "m.httpAdapter.dispatchHttpRequest.handleRequestError" in got

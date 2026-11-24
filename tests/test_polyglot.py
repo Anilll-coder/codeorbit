@@ -93,16 +93,6 @@ CASES = {
     ''', {"h.Handler": "class", "h.Handler.handle": "method",
           "h.Handler.helper": "method"}, {"helper"}, None),
 
-    "csharp": ("R.cs", '''
-        using System;
-        namespace App {
-            public class Runner : Base {
-                public void Run() { Helper(); }
-                private void Helper() {}
-            }
-        }
-    ''', {"R.App.Runner": "class", "R.App.Runner.Run": "method",
-          "R.App.Runner.Helper": "method"}, {"Helper"}, {"System"}),
 
     "kotlin": ("C.kt", '''
         import kotlin.math.abs
@@ -113,16 +103,6 @@ CASES = {
     ''', {"C.Calc": "class", "C.Calc.run": "method", "C.Calc.helper": "method"},
         {"helper", "abs"}, {"kotlin.math.abs"}),
 
-    "elixir": ("p.ex", '''
-        defmodule Pipeline do
-          import Logger
-          def run(x) do
-            helper(x)
-          end
-          defp helper(x), do: x * 2
-        end
-    ''', {"p.Pipeline": "class", "p.Pipeline.run": "method",
-          "p.Pipeline.helper": "method"}, {"helper"}, {"Logger"}),
 
     "c": ("m.c", '''
         #include <stdio.h>
@@ -140,20 +120,21 @@ CASES = {
     ''', {"S.Store": "class", "S.Store.load": "method",
           "S.Store.helper": "method"}, {"helper"}, {"Foundation"}),
 
-    "bash": ("d.sh", '''
-        helper() { echo "$1"; }
-        run() { helper "hello"; }
-    ''', {"d.helper": "function", "d.run": "function"}, {"helper", "echo"},
-        None),
 
-    "solidity": ("V.sol", '''
-        import "./Base.sol";
-        contract Vault is Base {
-            function deposit() public { _credit(); }
-            function _credit() internal {}
-        }
-    ''', {"V.Vault": "class", "V.Vault.deposit": "method",
-          "V.Vault._credit": "method"}, {"_credit"}, {"./Base.sol"}),
+
+    "scala": ("Svc.scala", '''
+        import scala.util.Try
+        class Server extends Base { def start(): Int = listen(port) }
+        object Util { def listen(p: Int): Int = p }
+    ''', {"Svc.Server": "class", "Svc.Server.start": "method",
+          "Svc.Util.listen": "method"}, {"listen"}, None),
+
+    "dart": ("svc.dart", '''
+        import 'dart:io';
+        class Server extends Base { int start() { return listen(port); } }
+        int listen(int p) { return p; }
+    ''', {"svc.Server": "class", "svc.Server.start": "method",
+          "svc.listen": "function"}, {"listen"}, None),
 }
 
 
@@ -215,40 +196,6 @@ def test_base_types_are_recorded_across_languages():
     ]:
         bases = {b for _, b in ex(source, lang, path).base_types}
         assert base in bases, f"{lang}: no base type recorded"
-
-
-def test_an_untabled_language_yields_a_full_graph():
-    """The inference path, which carries the ~350 languages nobody has written
-    a table entry for. Gleam has no entry and needs none: its node types are
-    spelled `function`, `function_call` and `import`."""
-    if "gleam" not in langs.supported():
-        pytest.skip("gleam grammar unavailable")
-    out = ex('''
-        import gleam/io
-        pub fn helper(x) { x + 1 }
-        pub fn run(x) { helper(x) }
-    ''', "gleam", "m.gleam")
-    assert {"m.helper", "m.run"} <= set(kinds(out))
-    assert "helper" in callees(out)
-    assert "gleam/io" in modules(out)
-
-
-@pytest.mark.parametrize("lang,path,source", [
-    ("nim", "m.nim", "proc helper(x: int): int = x + 1\n"
-                     "proc run(x: int): int = helper(x)\n"),
-    ("crystal", "m.cr", "class A\n  def helper\n    1\n  end\nend\n"),
-])
-def test_inference_finds_definitions_in_unusual_grammars(lang, path, source):
-    """Nim spells a function `routine` and Crystal spells one `method_def`.
-    Neither has a table entry, and neither should index to nothing.
-
-    Deliberately only about definitions: these grammars name their call nodes
-    in ways the patterns do not reach, so the graph for them is symbols and
-    imports without call edges. That is a real limit and worth pinning, because
-    the alternative is inventing edges that are not there.
-    """
-    names = {s.name for s in ex(source, lang, path).symbols}
-    assert "helper" in names
 
 
 # ---------------------------------------------------------------- embedded

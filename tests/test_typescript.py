@@ -190,3 +190,16 @@ def test_typescript_project_indexes_and_resolves(tmp_path: Path):
         assert n >= 1, "implements should produce an inheritance edge"
     finally:
         conn.close()
+
+
+def test_a_namespace_scopes_its_functions():
+    # vscode-languageserver: dozens of `namespace X { export function is() }`.
+    got = {s.qname: s.kind for s in parse_and_extract(textwrap.dedent('''
+        export namespace Range { export function is(v: any): boolean { return true; } }
+        export namespace Position { export function is(v: any): boolean { return true; } }
+        export namespace Opts { export interface Cfg { a(): void } }
+    ''').encode(), "typescript", "a.ts").symbols}
+    assert got.get("a.Range.is") == "function"
+    assert got.get("a.Position.is") == "function"
+    assert got.get("a.Opts.Cfg") == "interface"
+    assert not any("#" in q for q in got)

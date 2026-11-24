@@ -48,10 +48,7 @@ JAVA = ("java", "kotlin", "scala")
 RUBY = ("rb",)
 PHP = ("php",)
 C = ("c",)
-CS = ("csharp",)
 RUST = ("rust",)
-SH = ("bash", "zsh", "fish", "powershell")
-SQL = ("sql",)
 
 RULES: list[Rule] = [
     # ---------------- code execution ----------------
@@ -265,22 +262,6 @@ RULES: list[Rule] = [
          _r(r"=\s*(?:\([^)]*\)\s*)?(?:m|c|re)alloc\s*\([^;]*\);\s*\n\s*(?!.*(?:if|assert|NULL))"),
          C),
 
-    # ---------------- C# ----------------
-    Rule("cs-sql-concat", HIGH, "SQL built by concatenation or interpolation",
-         "Injectable. Use SqlParameter, or a parameterised query.",
-         _r(r"(?:CommandText\s*=|new\s+Sql(?:Command|DataAdapter)\s*\()\s*[$\"][^\"]*(?:\+|\{)"),
-         CS),
-    Rule("cs-cert-callback", HIGH, "certificate validation always succeeds",
-         "A callback that returns true accepts any certificate.",
-         _r(r"ServerCertificateValidationCallback\s*[+]?=\s*[^;]*=>\s*true"), CS),
-    Rule("cs-binaryformatter", HIGH, "BinaryFormatter deserialization",
-         "Executes code on untrusted input and is obsolete. Use "
-         "System.Text.Json.",
-         _r(r"\bBinaryFormatter\b"), CS),
-    Rule("cs-empty-catch", MEDIUM, "empty catch block",
-         "A failure here leaves no trace. Log it, or rethrow.",
-         _r(r"catch\s*(?:\([^)]*\))?\s*\{\s*\}"), CS),
-
     # ---------------- Rust ----------------
     Rule("rs-unwrap", MEDIUM, "unwrap() / expect() on a fallible value",
          "Panics on the error path, which takes the thread down. Propagate "
@@ -293,22 +274,6 @@ RULES: list[Rule] = [
     Rule("rs-panic", MEDIUM, "panic!/todo!/unimplemented! in library code",
          "Aborts rather than returning. Return a Result instead.",
          _r(r"(?<![\w])(?:panic|todo|unimplemented)!\s*[\(\[]"), RUST, skip_tests=True),
-
-    # ---------------- shell ----------------
-    Rule("sh-unquoted-var", MEDIUM, "unquoted variable expansion",
-         "Word-splitting and globbing apply, so a value with a space becomes "
-         "two arguments. Quote it: \"$var\".",
-         _r(r"(?m)^\s*(?:rm|cp|mv|cd|cat|chmod|chown)\s+(?:-\S+\s+)*\$\{?\w+"), SH),
-    Rule("sh-curl-pipe-shell", HIGH, "curl piped straight into a shell",
-         "Executes whatever the server returns, with no chance to look first.",
-         _r(r"(?:curl|wget)[^|\n]*\|\s*(?:sudo\s+)?(?:ba|z)?sh\b"), SH),
-    Rule("sh-eval", HIGH, "eval on a built string",
-         "Any interpolated value becomes code.",
-         _r(r"(?m)^\s*eval\s+"), SH),
-    Rule("sh-rm-rf-var", HIGH, "rm -rf on an unquoted variable",
-         "An empty or unset variable turns this into rm -rf /. Quote it and "
-         "check it first.",
-         _r(r"rm\s+(?:-\w+\s+)*-\w*[rR]\w*f\w*\s+[\"']?\$\{?\w+"), SH),
 ]
 
 RULES_BY_ID = {r.id: r for r in RULES}

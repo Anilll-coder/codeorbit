@@ -252,7 +252,9 @@ def build_languages() -> dict:
     from codeorbit.extract import generic
 
     supported = sorted(langs.supported())
-    builtin = [lang for lang in TIER_BUILTIN if lang in supported]
+    # .vue/.svelte/.astro/.html are read by the hand-written JS/TS extractors.
+    builtin = [lang for lang in (*TIER_BUILTIN, *sorted(langs.EMBEDDED))
+               if lang in supported]
     tabled = sorted(set(generic.TUNED) & set(supported) - set(builtin))
     inferred = [lang for lang in supported
                 if lang not in tabled and lang not in builtin]

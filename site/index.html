@@ -4,10 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>CodeOrbit: Local-First Code Intelligence with Graph-Grounded LLMs</title>
-  <meta name="description" content="CodeOrbit builds a structural knowledge graph of your repository with tree-sitter across 137 languages, and serves it over MCP to Claude Code, Cursor, or any agent — or answers questions directly with a local LLM through Ollama. No API keys, no telemetry." />
+  <meta name="description" content="CodeOrbit builds a structural knowledge graph of your repository with tree-sitter across 14 languages, and serves it over MCP to Claude Code, Cursor, or any agent — or answers questions directly with a local LLM through Ollama. No API keys, no telemetry." />
 
   <meta property="og:title" content="CodeOrbit: Local-First Code Intelligence with Graph-Grounded LLMs" />
-  <meta property="og:description" content="A structural knowledge graph of your repo across 137 languages, served to any MCP agent or answered by a model that runs on your machine. No API keys, no telemetry." />
+  <meta property="og:description" content="A structural knowledge graph of your repo across 14 languages, served to any MCP agent or answered by a model that runs on your machine. No API keys, no telemetry." />
   <meta property="og:type" content="website" />
   <meta name="theme-color" content="#0a0b0d" />
 
@@ -101,7 +101,7 @@
       <div class="hero-inner">
         <div class="hero-copy">
           <h1>Code intelligence, entirely <em>local</em>.</h1>
-          <p class="sub">A structural graph of your repository — <span class="sub-hl" data-lang-count>137</span> languages, one index — queryable by any agent over MCP, or answered by a model that runs here.</p>
+          <p class="sub">A structural graph of your repository — <span class="sub-hl" data-lang-count>19</span> languages, one index — queryable by any agent over MCP, or answered by a model that runs here.</p>
           <div class="hero-actions">
             <a class="btn btn-primary" href="#install">Install CodeOrbit</a>
             <a class="btn btn-ghost" href="https://github.com/Anilll-coder/codeorbit" target="_blank" rel="noopener">
@@ -168,7 +168,7 @@
                 <div class="lbl">call sites bound</div>
               </div>
               <div class="proof-item">
-                <div class="num" data-lang-count>137</div>
+                <div class="num" data-lang-count>19</div>
                 <div class="lbl">languages read</div>
               </div>
             </div>
@@ -249,7 +249,7 @@
           <div class="pipeline-stage" data-i="1">
             <div class="pipeline-node">2</div>
             <h4>extract</h4>
-            <p>Tree-sitter turns source into symbols, call sites and imports. Hand-written for three languages, table-driven for thirty, inferred for the rest.</p>
+            <p>Tree-sitter turns source into symbols, call sites and imports. Hand-written for Python, JavaScript and TypeScript, table-driven for eleven more. Nothing is guessed.</p>
           </div>
           <div class="pipeline-stage" data-i="2">
             <div class="pipeline-node">3</div>
@@ -289,11 +289,11 @@
 
         <div class="stat-band reveal">
           <div class="stat">
-            <div class="stat-num" data-lang-count>137</div>
+            <div class="stat-num" data-lang-count>19</div>
             <div class="stat-lbl">languages</div>
           </div>
           <div class="stat">
-            <div class="stat-num" data-suffix-count>207</div>
+            <div class="stat-num" data-suffix-count>44</div>
             <div class="stat-lbl">file extensions</div>
           </div>
           <div class="stat">
@@ -308,19 +308,19 @@
 
         <div class="tiers reveal">
           <article class="tier is-1">
-            <div class="tier-rule"><span class="tier-idx">Tier 1</span><span class="tier-count" data-tier-count="builtin">4</span></div>
+            <div class="tier-rule"><span class="tier-idx">Tier 1</span><span class="tier-count" data-tier-count="builtin">8</span></div>
             <h4>Hand-written</h4>
-            <p>Python, JavaScript/JSX, TypeScript/TSX. The languages this is measured on, where a tuned extractor catches what a generic one cannot: PEP 257 docstrings, an arrow function bound to a <code>const</code>, <code>extends B implements C</code>.</p>
+            <p>Python, JavaScript/JSX, TypeScript/TSX, and the script blocks of Vue, Svelte, Astro and HTML files. The languages this is measured on, where a tuned extractor catches what a generic one cannot: PEP 257 docstrings, an arrow function bound to a <code>const</code>, <code>extends B implements C</code>.</p>
           </article>
           <article class="tier is-2">
-            <div class="tier-rule"><span class="tier-idx">Tier 2</span><span class="tier-count" data-tier-count="tabled">30</span></div>
+            <div class="tier-rule"><span class="tier-idx">Tier 2</span><span class="tier-count" data-tier-count="tabled">11</span></div>
             <h4>Table-driven</h4>
-            <p>A <code>Spec</code> per language saying which node types are definitions, calls and imports. Go methods bind to their receiver; a Rust <code>impl</code> folds into its struct; Elixir gets a hook, because <code>def</code> there is a macro call and the grammar has no definition node at all.</p>
+            <p>A <code>Spec</code> per language saying which node types are definitions, calls and imports. Go methods bind to their receiver; a Rust <code>impl</code> folds into its struct; C++ methods defined out of line land on their class.</p>
           </article>
           <article class="tier is-3">
-            <div class="tier-rule"><span class="tier-idx">Tier 3</span><span class="tier-count" data-tier-count="inferred">103</span></div>
+            <div class="tier-rule"><span class="tier-idx">Tier 3</span><span class="tier-count" data-tier-count="inferred">0</span></div>
             <h4>Inferred</h4>
-            <p>The node types are read out of the grammar itself and classified by name. Tree-sitter grammars converge hard on <code>function_definition</code>, <code>class_declaration</code>, <code>call_expression</code> — so a language nobody here has looked at still yields a graph.</p>
+            <p>Removed. Guessing node types from a grammar gave half-right graphs, and a half-right graph looks exactly like a right one. A language not checked on real code is skipped and named instead.</p>
           </article>
         </div>
 
@@ -579,7 +579,7 @@
             </svg>
             CodeOrbit
           </a>
-          <p>A structural code graph, served over MCP or answered by a local model. <span data-lang-count>137</span> languages, indexed with tree-sitter.</p>
+          <p>A structural code graph, served over MCP or answered by a local model. <span data-lang-count>19</span> languages, indexed with tree-sitter.</p>
         </div>
 
         <div class="footer-col">
@@ -608,7 +608,7 @@
             <li><span class="plain">Python 3.10+</span></li>
             <li><span class="plain">Ollama, for <code style="font-family:inherit;">ask</code> / <code style="font-family:inherit;">agent</code></span></li>
             <li><span class="plain">An MCP client, for <code style="font-family:inherit;">mcp</code></span></li>
-            <li><span class="plain">Any repo: <span data-lang-count>137</span> languages read</span></li>
+            <li><span class="plain">Any repo: <span data-lang-count>19</span> languages read</span></li>
           </ul>
         </div>
       </div>

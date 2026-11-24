@@ -93,7 +93,7 @@
         keyButtons.forEach((b) => b.classList.toggle("is-on", b === btn));
 
         /* Dimming rather than hiding, so the proportions stay visible: the
-           whole point of the tiers is that most of the 137 are inferred. */
+           proportions between the tiers stay visible. */
         chipHost.querySelectorAll(".lang-chip").forEach((chip) => {
           chip.classList.toggle(
             "is-dim",

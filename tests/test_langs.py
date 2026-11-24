@@ -26,32 +26,31 @@ pack = pytest.mark.skipif(
     ("main.py", "python"), ("app.tsx", "tsx"), ("server.go", "go"),
     ("lib.rs", "rust"), ("App.java", "java"), ("view.rb", "ruby"),
     ("index.php", "php"), ("Main.kt", "kotlin"), ("app.swift", "swift"),
-    ("m.ex", "elixir"), ("q.sql", "sql"), ("deploy.sh", "bash"),
     ("Card.vue", "vue"), ("Nav.svelte", "svelte"), ("main.dart", "dart"),
+    ("json.hpp", "cpp"), ("jv.c", "c"), ("Seq.scala", "scala"),
 ])
 def test_common_files_map_to_a_language(name, expected):
     assert langs.lang_for(name) == expected
 
 
 @pytest.mark.parametrize("name,expected", [
-    ("Dockerfile", "dockerfile"), ("Makefile", "make"),
-    ("Gemfile", "ruby"), ("CMakeLists.txt", "cmake"),
+    ("Gemfile", "ruby"), ("Rakefile", "ruby"), ("SConstruct", "python"),
 ])
 def test_files_named_rather_than_suffixed(name, expected):
-    """Half the build system in any repo has no extension at all."""
     assert langs.lang_for(name) == expected
-
-
-def test_a_double_suffix_beats_its_tail():
-    """`page.blade.php` is Blade. Matching `.php` first would parse the
-    template's PHP and miss everything the directives do."""
-    assert langs.lang_for("page.blade.php") == "blade"
-    assert langs.lang_for("plain.php") == "php"
 
 
 def test_an_unknown_extension_is_not_guessed():
     assert langs.lang_for("notes.txt") is None
     assert langs.lang_for("image.png") is None
+
+
+@pytest.mark.parametrize("name", ["deploy.sh", "R.cs", "Svc.m", "p.ex", "q.sql",
+                                  "main.tf", "Dockerfile", "m.lua", "a.hs"])
+def test_languages_not_verified_on_real_code_are_not_read(name):
+    """Only languages whose extraction was checked on real repositories are
+    indexed. A half-right graph looks exactly like a right one."""
+    assert langs.lang_for(name) is None
 
 
 # ---------------------------------------------------------------- families
@@ -95,12 +94,10 @@ def test_nothing_unloadable_is_claimed():
 
 
 @pack
-def test_the_pack_widens_coverage_a_lot():
-    """The whole point of the change: three languages is the wrong answer for
-    most repositories."""
-    assert len(langs.supported()) > 50
-    for lang in ("go", "rust", "java", "ruby", "php", "csharp", "kotlin"):
-        assert lang in langs.supported()
+def test_the_main_languages_are_supported():
+    for lang in ("python", "javascript", "typescript", "java", "c", "cpp", "go",
+                 "rust", "php", "ruby", "kotlin", "swift", "dart", "scala"):
+        assert lang in langs.supported(), lang
 
 
 # ---------------------------------------------------------------- scanning

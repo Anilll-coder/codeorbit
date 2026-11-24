@@ -47,6 +47,31 @@ def extract(tree, src: bytes, module_qname: str) -> Extraction:
                 walk(child, q, False)
                 continue
 
+            # TypeScript `namespace Range { export function is() {} }` (this
+            # walker serves TS too). The namespace is scope, so `Range.is` and
+            # `Position.is` stay apart instead of colliding as `is`, `is#2`.
+            if t == "internal_module":
+                nm_node = child.child_by_field_name("name")
+                body = child.child_by_field_name("body")
+                if nm_node is not None and body is not None:
+                    walk(body, scope + "." + text(nm_node, src), False)
+                    continue
+
+            # A named function expression anywhere else: `export default ok &&
+            # function httpAdapter() {...}`, `wrapAsync(async function
+            # dispatch() {...})`, `req.on('error', function onError() {...})`.
+            # Its name is real and its body can be hundreds of lines; without
+            # this, axios's whole http adapter had no symbol and its inner
+            # functions landed at module scope.
+            if t in ("function_expression", "function", "generator_function"):
+                nm_node = child.child_by_field_name("name")
+                if nm_node is not None:
+                    nm = text(nm_node, src)
+                    q = scope + "." + nm
+                    add(nm, q, "function", child, scope, nm + _params(child, src))
+                    walk(child, q, False)
+                    continue
+
             # abstract_class_declaration only occurs in TypeScript, which reuses
             # this walker. Handling it here rather than in the TS extractor is
             # what keeps a method's qualified name right: without it the walker

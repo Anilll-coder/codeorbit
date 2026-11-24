@@ -6,11 +6,11 @@
 
 **Local-First Code Intelligence with Graph-Grounded LLMs**
 
-A structural graph of your repository — **137 languages, one index** — served to any
+A structural graph of your repository — **14 languages, one index** — served to any
 MCP agent, or answered by a model that runs on your machine.
 
-[![Languages](https://img.shields.io/badge/languages-137-e2a13f?style=flat-square&labelColor=0a0b0d)](#languages)
-[![Extensions](https://img.shields.io/badge/extensions-207-e2a13f?style=flat-square&labelColor=0a0b0d)](#languages)
+[![Languages](https://img.shields.io/badge/languages-19-e2a13f?style=flat-square&labelColor=0a0b0d)](#languages)
+[![Extensions](https://img.shields.io/badge/extensions-44-e2a13f?style=flat-square&labelColor=0a0b0d)](#languages)
 [![Python](https://img.shields.io/badge/python-3.10%2B-e2a13f?style=flat-square&logo=python&logoColor=f2b658&labelColor=0a0b0d)](#install)
 [![MCP](https://img.shields.io/badge/MCP-server-e2a13f?style=flat-square&labelColor=0a0b0d)](#using-it-from-claude-code-cursor-or-any-mcp-agent)
 [![tree-sitter](https://img.shields.io/badge/parser-tree--sitter-9b9ca4?style=flat-square&labelColor=0a0b0d)](#languages)
@@ -30,13 +30,13 @@ codeorbit install-mcp            # your agent now reads the graph, not guesses
 
 <table>
 <tr>
-<td width="25%" align="center"><h3>137</h3><sub>LANGUAGES READ</sub></td>
+<td width="25%" align="center"><h3>14</h3><sub>LANGUAGES READ</sub></td>
 <td width="25%" align="center"><h3>61%</h3><sub>CALL SITES BOUND</sub></td>
 <td width="25%" align="center"><h3>&minus;61%</h3><sub>AGENT TOKENS</sub></td>
 <td width="25%" align="center"><h3>0</h3><sub>NETWORK CALLS</sub></td>
 </tr>
 <tr>
-<td align="center"><sub>Three tiers of extraction, from hand-written to inferred straight out of the grammar.</sub></td>
+<td align="center"><sub>Each one checked on real repositories. Nothing is guessed from a grammar.</sub></td>
 <td align="center"><sub>Measured on <code>rich</code>: 1,193 symbols, 5,381 edges. The rest genuinely leaves the project.</sub></td>
 <td align="center"><sub>Over a repeated session, against the flat response format. Estimated at 4 chars/token.</sub></td>
 <td align="center"><sub>Indexing is on disk, the graph is served over loopback and stdio. No keys, no telemetry.</sub></td>
@@ -288,29 +288,32 @@ codeorbit langs              # what this install can read
 codeorbit langs --verbose    # the whole list
 ```
 
-**137 languages across 207 file extensions**, from one registry in `langs.py`.
+**14 languages** - Python, JavaScript, TypeScript, Java, C, C++, Go, Rust, PHP,
+Ruby, Kotlin, Swift, Dart, Scala - across 44 file extensions, from one registry
+in `langs.py` (19 ids, counting TSX and the Vue, Svelte, Astro and HTML
+component formats). Every one was checked on real files from real repositories.
 Extraction has three tiers, tried in that order:
 
 | | tier | count | how it reads a file |
 |---|---|---|---|
-| **1** | Hand-written | **4** | Python, JavaScript/JSX, TypeScript/TSX. The languages this is measured on, where a tuned extractor catches what a generic one cannot: PEP 257 docstrings, an arrow function bound to a `const`, `extends B implements C`. |
-| **2** | Table-driven | **30** | A `Spec` per language in `extract/generic.py` naming which node types are definitions, calls and imports. Go, Rust, Java, C, C++, C#, Ruby, PHP, Swift, Kotlin, Scala, Dart, Elixir, Solidity, Lua, shell and the rest. |
-| **3** | Inferred | **103** | `infer_spec` reads node types out of the grammar itself and classifies them by name. Grammars written by different people over a decade still converge hard on `function_definition`, `class_declaration`, `call_expression`, `import_declaration` — so a language nobody here has looked at still yields a graph. Gleam has no table entry and needs none. |
+| **1** | Hand-written | **8** | Python, JavaScript/JSX, TypeScript/TSX, and the script blocks of `.vue`, `.svelte`, `.astro` and `.html` files. The languages this is measured on, where a tuned extractor catches what a generic one cannot: PEP 257 docstrings, an arrow function bound to a `const`, `extends B implements C`. |
+| **2** | Table-driven | **11** | A `Spec` per language in `extract/generic.py` naming which node types are definitions, calls and imports: Go, Rust, Java, C, C++, Ruby, PHP, Swift, Kotlin, Scala, Dart. |
+| **3** | Inferred | **0** | Removed. Guessing node types from a grammar gave graphs that were half right - wrong C++ names, lost methods - and a half-right graph looks exactly like a right one. Languages that were not checked on real code, or failed the check (C#, shell, Objective-C, Lua, Haskell and others), are skipped and named instead. |
 
 Each tier-2 entry earned itself against a real file. Go methods needed the
 receiver (`Server.Start`, not `Start`); a Rust `impl` had to fold into its
 struct rather than duplicate it; C hides a function's name two declarators deep;
-Dart has no call node at all; Elixir has no *definition* node, because `def`
-there is a macro call, so it gets a hook.
+Dart has no call node at all; C++ defines methods out of line
+(`void buffer::push()`) and hides C++ inside `.h` files.
 
 `.vue`, `.svelte`, `.astro` and `.html` go through a fourth path: the wrapper is
 blanked out line-for-line and the script block handed to the JavaScript or
 TypeScript extractor, so a single-file component indexes its logic *and* its
 line numbers still point at the real lines.
 
-Adding a language is normally one line in `SUFFIX`. A language whose grammar
-spells things unusually gets a `Spec` entry; a language with no definition node
-at all — Elixir, where `def` is a macro call — gets a hook.
+Adding a language is a `SUFFIX` line and a `Spec` entry, and it ships only
+after its extraction is checked on real repositories and a test pins it in
+`tests/test_polyglot.py`.
 
 > [!IMPORTANT]
 > **What this does not do.**
@@ -961,16 +964,15 @@ interactive graph viewer, an MCP server for external agents, and an agent of its
 own over those same tools - Ollama by default, or any OpenAI-compatible server
 or Claude directly via `--provider`.
 
-Around 137 languages, with three tiers of fidelity — see
+14 languages, each checked on real code — see
 [Languages](#languages). The known limits are honest ones, and the tool says
 which apply rather than hiding them:
 
 - Static parsing cannot follow dynamic dispatch. Decorator-registered and
   dict-dispatched functions show up as uncalled, and a missing edge always means
   "not statically visible", never "does not happen".
-- Outside the hand-written and tabled languages, extraction is inferred from the
-  grammar. It finds definitions and imports reliably and call edges less so; a
-  few grammars (Nim, Crystal) yield no call edges at all.
+- Only those 14 languages are read. Files in any other language are skipped
+  and named, not indexed into a half-right graph.
 - A language with no grammar installed is skipped and named, not indexed empty.
 - Answer latency for `ask` is bounded by CPU generation speed rather than by
   anything the graph does.

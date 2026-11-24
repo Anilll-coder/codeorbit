@@ -42,13 +42,9 @@ class UnsupportedLanguage(Exception):
 @functools.lru_cache(maxsize=512)
 def spec_for(lang: str) -> generic.Spec | None:
     """The generic extractor's table for a language, inferred if untabled."""
-    tuned = generic.TUNED.get(lang)
-    if tuned is not None:
-        return tuned
-    grammar = langs.grammar(lang)
-    if grammar is None:
-        return None
-    return generic.infer_spec(grammar)
+    # No guessing from the grammar: a language without a tested table is not
+    # read at all, rather than read into a graph of half-right names.
+    return generic.TUNED.get(lang)
 
 
 def module_qname(rel_path: str) -> str:

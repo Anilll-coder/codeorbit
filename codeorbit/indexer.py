@@ -44,8 +44,14 @@ def _index_one(conn, root: Path, path: Path, rel: str, lang: str) -> int:
         )
 
     for s in ex.symbols:
-        if s.parent and s.parent in ids and s.qname in ids:
-            db.insert_edge(conn, ids[s.parent], ids[s.qname], "contains")
+        parent = s.parent
+        # A namespace (C++, C#, TypeScript) or Go receiver is a scope with no
+        # symbol of its own: link to the nearest ancestor that has one, or
+        # everything inside `namespace fmt { ... }` floats free of its file.
+        while parent and parent not in ids and "." in parent:
+            parent = parent.rsplit(".", 1)[0]
+        if parent and parent in ids and s.qname in ids and parent != s.qname:
+            db.insert_edge(conn, ids[parent], ids[s.qname], "contains")
 
     for imp in ex.imports:
         conn.execute(

@@ -150,6 +150,13 @@ def extract(tree, src: bytes, module_qname: str) -> Extraction:
                 if nm is not None:
                     _implements(child, src, f"{scope}.{text(nm, src)}", out)
 
+            if t == "internal_module":      # same namespace scoping as the JS pass
+                nm = child.child_by_field_name("name")
+                body = child.child_by_field_name("body")
+                if nm is not None and body is not None:
+                    walk(body, f"{scope}.{text(nm, src)}")
+                    continue
+
             if t == "export_statement":
                 walk(child, scope)
                 continue

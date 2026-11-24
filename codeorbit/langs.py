@@ -31,8 +31,14 @@ import functools
 # --------------------------------------------------------------- suffixes
 
 # suffix -> language id. Ids are tree-sitter grammar names.
+#
+# Only languages whose extraction is tested are listed - each has a test in
+# tests/test_polyglot.py (or its own test file) checking that classes, methods,
+# functions and calls come out right. A language a grammar can parse but whose
+# symbols were never checked is left out: indexing it to wrong names is worse
+# than skipping it, because a wrong graph looks exactly like a right one.
 SUFFIX: dict[str, str] = {
-    # ---- the three CodeOrbit parses with its own grammars
+    # ---- hand-written extractors
     ".py": "python", ".pyi": "python", ".pyw": "python",
     ".js": "javascript", ".jsx": "javascript", ".mjs": "javascript",
     ".cjs": "javascript",
@@ -42,157 +48,33 @@ SUFFIX: dict[str, str] = {
     # ---- systems
     ".go": "go",
     ".rs": "rust",
-    ".c": "c", ".h": "c",
+    ".c": "c", ".h": "c",           # a C++ .h is detected and read as C++
     ".cc": "cpp", ".cpp": "cpp", ".cxx": "cpp", ".c++": "cpp",
     ".hh": "cpp", ".hpp": "cpp", ".hxx": "cpp", ".h++": "cpp", ".inl": "cpp",
-    ".m": "objc", ".mm": "objc",
-    ".zig": "zig",
-    ".v": "verilog", ".sv": "verilog", ".svh": "verilog",
-    ".vhd": "vhdl", ".vhdl": "vhdl",
-    ".nim": "nim", ".nims": "nim",
-    ".d": "d",
-    ".odin": "odin",
-    ".cu": "cuda", ".cuh": "cuda",
-    ".ada": "ada", ".adb": "ada", ".ads": "ada",
-    ".f90": "fortran", ".f95": "fortran", ".f03": "fortran", ".f": "fortran",
-    ".pas": "pascal", ".pp": "pascal",
 
-    # ---- JVM / .NET
+    # ---- JVM
     ".java": "java",
     ".kt": "kotlin", ".kts": "kotlin",
     ".scala": "scala", ".sc": "scala",
-    ".groovy": "groovy", ".gvy": "groovy",
-    ".clj": "clojure", ".cljs": "clojure", ".cljc": "clojure", ".edn": "clojure",
-    ".cs": "csharp", ".csx": "csharp",
-    ".fs": "fsharp", ".fsx": "fsharp", ".fsi": "fsharp_signature",
-    ".vb": "vb",
 
     # ---- scripting / dynamic
     ".rb": "ruby", ".rake": "ruby", ".gemspec": "ruby", ".ru": "ruby",
     ".php": "php", ".php4": "php", ".php5": "php", ".phtml": "php",
-    ".pl": "perl", ".pm": "perl", ".t": "perl",
-    ".lua": "lua",
-    ".luau": "luau",
-    ".tcl": "tcl",
-    ".r": "r", ".R": "r",
-    ".jl": "julia",
     ".dart": "dart",
     ".swift": "swift",
-    ".ex": "elixir", ".exs": "elixir",
-    ".erl": "erlang", ".hrl": "erlang",
-    ".hs": "haskell", ".lhs": "haskell",
-    ".elm": "elm",
-    ".ml": "ocaml", ".mli": "ocaml_interface",
-    ".re": "reason",
-    ".res": "rescript",
-    ".purs": "purescript",
-    ".cr": "crystal",
-    ".nix": "nix",
-    ".rkt": "racket",
-    ".scm": "scheme", ".ss": "scheme",
-    ".lisp": "commonlisp", ".lsp": "commonlisp", ".cl": "commonlisp",
-    ".el": "elisp",
-    ".fnl": "fennel",
-    ".janet": "janet",
-    ".gleam": "gleam",
-    ".gd": "gdscript",
-    ".hx": "haxe",
-    ".vala": "vala",
-    ".sml": "sml",
-    ".eiffel": "eiffel", ".e": "eiffel",
-    ".mojo": "mojo", ".🔥": "mojo",
-    ".pyx": "cython", ".pxd": "cython",
-    ".as": "actionscript",
-    ".apex": "apex", ".cls": "apex", ".trigger": "apex",
-    ".sol": "solidity",
-    ".move": "move",
-    ".cairo": "cairo",
-    ".pro": "prolog",
-    ".matlab": "matlab",
-    ".sas": "sas",
-    ".awk": "awk",
-    ".vim": "vim",
-    ".rs.in": "rust",
-    ".smali": "smali",
-    ".ballerina": "ballerina", ".bal": "ballerina",
-    ".pony": "pony",
-    ".roc": "roc",
-    ".koka": "koka",
-    ".hoon": "hoon",
-    ".wgsl": "wgsl",
-    ".glsl": "glsl", ".vert": "glsl", ".frag": "glsl",
-    ".hlsl": "hlsl",
-    ".slang": "slang",
-    ".ql": "ql",
-    ".rego": "rego",
-    ".tla": "tlaplus",
 
-    # ---- shell / config-as-code
-    ".sh": "bash", ".bash": "bash", ".ksh": "bash", ".zsh": "zsh",
-    ".fish": "fish",
-    ".ps1": "powershell", ".psm1": "powershell", ".psd1": "powershell",
-    ".bat": "batch", ".cmd": "batch",
-    ".nu": "nushell",
-    ".elv": "elvish",
-    ".tf": "terraform", ".tfvars": "terraform",
-    ".hcl": "hcl",
-    ".bzl": "starlark", ".star": "starlark",
-    ".cmake": "cmake",
-    ".mk": "make",
-    ".just": "just",
-    ".nix.in": "nix",
-
-    # ---- data / schema / query (structure still worth graphing)
-    ".sql": "sql", ".psql": "sql", ".pgsql": "sql",
-    ".graphql": "graphql", ".gql": "graphql",
-    ".proto": "proto",
-    ".thrift": "thrift",
-    ".capnp": "capnp",
-    ".fbs": "flatbuffers",
-    ".smithy": "smithy",
-    ".prisma": "prisma",
-    ".cue": "cue",
-    ".pkl": "pkl",
-    ".jsonnet": "jsonnet", ".libsonnet": "jsonnet",
-    ".dhall": "dhall",
-    ".wit": "wit",
-
-    # ---- templates / markup whose logic matters
+    # ---- components whose script block is JavaScript or TypeScript
     ".vue": "vue",
     ".svelte": "svelte",
     ".astro": "astro",
     ".html": "html", ".htm": "html",
-    ".erb": "embeddedtemplate",
-    ".ejs": "embeddedtemplate",
-    ".hbs": "glimmer", ".handlebars": "glimmer",
-    ".twig": "twig",
-    ".liquid": "liquid",
-    ".blade.php": "blade",
-    ".razor": "razor", ".cshtml": "razor",
-    ".heex": "heex", ".eex": "eex",
-    ".slim": "slim",
-    ".haml": "haml",
-    ".pug": "pug",
-    ".jinja": "jinja2", ".j2": "jinja2",
-    ".templ": "templ",
-    ".qml": "qmljs",
 }
 
 # Files whose name, not suffix, says what they are.
 FILENAME: dict[str, str] = {
-    "Dockerfile": "dockerfile", "Containerfile": "dockerfile",
-    "Makefile": "make", "GNUmakefile": "make", "makefile": "make",
-    "CMakeLists.txt": "cmake",
     "Rakefile": "ruby", "Gemfile": "ruby", "Vagrantfile": "ruby",
     "Brewfile": "ruby", "Podfile": "ruby", "Fastfile": "ruby",
-    "BUILD": "starlark", "BUILD.bazel": "starlark", "WORKSPACE": "starlark",
-    "Justfile": "just", "justfile": "just",
     "SConstruct": "python", "SConscript": "python",
-    "Jenkinsfile": "groovy",
-    "go.mod": "gomod", "go.sum": "gosum", "go.work": "gowork",
-    "Earthfile": "earthfile",
-    "meson.build": "meson",
-    ".env": "dotenv",
 }
 
 # Files that are a wrapper around a script block. The wrapper grammar sees no
@@ -214,14 +96,11 @@ BUILTIN = ("python", "javascript", "typescript", "tsx")
 # not listed here is its own family, which is the safe default.
 FAMILY: dict[str, str] = {
     "javascript": "js", "typescript": "js", "tsx": "js", "vue": "js",
-    "svelte": "js", "astro": "js", "html": "js", "qmljs": "js",
-    "python": "py", "cython": "py", "mojo": "py",
-    "c": "c", "cpp": "c", "objc": "c", "cuda": "c",
-    "ocaml": "ml", "ocaml_interface": "ml", "reason": "ml",
-    "fsharp": "fs", "fsharp_signature": "fs",
-    "php": "php", "blade": "php",
-    "ruby": "rb", "haml": "rb", "slim": "rb",
-    "elixir": "ex", "heex": "ex", "eex": "ex",
+    "svelte": "js", "astro": "js", "html": "js",
+    "python": "py",
+    "c": "c", "cpp": "c",
+    "php": "php",
+    "ruby": "rb",
 }
 
 
