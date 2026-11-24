@@ -1,0 +1,59 @@
+{
+  "dataset": {
+    "name": "swebench-lite",
+    "source": "princeton-nlp/SWE-bench_Lite",
+    "sha256": "5dd70d011c13d4f1ab9dc43b0b9d15e3351da362e1784b2695fd035b227129bd",
+    "selection": {
+      "repos": null,
+      "instances": null,
+      "limit": null,
+      "sample": null,
+      "seed": 0,
+      "exclude_sample": 60,
+      "exclude_seed": 0,
+      "excluded": 60
+    }
+  },
+  "codeorbit": {
+    "commit": "9963d9391759ac871c7e9307bf70ad4fce5edf74",
+    "dirty": false
+  },
+  "run": {
+    "utc": "2026-11-23T18:44:29+00:00",
+    "arms": [
+      "hybrid",
+      "hybrid-graph",
+      "fusion"
+    ],
+    "char_budget": 6000,
+    "rank_depth": 10,
+    "question_chars": 4000,
+    "tokenizer": "hf microsoft/Phi-4-mini-instruct (tokenizers 0.23.3)",
+    "tokenizer_exact": true,
+    "embed": true,
+    "tasks_selected": 240,
+    "complete": true,
+    "fusion": {
+      "name_weight": 1.0,
+      "name_depth": null,
+      "only_coded": false
+    },
+    "semantic_live": true,
+    "tasks_scored": 240,
+    "wall_s": 8151.6
+  },
+  "environment": {
+    "python": "3.13.16",
+    "platform": "Linux-6.18.55+-x86_64-with-glibc2.39",
+    "packages": {
+      "codeorbit": "0.1.0",
+      "tree-sitter": "0.27.0",
+      "tree-sitter-language-pack": "1.25.2",
+      "tree-sitter-python": "0.25.0",
+      "tree-sitter-javascript": "0.25.0",
+      "tree-sitter-typescript": "0.23.2",
+      "tiktoken": "0.14.0",
+      "tokenizers": "0.23.3"
+    }
+  }
+}
