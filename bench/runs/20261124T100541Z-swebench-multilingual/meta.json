@@ -1,0 +1,59 @@
+{
+  "dataset": {
+    "name": "swebench-multilingual",
+    "source": "SWE-bench/SWE-bench_Multilingual",
+    "sha256": "91e7218b734c89b481325fe5ee6b678f8cca35c9b639bacf1baf47818e08d278",
+    "selection": {
+      "repos": null,
+      "instances": null,
+      "limit": null,
+      "sample": null,
+      "seed": 0,
+      "exclude_sample": null,
+      "exclude_seed": 0,
+      "excluded": 0
+    }
+  },
+  "codeorbit": {
+    "commit": "320cba2389e47d5708af3864e2c6858e0f5072eb",
+    "dirty": false
+  },
+  "run": {
+    "utc": "2026-11-24T10:05:41+00:00",
+    "arms": [
+      "hybrid",
+      "hybrid-graph",
+      "fusion"
+    ],
+    "char_budget": 6000,
+    "rank_depth": 10,
+    "question_chars": 4000,
+    "tokenizer": "hf microsoft/Phi-4-mini-instruct (tokenizers 0.23.3)",
+    "tokenizer_exact": true,
+    "embed": true,
+    "tasks_selected": 300,
+    "complete": true,
+    "fusion": {
+      "name_weight": 1.0,
+      "name_depth": null,
+      "only_coded": false
+    },
+    "semantic_live": true,
+    "tasks_scored": 299,
+    "wall_s": 10111.7
+  },
+  "environment": {
+    "python": "3.13.16",
+    "platform": "Linux-6.18.55+-x86_64-with-glibc2.39",
+    "packages": {
+      "codeorbit": "0.1.0",
+      "tree-sitter": "0.27.0",
+      "tree-sitter-language-pack": "1.25.2",
+      "tree-sitter-python": "0.25.0",
+      "tree-sitter-javascript": "0.25.0",
+      "tree-sitter-typescript": "0.23.2",
+      "tiktoken": "0.14.0",
+      "tokenizers": "0.23.3"
+    }
+  }
+}
