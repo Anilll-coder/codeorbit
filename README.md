@@ -396,8 +396,59 @@ tokenizer ([run record](https://github.com/Anilll-coder/codeorbit/tree/8a001d901
 - Questions that name nothing in the code remain the open problem: no arm
   retrieves the code for any of the four.
 - **12 questions is a pilot, not evidence.** Every arm's 95% bootstrap interval
-  spans roughly 40 percentage points. A multi-repository question set is the
-  next step before any general claim.
+  spans roughly 40 percentage points. The SWE-bench results below are the
+  evidence.
+
+### On real GitHub issues: SWE-bench Lite
+
+[SWE-bench Lite](https://www.swebench.com/) is 300 real issues from 12 Python
+projects, each with the commit it was filed against and the patch that fixed
+it. The functions that patch edits are the ground truth: nobody here labels
+anything, and the question is the issue text exactly as the user wrote it.
+`python scripts/swebench.py run --split lite` checks out each commit, indexes
+it, and scores every arm the same way as above.
+
+The 300 tasks were split before anything was tuned: 60 for development (fusion's
+settings were chosen on these) and **240 held out**, scored once. 233 of the
+240 have a function target. Held-out results, embeddings live, phi4-mini
+tokenizer
+([run 1](https://github.com/Anilll-coder/codeorbit/tree/9963d9391759ac871c7e9307bf70ad4fce5edf74/bench/runs/20261123T122146Z-swebench-lite),
+[run 2](https://github.com/Anilll-coder/codeorbit/tree/d268f4f1219182ce37f7e16f45c69d5856f8e459/bench/runs/20261123T184429Z-swebench-lite)):
+
+| arm | R@1 | R@5 | MRR@10 | found (95% CI) | code | tokens |
+|---|---|---|---|---|---|---|
+| BM25 | 19% | 40% | 0.280 | 33% | 32% | 993 |
+| dense | 16% | 34% | 0.239 | 39% | 37% | 1,078 |
+| hybrid - BM25 + dense, RRF | 20% | 43% | 0.300 | 38% (32-45%) | 36% | 1,040 |
+| CodeOrbit | 12% | 34% | 0.206 | 45% (39-52%) | 36% | 1,296 |
+| hybrid-graph - hybrid's ranking + CodeOrbit's graph context | 20% | 43% | 0.300 | 53% (47-60%) | 39% | 1,446 |
+| **fusion** - CodeOrbit's name search + BM25 + dense, with graph context | **21%** | **45%** | **0.316** | **53% (47-60%)** | **42%** | 1,430 |
+
+**What this does and does not show.**
+
+- **The graph context is the result.** Adding CodeOrbit's graph context to a
+  standard hybrid retriever puts the function the fix changed in front of the
+  model for 53% of issues instead of 38%. The confidence intervals do not
+  overlap. It costs about 400 tokens per query.
+- **CodeOrbit's own ranking is weaker than hybrid's** (MRR 0.21 vs 0.30). Its
+  identifier search ranks well when an issue names the code and poorly when it
+  does not, so on its own it is not the retriever to use.
+- **Fusion ranks best, by a small margin.** It held hybrid's top-5 on the
+  held-out tasks and slightly improved top-1 and MRR. Task by task, its top 5
+  has 11 targets that hybrid's misses and hybrid's has 8 that fusion's misses:
+  a net gain of 3 tasks, which is not statistically significant.
+- **The gain is in issues that name the code.** Where the issue mentions a
+  gold function (95 tasks), fusion's top-1 is 39% vs hybrid's 35%, and the
+  target's name is in context for 74% vs 55%. Where it does not (138 tasks),
+  every arm's top-5 stays under 30%: issues that describe a symptom without
+  naming any code are still the open problem.
+- *Found* checks for the target's name in the context. In these two runs a
+  class-level target (about 5% of tasks) also counted as found when one of its
+  methods' names appeared; this was tightened afterwards, to an exact match.
+  It applied equally to every arm.
+- These are retrieval scores, not fixed bugs. Whether an agent fixes more
+  issues with this context is what [`scripts/agent_eval.py`](scripts/agent_eval.py)
+  measures; see [`bench/README.md`](bench/README.md).
 
 ### Performance on constrained hardware
 
