@@ -57,6 +57,7 @@ SPLITS = {
     "lite": "princeton-nlp/SWE-bench_Lite",
     "verified": "princeton-nlp/SWE-bench_Verified",
     "full": "princeton-nlp/SWE-bench",
+    "multilingual": "SWE-bench/SWE-bench_Multilingual",     # 9 languages, no Python
 }
 CACHE = REPO / "bench" / "swebench"             # downloaded task files, not committed
 CHECKOUTS = REPO / "bench" / "repos" / "swe"
@@ -199,13 +200,38 @@ def first_rank(ranked, match) -> int | None:
     return None
 
 
-def score(o: bench.ArmOutput, targets: list[str], files: list[str]) -> dict:
+def definition_lines(conn, src, targets: list[str]) -> list[str]:
+    """Each target's definition line as written - the line naming it.
+
+    What "its code is in the context" looks for in any language: the regex in
+    bench.defines knows Python's def/class, not Go's func, Rust's fn or a Java
+    method. Too-short lines are left out, so nothing matches by accident.
+    """
+    out = []
+    for t in targets:
+        row = conn.execute("SELECT n.start_line, n.end_line, f.path FROM nodes n "
+                           "JOIN files f ON f.id = n.file_id WHERE n.qname = ? "
+                           "ORDER BY n.end_line - n.start_line DESC LIMIT 1",
+                           (t,)).fetchone()
+        if row is None:
+            continue
+        lines = [ln.strip() for ln in src.body(row).splitlines()]
+        tail = t.rsplit(".", 1)[-1]
+        line = next((ln for ln in lines if re.search(rf"\b{re.escape(tail)}\b", ln)), "")
+        if len(line) >= 8:
+            out.append(line)
+    return out
+
+
+def score(o: bench.ArmOutput, targets: list[str], files: list[str],
+          def_lines: list[str] = ()) -> dict:
     return {
         "rank": first_rank(o.ranked, lambda u: any(bench.unit_matches(u, t) for t in targets))
         if targets else None,
         "file_rank": first_rank(o.ranked, lambda u: u.path in files) if files else None,
         "hit_ctx": any(bench.contains_target(o.context, t) for t in targets),
-        "def_ctx": any(bench.defines(o.context, t) for t in targets),
+        "def_ctx": any(bench.defines(o.context, t) for t in targets)
+        or any(ln in o.context for ln in def_lines),
         "file_ctx": any(f in o.context for f in files),
     }
 
@@ -563,6 +589,7 @@ def run(args) -> None:
         needs_bm25 = {"bm25", "hybrid", "hybrid-graph", "fusion"}
         bm25 = bench.BM25(conn, src) if needs_bm25 & set(task_arms) else None
 
+        def_lines = definition_lines(conn, src, targets)
         marks = []
         file_tokens: dict[str, int] = {}
         outline_tokens: dict[str, int] = {}
@@ -571,7 +598,7 @@ def run(args) -> None:
             row = {
                 "question_id": iid, "repo": task["repo"], "commit": task["base_commit"],
                 "kind": kind, "arm": arm, "fn_targets": len(targets), "targets": targets,
-                "files": files, **score(o, targets, files),
+                "files": files, **score(o, targets, files, def_lines),
                 "chars": len(o.context), "tokens": count_tokens(o.context),
                 "ms": round(1000 * o.seconds, 2), "index_s": round(index_s, 2),
                 "top5": [u.label for u in o.ranked[:5]],
