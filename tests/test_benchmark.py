@@ -246,3 +246,9 @@ def test_tune_scores_saved_lists():
               "lists": {"name": ["x"], "bm25": ["a", "x"], "dense": ["a"]}}]
     off = {"name_weight": 0.0, "name_depth": None, "only_coded": False}
     assert tune.score(tasks, off) == {"R@1": 1.0, "R@5": 1.0, "MRR": 1.0}
+
+
+def test_contains_target_needs_the_whole_name():
+    assert bench.contains_target("### class pkg.mod.Utils\n", "pkg.mod.Utils")
+    assert not bench.contains_target("### method pkg.mod.Utils.slugify\n", "pkg.mod.Utils")
+    assert not bench.contains_target("see xpkg.mod.Utils here", "pkg.mod.Utils")

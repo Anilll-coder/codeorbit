@@ -138,7 +138,10 @@ def contains_target(text: str, target: str) -> bool:
     file regions that never carry a qualified name - requiring one would rig
     the result.
     """
-    return bool(text) and (target in text or defines(text, target))
+    # The whole name, not a prefix: a class target `pkg.mod.Utils` is not found
+    # by `pkg.mod.Utils.slugify` appearing - that is one of its methods.
+    whole = re.search(rf"(?<![\w.]){re.escape(target)}(?![\w.])", text) if text else None
+    return bool(text) and (whole is not None or defines(text, target))
 
 
 def unit_matches(u: Unit, target: str) -> bool:
