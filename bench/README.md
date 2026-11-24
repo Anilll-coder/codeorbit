@@ -105,8 +105,11 @@ time. The report pairs the two conditions per task: an exact McNemar test on
 success and paired bootstrap 95% intervals on every difference. Answers are
 scored again from the saved text on every report, so a scoring fix applies to
 finished runs without running the model again.
-[`kaggle_agent.ipynb`](kaggle_agent.ipynb) runs two models side by side on
-Kaggle's two GPUs.
+[`kaggle_agent.ipynb`](kaggle_agent.ipynb) runs one model on Kaggle's two
+GPUs: an Ollama server per GPU, each taking half the tasks (`--shard 1/2`,
+`--shard 2/2`), pooled into one paired test by `report --pool`. `MODE='pilot'`
+(10 held-out tasks) measures the time per task; `MODE='main'` is the 100
+held-out tasks (seed 1) fixed before any agent ran.
 
 ## SWE-bench on a GPU (Google Colab)
 

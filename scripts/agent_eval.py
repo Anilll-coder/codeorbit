@@ -453,6 +453,7 @@ def run(args) -> None:
         for k in ("repos", "instances", "limit", "sample", "seed", "exclude_sample",
                   "exclude_seed"):
             setattr(args, k, sel[k])
+        args.shard = sel.get("shard")
         done = {(x["question_id"], x["condition"]) for x in
                 map(json.loads, (out / "runs.jsonl").read_text(encoding="utf-8").splitlines())}
         print(f"resuming {out}: {len(done)} run(s) already done")
@@ -466,6 +467,11 @@ def run(args) -> None:
         all_tasks = [t for t in all_tasks if t["instance_id"] not in seen]
     tasks = swe.select(all_tasks, args.repos, args.instances, args.limit,
                        args.sample, args.seed)
+    if args.shard:
+        # `--shard 1/2`: every 2nd task from the 1st, so two processes on two
+        # GPUs split one selection exactly; `report` takes both run folders.
+        k, n = (int(x) for x in args.shard.split("/"))
+        tasks = tasks[k - 1::n]
     if not tasks:
         sys.exit("no tasks selected")
 
@@ -487,6 +493,8 @@ def run(args) -> None:
     if not args.resume:
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         safe = re.sub(r"[^A-Za-z0-9.]+", "-", args.model)
+        if args.shard:
+            safe += "-shard" + args.shard.replace("/", "of")
         out = Path(args.out) / f"{stamp}-agent-{safe}"
         out.mkdir(parents=True, exist_ok=True)
         meta = {
@@ -497,7 +505,8 @@ def run(args) -> None:
                                       "limit": args.limit, "sample": args.sample,
                                       "seed": args.seed,
                                       "exclude_sample": args.exclude_sample,
-                                      "exclude_seed": args.exclude_seed}},
+                                      "exclude_seed": args.exclude_seed,
+                                      "shard": args.shard}},
             "codeorbit": {"commit": bench._git("rev-parse", "HEAD", cwd=REPO),
                           "dirty": bool(bench._git("status", "--porcelain",
                                                    "--untracked-files=no", cwd=REPO))},
@@ -689,15 +698,32 @@ def print_compare(name: str, c: dict) -> None:
                                                    key=lambda kv: -kv[1])))
 
 
-def report_runs(runs: list[Path]) -> None:
-    for run in runs:
-        meta = json.loads((run / "meta.json").read_text(encoding="utf-8"))
-        rows = [json.loads(l) for l in
-                (run / "runs.jsonl").read_text(encoding="utf-8").splitlines() if l]
-        for r in rows:          # scored again from the saved answer: scoring fixes apply
-            tf = r.get("target_files") or {t: r["files"][0] for t in r["targets"]
-                                           if len(r["files"]) == 1}
-            r.update(score_answer(r["answer"], r["targets"], tf, r["files"]))
+def _load(run: Path) -> tuple[dict, list[dict]]:
+    meta = json.loads((run / "meta.json").read_text(encoding="utf-8"))
+    rows = [json.loads(l) for l in
+            (run / "runs.jsonl").read_text(encoding="utf-8").splitlines() if l]
+    for r in rows:              # scored again from the saved answer: scoring fixes apply
+        tf = r.get("target_files") or {t: r["files"][0] for t in r["targets"]
+                                       if len(r["files"]) == 1}
+        r.update(score_answer(r["answer"], r["targets"], tf, r["files"]))
+    return meta, rows
+
+
+def report_runs(runs: list[Path], pool: bool = False) -> None:
+    loaded = [(run, *_load(run)) for run in runs]
+    if pool:
+        # Shards of one selection (`--shard K/N`): one model, disjoint tasks,
+        # so the paired test runs over all of them together.
+        models = {m["run"]["model"] for _, m, _ in loaded}
+        if len(models) != 1:
+            sys.exit(f"--pool needs runs of one model, got {sorted(models)}")
+        meta = dict(loaded[0][1])
+        meta["run"] = dict(meta["run"], complete=all(m["run"].get("complete")
+                                                     for _, m, _ in loaded))
+        out = runs[0].parent / f"pooled-{runs[0].name}"
+        out.mkdir(exist_ok=True)
+        loaded = [(out, meta, [r for _, _, rows in loaded for r in rows])]
+    for run, meta, rows in loaded:
         pairs = paired(rows)
         if not pairs:
             print(f"{run}: no task has both runs yet")
@@ -729,6 +755,7 @@ def main() -> None:
     r.add_argument("--seed", type=int, default=0, help="task sample seed")
     r.add_argument("--exclude-sample", type=int, help="leave out the development sample")
     r.add_argument("--exclude-seed", type=int, default=0)
+    r.add_argument("--shard", metavar="K/N", help="run the K-th of N interleaved slices")
     r.add_argument("--seed-runs", type=int, default=0, help="the model's sampling seed")
     r.add_argument("--embed", action="store_true",
                    help="embed each checkout, so CodeOrbit's explore uses meaning too")
@@ -740,11 +767,13 @@ def main() -> None:
     r.add_argument("--resume")
     p = sub.add_parser("report", help="paired with/without comparison of finished runs")
     p.add_argument("runs", nargs="+")
+    p.add_argument("--pool", action="store_true",
+                   help="one result over several shard runs of the same model")
     args = ap.parse_args()
     if args.cmd == "run":
         run(args)
     else:
-        report_runs([Path(x) for x in args.runs])
+        report_runs([Path(x) for x in args.runs], pool=args.pool)
 
 
 if __name__ == "__main__":
