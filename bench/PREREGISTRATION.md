@@ -88,6 +88,127 @@ and the end of the last.
 - Issues that fail setup (checkout, indexing) are excluded from both conditions
   and listed by ID. No issue is excluded for any other reason.
 
+## Second sample: other languages (added before any run on it)
+
+The 100 issues above are all Python. To test the same question in the other
+languages CodeOrbit supports, a second sample is run by **both agents** with the
+same conditions, measures and analysis, reported separately (one McNemar test
+per agent per sample; the two samples are never pooled):
+
+- **Dataset:** SWE-bench Multilingual (`SWE-bench/SWE-bench_Multilingual`, test
+  split, downloaded file SHA-256 `7d0c845f...`). It was used before only for
+  retrieval scores, where nothing was tuned on it; no agent has seen it.
+- **Sample:** 100 of its 300 issues, chosen by
+  `--split multilingual --sample 100 --seed 3`: Rust 15, JavaScript/TypeScript
+  15, PHP 15, Ruby 15, C/C++ 14, Java 13, Go 12, and 1 whose fix touches no
+  supported code file (excluded under the setup rule); 32 projects. Listed below.
+- **Pilot:** 3 issues outside the sample, only to check the pipeline:
+  `gin-gonic__gin-3741` (Go), `google__gson-2061` (Java), `sharkdp__bat-1892`
+  (Rust).
+
+### Multilingual sample (100 issues)
+
+1. `apache__lucene-11760` (Java)
+2. `apache__lucene-12022` (Java)
+3. `apache__lucene-12196` (Java)
+4. `apache__lucene-13301` (Java)
+5. `astral-sh__ruff-15330` (Rust)
+6. `astral-sh__ruff-15356` (Rust)
+7. `astral-sh__ruff-15394` (Rust)
+8. `astral-sh__ruff-15443` (Rust)
+9. `axios__axios-4731` (JS/TS)
+10. `axios__axios-4738` (JS/TS)
+11. `axios__axios-6539` (JS/TS)
+12. `babel__babel-15649` (JS/TS)
+13. `babel__babel-16130` (JS/TS)
+14. `briannesbitt__carbon-2665` (PHP)
+15. `briannesbitt__carbon-2752` (PHP)
+16. `briannesbitt__carbon-3041` (PHP)
+17. `briannesbitt__carbon-3103` (PHP)
+18. `caddyserver__caddy-5870` (Go)
+19. `caddyserver__caddy-6345` (Go)
+20. `facebook__docusaurus-10309` (JS/TS)
+21. `fastlane__fastlane-19304` (Ruby)
+22. `fastlane__fastlane-20642` (Ruby)
+23. `fastlane__fastlane-20958` (Ruby)
+24. `fastlane__fastlane-21857` (Ruby)
+25. `fluent__fluentd-3328` (Ruby)
+26. `fluent__fluentd-3616` (Ruby)
+27. `fluent__fluentd-3640` (Ruby)
+28. `fluent__fluentd-4311` (Ruby)
+29. `fluent__fluentd-4655` (Ruby)
+30. `fmtlib__fmt-2317` (C/C++)
+31. `fmtlib__fmt-3158` (C/C++)
+32. `fmtlib__fmt-3248` (C/C++)
+33. `gin-gonic__gin-2755` (Go)
+34. `gohugoio__hugo-12204` (no supported code file)
+35. `gohugoio__hugo-12343` (Go)
+36. `gohugoio__hugo-12448` (Go)
+37. `gohugoio__hugo-12768` (Go)
+38. `google__gson-1093` (Java)
+39. `google__gson-2479` (Java)
+40. `hashicorp__terraform-34580` (Go)
+41. `hashicorp__terraform-34900` (Go)
+42. `hashicorp__terraform-35611` (Go)
+43. `jekyll__jekyll-8167` (Ruby)
+44. `jekyll__jekyll-9141` (Ruby)
+45. `jqlang__jq-2598` (C/C++)
+46. `jqlang__jq-2650` (C/C++)
+47. `jqlang__jq-2658` (C/C++)
+48. `laravel__framework-48573` (PHP)
+49. `laravel__framework-48636` (PHP)
+50. `laravel__framework-52451` (PHP)
+51. `laravel__framework-53696` (PHP)
+52. `laravel__framework-53914` (PHP)
+53. `mrdoob__three.js-25687` (JS/TS)
+54. `mrdoob__three.js-26589` (JS/TS)
+55. `nushell__nushell-12950` (Rust)
+56. `php-cs-fixer__php-cs-fixer-7523` (PHP)
+57. `php-cs-fixer__php-cs-fixer-7875` (PHP)
+58. `php-cs-fixer__php-cs-fixer-8256` (PHP)
+59. `phpoffice__phpspreadsheet-3469` (PHP)
+60. `phpoffice__phpspreadsheet-4114` (PHP)
+61. `phpoffice__phpspreadsheet-4214` (PHP)
+62. `preactjs__preact-3345` (JS/TS)
+63. `preactjs__preact-3562` (JS/TS)
+64. `preactjs__preact-3567` (JS/TS)
+65. `preactjs__preact-3763` (JS/TS)
+66. `preactjs__preact-4152` (JS/TS)
+67. `preactjs__preact-4182` (JS/TS)
+68. `projectlombok__lombok-3215` (Java)
+69. `projectlombok__lombok-3312` (Java)
+70. `projectlombok__lombok-3350` (Java)
+71. `projectlombok__lombok-3479` (Java)
+72. `projectlombok__lombok-3486` (Java)
+73. `projectlombok__lombok-3571` (Java)
+74. `projectlombok__lombok-3674` (Java)
+75. `prometheus__prometheus-11859` (Go)
+76. `prometheus__prometheus-12874` (Go)
+77. `prometheus__prometheus-15142` (Go)
+78. `redis__redis-10068` (C/C++)
+79. `redis__redis-11279` (C/C++)
+80. `redis__redis-11734` (C/C++)
+81. `redis__redis-12272` (C/C++)
+82. `redis__redis-12472` (C/C++)
+83. `redis__redis-13115` (C/C++)
+84. `rubocop__rubocop-13393` (Ruby)
+85. `rubocop__rubocop-13431` (Ruby)
+86. `rubocop__rubocop-13503` (Ruby)
+87. `rubocop__rubocop-13579` (Ruby)
+88. `sharkdp__bat-2393` (Rust)
+89. `sharkdp__bat-2835` (Rust)
+90. `tokio-rs__axum-734` (Rust)
+91. `tokio-rs__axum-2096` (Rust)
+92. `tokio-rs__tokio-4384` (Rust)
+93. `tokio-rs__tokio-4867` (Rust)
+94. `tokio-rs__tokio-6603` (Rust)
+95. `tokio-rs__tokio-6724` (Rust)
+96. `uutils__coreutils-6682` (Rust)
+97. `uutils__coreutils-6731` (Rust)
+98. `valkey-io__valkey-1499` (C/C++)
+99. `valkey-io__valkey-1842` (C/C++)
+100. `vuejs__core-11589` (JS/TS)
+
 ## Follow-up
 
 A larger follow-up may be run after this test. If it is, it uses issues outside
