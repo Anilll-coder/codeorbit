@@ -170,7 +170,12 @@ def test_a_repeated_question_stops_resending_the_same_bodies(project):
     again = mcp_server.codeorbit_explore("how does Engine run",
                                          project_path=str(root))
     assert budget.estimate_tokens(again) < budget.estimate_tokens(first)
-    assert "already returned to you earlier in this session" in again
+    # explore now moves past what the session was shown, so a repeat either
+    # brings new candidates or says everything matching was already shown -
+    # it never sends the first answer's bodies again.
+    first_names = {l for l in first.splitlines() if l.startswith("## ")}
+    assert first_names.isdisjoint(l for l in again.splitlines() if l.startswith("## "))
+    assert "already" in again.lower()
 
 
 def test_detail_full_brings_an_elided_body_back(project):

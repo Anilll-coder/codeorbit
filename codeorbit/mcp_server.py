@@ -339,6 +339,7 @@ def codeorbit_explore(root, conn, query_text: str, max_symbols: int = 2,
 EXPLORE_BODY_LINES = 80     # the best match's source; the next gets about half
 EXPLORE_MORE = 6            # further candidates, one line each
 EXPLORE_NEIGHBOURS = (5, 6)  # callers, callees per symbol
+EXPLORE_REMIND_AFTER = 3    # from this call on, name what was already shown
 
 
 def explore_text(root: Path, conn, query_text: str, max_symbols: int = 2,
@@ -349,7 +350,18 @@ def explore_text(root: Path, conn, query_text: str, max_symbols: int = 2,
         picks, more = ctxmod.retrieve(conn, query_text, max_symbols=max_symbols), []
         budget, near = MAX_BODY_LINES, (10, 12)
     else:
-        rows = explore_rows(root, conn, query_text, max_symbols + EXPLORE_MORE)
+        # A repeat call moves down the ranking: what this session has already
+        # been shown is skipped, so a rephrased question brings new candidates
+        # instead of the same ones again. detail="full" is a request to resend.
+        seen = LEDGER.shown if detail != "full" else {}
+        late = LEDGER.explore_calls + 1 >= EXPLORE_REMIND_AFTER and detail != "full"
+        if late:
+            # Deep into a search: candidates matter more than source now, and
+            # every token sent is re-read on every later turn.
+            max_symbols = min(max_symbols, 1)
+        rows = [r for r in explore_rows(root, conn, query_text,
+                                        max_symbols + EXPLORE_MORE + len(seen))
+                if r["id"] not in seen][:max_symbols + EXPLORE_MORE]
         # Source goes to functions and methods: a class's "body" is its first
         # lines - attributes, a docstring - while the method that matters is
         # cut off. Classes stay in the list, with their members named.
@@ -364,11 +376,20 @@ def explore_text(root: Path, conn, query_text: str, max_symbols: int = 2,
         picks = picks or rows[:max_symbols]
         more = [r for r in rows if r not in picks][:EXPLORE_MORE]
         budget, near = EXPLORE_BODY_LINES, EXPLORE_NEIGHBOURS
+        if late:
+            budget, near = EXPLORE_BODY_LINES // 2, (3, 3)
     if not picks:
+        if style != "classic" and LEDGER.shown:
+            return ("Everything that matches this was already shown in this session: "
+                    + ", ".join(list(LEDGER.shown.values())[:EXPLORE_MORE])
+                    + ".\nIf one of these is what the task needs, answer now; "
+                    "otherwise ask about something different, or call "
+                    "codeorbit_node on one name.")
         return (f"Nothing in the graph matched: {query_text!r}\n\n"
                 "Try codeorbit_search with a single identifier to see what "
                 "exists, or codeorbit_overview for the project's main symbols.")
 
+    earlier = list(LEDGER.shown.values()) if style != "classic" else []
     ledger = _ledger_for(detail, [r["id"] for r in picks])
     budgets = budgetmod.allocate(len(picks), budget)
     focus = None
@@ -376,6 +397,15 @@ def explore_text(root: Path, conn, query_text: str, max_symbols: int = 2,
         from .rank import code_tokens
         focus = {t for t in code_tokens(query_text) if t not in ctxmod.STOP and len(t) > 2}
     header = f"Retrieved {len(picks)} symbol(s) for: {query_text[:200]}\n"
+    if style != "classic":
+        LEDGER.explore_calls += 1
+        for r in picks + more:
+            LEDGER.shown.setdefault(r["id"], r["qname"])
+        if LEDGER.explore_calls >= EXPLORE_REMIND_AFTER and earlier:
+            header = (f"Already shown in this session (best first): "
+                      f"{', '.join(earlier[:EXPLORE_MORE])}. If one of these is what "
+                      f"the task needs, answer now rather than searching again. "
+                      f"New candidates follow.\n\n" + header)
     body = "\n\n".join(
         _fmt_symbol(root, conn, r, body_lines=lines, ledger=ledger,
                     source=detail != "signatures", neighbours=near, focus=focus)

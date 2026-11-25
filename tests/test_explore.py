@@ -103,3 +103,46 @@ def test_source_is_capped_and_lands_on_the_matching_lines(project):
     source = [l for l in out.splitlines() if " | " in l]
     assert len(source) <= sum(budget.allocate(2, ms.EXPLORE_BODY_LINES))
     assert any("proxy_header = request.proxy_header" in l for l in source)
+
+
+def _session_calls(root: Path, q: str, n: int) -> list[str]:
+    ms.LEDGER = budget.Ledger()                 # one agent session
+    conn = db.connect(root)
+    try:
+        return [ms.explore_text(root, conn, q, max_symbols=1) for _ in range(n)]
+    finally:
+        conn.close()
+
+
+def test_asking_again_brings_new_candidates_not_the_same_ones(project):
+    first, second = _session_calls(project, "proxy header", 2)
+    assert headers(first) and headers(second)
+    assert set(headers(first)).isdisjoint(headers(second))
+
+
+def test_from_the_third_call_it_names_what_was_already_shown(project):
+    # On this small project the third call has nothing new left, so it answers
+    # with the "everything was shown" form; either way it leads with the names.
+    calls = _session_calls(project, "proxy header", 3)
+    assert "Already shown in this session" not in calls[1]
+    shown_first = headers(calls[0])[0].split()[-1]
+    first_line = calls[2].split("\n", 1)[0]
+    assert first_line.startswith(("Already shown in this session",
+                                  "Everything that matches this was already shown"))
+    assert shown_first in first_line
+
+
+def test_when_everything_was_shown_it_says_so(project):
+    calls = _session_calls(project, "proxy header", 12)
+    assert calls[-1].startswith("Everything that matches this was already shown")
+
+
+def test_full_detail_resends_what_was_shown(project):
+    ms.LEDGER = budget.Ledger()
+    conn = db.connect(project)
+    try:
+        a = ms.explore_text(project, conn, "proxy header", max_symbols=1)
+        b = ms.explore_text(project, conn, "proxy header", max_symbols=1, detail="full")
+    finally:
+        conn.close()
+    assert headers(a) == headers(b)

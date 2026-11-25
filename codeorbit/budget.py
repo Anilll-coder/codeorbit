@@ -94,6 +94,12 @@ class Ledger:
         self._full_sends = full_sends
         self._stale_after = stale_after
         self._response: set[tuple[str, int, int]] = set()
+        # What explore has put in front of the agent this session, in the order
+        # first shown (id -> qualified name), and how often it was called. An
+        # agent pilot looped on explore - 13 to 19 calls on 44 of 100 issues,
+        # 63% of its tokens - because each call mostly repeated the last.
+        self.shown: dict[int, str] = {}
+        self.explore_calls = 0
 
     # ------------------------------------------------- within one response
 
