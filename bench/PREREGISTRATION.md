@@ -205,3 +205,10 @@ full whatever this test or it shows. Its results are never pooled with these
   and small models, and a subscription model's usage limits would have stretched
   200 sessions over days. Claude Code remains supported by the harness
   (`--agent claude`) but is not part of this test.
+- After the qwen3:14b pilot, before its main run: in the pilot, qwen3:14b gave no
+  answer in all 3 *without* runs, and the harness could not show why. On the
+  forced final turn, a model that writes its locations as text instead of
+  calling `finish` is now scored on those locations (stop reason `text_answer`),
+  in both conditions alike, and the final message's text is saved with every
+  run. The earlier qwen3:8b run used the previous rule (text on the final turn
+  counted as no answer).

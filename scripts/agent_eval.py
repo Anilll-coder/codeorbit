@@ -333,10 +333,16 @@ def episode(model: str, condition: str, issue: str, ws: Workspace, count,
         rec["output_tokens"] += count((msg.get("content") or "") +
                                       "".join(json.dumps(a) + n for n, a in calls))
         messages.append({k: msg[k] for k in ("role", "content", "tool_calls") if k in msg})
+        rec["final_text"] = (msg.get("content") or "")[-1500:]
         if not calls:
             rec["malformed"] += 1
             if forced:
-                rec["stop"] = "no_answer"
+                # Told to answer, it answered in prose instead of calling finish
+                # (qwen3:14b did this in the pilot). The locations it wrote are its
+                # answer; reading them is the same for both conditions.
+                locs = text_locations(msg.get("content") or "")
+                rec["answer"] = locs or None
+                rec["stop"] = "text_answer" if locs else "no_answer"
                 break
             messages.append({"role": "user", "content": NUDGE})
             continue
@@ -355,7 +361,9 @@ def episode(model: str, condition: str, issue: str, ws: Workspace, count,
         if done:
             break
         if forced:                      # it called a tool instead of finishing
-            rec["stop"] = "no_answer"
+            locs = text_locations(msg.get("content") or "")
+            rec["answer"] = locs or None
+            rec["stop"] = "text_answer" if locs else "no_answer"
             break
     rec["seconds"] = round(time.perf_counter() - t0, 1)
     return rec
@@ -366,6 +374,21 @@ def episode(model: str, condition: str, issue: str, ws: Workspace, count,
 _EXTS = sorted({k[1:] for k in __import__("codeorbit.langs", fromlist=["SUFFIX"]).SUFFIX
                 if k.startswith(".")}, key=len, reverse=True)
 _LOC = re.compile(r"^(.+?\.(?:%s))(?:(?:::|:|#|\s+)(.*))?$" % "|".join(map(re.escape, _EXTS)))
+
+
+_LOC_IN_TEXT = re.compile(r"[\w./\\-]+\.(?:%s)(?:(?:::|:|#)[A-Za-z_$][\w$]*(?:(?:\.|::|#)[A-Za-z_$][\w$]*)*)?"
+                          % "|".join(map(re.escape, _EXTS)))
+
+
+def text_locations(text: str) -> list[str]:
+    """`path:Function` locations written in prose, in order, at most MAX_ANSWERS.
+    Only ones naming a function count: a bare file name is not an answer."""
+    out = []
+    for m in _LOC_IN_TEXT.finditer(text or ""):
+        loc = m.group(0).strip("`'\".,")
+        if parse_location(loc)[1] and loc not in out:
+            out.append(loc)
+    return out[:MAX_ANSWERS]
 
 
 def parse_location(s: str) -> tuple[str | None, str | None]:

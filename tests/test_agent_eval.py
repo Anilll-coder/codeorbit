@@ -89,3 +89,12 @@ def test_parse_location_ignores_what_follows_the_name():
     assert ae.parse_location("src/lib.rs:Parser::parse") == ("src/lib.rs", "Parser.parse")
     assert ae.parse_location("lib/a.rb#Foo#bar") == ("lib/a.rb", "Foo.bar")
     assert ae.parse_location("pkg/x.go:42") == ("pkg/x.go", None)
+
+
+def test_locations_written_in_prose_are_read():
+    from agent_eval import text_locations
+    text = ("The bug is in `src/_pytest/unittest.py:TestCaseFunction.runtest`, and also "
+            "maybe src/_pytest/unittest.py:_is_skipped. See src/_pytest/unittest.py too.")
+    assert text_locations(text) == ["src/_pytest/unittest.py:TestCaseFunction.runtest",
+                                    "src/_pytest/unittest.py:_is_skipped"]
+    assert text_locations("no locations here") == []
