@@ -496,6 +496,39 @@ Found, by the language of the files the fix changed:
   checked against git's own view of which function each change is in before
   this run; the C++ and JavaScript extraction bugs it turned up were fixed first.
 
+### With an agent: does it find the bug more often?
+
+Retrieval scores say the right code reaches the model; this asks whether an
+agent uses it. A local tool-calling model (qwen3:8b through Ollama, temperature
+0, 16k context, at most 20 turns) is given each issue twice from a fresh
+conversation and must name the functions to change: once with `grep`,
+`read_file` and `list_dir`, and once with those plus CodeOrbit's MCP tools.
+100 held-out SWE-bench Lite issues (seed 1), with the analysis fixed before
+any agent ran
+([run](bench/agent_runs/20261125T022954Z-agent-qwen3-8b-pooled), CodeOrbit
+`12af41a`):
+
+| | without CodeOrbit | with CodeOrbit | gained / lost | exact McNemar p |
+|---|---|---|---|---|
+| a changed function in the answer | 22% | **41%** | 23 / 4 | 0.0003 |
+| ... as the first answer | 18% | **34%** | 18 / 2 | 0.0004 |
+| issues that name the code (40) | 48% | **68%** | 10 / 2 | 0.039 |
+| issues that do not (60) | 5% | **24%** | 13 / 2 | 0.007 |
+| gave an answer at all | 86% | 100% | | |
+| turns (median) | 20 | 15 | | |
+| input tokens per issue (median) | 47,034 | 108,360 | | |
+| input tokens per success | 253,531 | 240,884 | | |
+
+- **The agent names the function to fix almost twice as often**, and the gain
+  holds where the issue names no code at all - the case retrieval alone found
+  hardest.
+- **It costs more per issue, not per success.** With CodeOrbit the agent reads
+  about twice the input tokens per issue (it called `codeorbit_explore` about
+  ten times per issue), but spends slightly fewer tokens per bug it finds - and
+  on issues that name no code, about a third.
+- One small model, one run. Whether the gain holds for stronger models, which
+  use tools better, is not measured here.
+
 ### Performance on constrained hardware
 
 Measured on 7.3 GB RAM with **no usable GPU** — `ollama ps` reports phi4-mini
