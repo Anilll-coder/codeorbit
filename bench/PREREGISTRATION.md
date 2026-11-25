@@ -45,12 +45,21 @@ The agent must answer with up to 5 locations written `path:Function` or
 1. **qwen3:14b** (open, local) through Ollama on Kaggle (2 x NVIDIA T4), with
    `scripts/agent_eval.py`: temperature 0, fixed seed, thinking off, 16,384-token
    context, at most 20 turns, at most 12,000 characters per tool result.
-2. **Claude Code** with a Claude Sonnet model (frontier), run non-interactively
-   (`claude -p`) with its built-in read-only tools (Read, Grep, Glob) in
-   *without*, plus CodeOrbit's MCP server in *with*; at most 20 turns; the exact
-   model ID and Claude Code version are recorded in the run. If plan usage limits
-   stop this run early, the result covers the issues completed, in the fixed
-   order of the sample, and is reported as such.
+2. **OpenCode** (a real, open-source coding agent; version recorded in the run)
+   with the free hosted model `opencode/big-pickle`, run non-interactively
+   (`opencode run`) on an ordinary laptop with `scripts/claude_eval.py --agent
+   opencode`. Tools: OpenCode's read, grep, glob and list in *without*, plus
+   CodeOrbit's MCP server in *with*; edit, bash, web, sub-agents and the rest are
+   denied; at most 20 agentic steps (`steps: 20`). Two differences from the
+   Kaggle run, both fixed in advance: CodeOrbit runs **without embeddings** (a
+   laptop CPU cannot embed these repositories in reasonable time), so its tools
+   rank with name search and BM25 only; and the provider does not publish which
+   model `big-pickle` is, so the result is reported as "a free hosted model"
+   with its OpenCode identifier. A service error (an unavailable model, a
+   network failure) is retried once and then stops the run to be resumed; it is
+   never recorded as a failed answer. If the model is withdrawn before the run
+   finishes, the result covers the issues completed, in the fixed order of the
+   sample, and is reported as such.
 
 CodeOrbit version: the commit recorded in each run's `meta.json`; no change to
 CodeOrbit's retrieval or tools is made between the start of the first main run
@@ -191,4 +200,8 @@ full whatever this test or it shows. Its results are never pooled with these
 
 ## Deviations
 
-None yet.
+- Before any run: the second agent was changed from Claude Code (Sonnet) to
+  OpenCode with a free hosted model, because the project's aim is to help free
+  and small models, and a subscription model's usage limits would have stretched
+  200 sessions over days. Claude Code remains supported by the harness
+  (`--agent claude`) but is not part of this test.

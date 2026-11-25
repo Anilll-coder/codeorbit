@@ -1,4 +1,4 @@
-"""Claude Code as the agent: the same issues, with and without CodeOrbit.
+"""Claude Code or OpenCode as the agent: the same issues, with and without CodeOrbit.
 
 The frontier-model half of the pre-registered agent test (bench/PREREGISTRATION.md).
 Each issue is given to Claude Code twice, non-interactively (`claude -p`), each
@@ -196,8 +196,112 @@ def parse_stream(out: str, seconds: float, count) -> dict:
     }
 
 
+# ------------------------------------------------------------------ OpenCode
+#
+# The same test with OpenCode (opencode.ai) as the agent and a free hosted model.
+# Its read-only tools are read, grep, glob and list; everything that edits, runs,
+# fetches or delegates is denied, and `steps` caps the agentic iterations the way
+# --max-turns does for Claude Code. CodeOrbit's MCP tools are named
+# codeorbit_codeorbit_<tool> there.
+
+OC_BASE = ["read", "grep", "glob", "list"]
+OC_DENY = ["edit", "bash", "webfetch", "websearch", "task", "todowrite", "question",
+           "skill", "lsp", "external_directory"]
+
+
+def opencode_bin(path: str | None) -> str:
+    """The native executable: npm's `opencode` is a .cmd wrapper on Windows, and
+    passing an issue's text through cmd.exe would mangle it."""
+    if path:
+        return path
+    found = shutil.which("opencode")
+    if found and os.name == "nt":
+        exe = Path(found).parent / "node_modules" / "opencode-ai" / "bin" / "opencode.exe"
+        if exe.exists():
+            return str(exe)
+    if not found:
+        sys.exit("opencode not found - install OpenCode first")
+    return found
+
+
+def opencode_config(cond: str, dest: Path, max_turns: int) -> dict:
+    perm = {**{k: "deny" for k in OC_DENY}, **{k: "allow" for k in OC_BASE}}
+    cfg = {"$schema": "https://opencode.ai/config.json",
+           "agent": {"build": {"steps": max_turns, "permission": perm}}}
+    if cond == "with":
+        perm.update({f"codeorbit_{t}": "deny" for t in
+                     ("codeorbit_path", "codeorbit_audit", "codeorbit_overview")})
+        cmd = mcp_command() + ["mcp", "--path", str(dest)]
+        cfg["mcp"] = {"codeorbit": {"type": "local", "command": cmd, "enabled": True}}
+    return cfg
+
+
+def session_opencode(binary: str, model: str, cond: str, prompt: str, dest: Path,
+                     cfg: Path, max_turns: int, count) -> dict:
+    cfg.write_text(json.dumps(opencode_config(cond, dest, max_turns)), encoding="utf-8")
+    env = dict(os.environ, OPENCODE_CONFIG=str(cfg))
+    cmd = [binary, "run", "--agent", "build", "--model", model, "--format", "json", prompt]
+    t0 = time.perf_counter()
+    try:
+        p = subprocess.run(cmd, cwd=dest, env=env, capture_output=True, text=True,
+                           encoding="utf-8", errors="replace", timeout=SESSION_TIMEOUT)
+        out, err = p.stdout, p.stderr
+    except subprocess.TimeoutExpired as e:
+        out = e.stdout or ""
+        err = "timeout"
+        if isinstance(out, bytes):
+            out = out.decode("utf-8", "replace")
+    return parse_opencode(out, round(time.perf_counter() - t0, 1), count, err)
+
+
+def parse_opencode(out: str, seconds: float, count, err: str = "") -> dict:
+    """The episode record from `opencode run --format json` events."""
+    tools: dict[str, int] = {}
+    tool_tokens = steps = peak = 0
+    tin = tout = tread = twrite = 0
+    texts, errors, finished = [], [], False
+    for line in out.splitlines():
+        try:
+            ev = json.loads(line)
+        except ValueError:
+            continue
+        kind, part = ev.get("type"), ev.get("part") or {}
+        if kind == "tool_use":
+            name = str(part.get("tool", "?")).replace("codeorbit_codeorbit_", "codeorbit_")
+            tools[name] = tools.get(name, 0) + 1
+            tool_tokens += count(str((part.get("state") or {}).get("output") or ""))
+        elif kind == "text":
+            texts.append(part.get("text", ""))
+        elif kind == "step_finish":
+            steps += 1
+            t = part.get("tokens") or {}
+            c = t.get("cache") or {}
+            step_in = t.get("input", 0) + c.get("read", 0) + c.get("write", 0)
+            tin += t.get("input", 0)
+            tread += c.get("read", 0)
+            twrite += c.get("write", 0)
+            tout += t.get("output", 0) + t.get("reasoning", 0)
+            peak = max(peak, step_in)
+            finished = finished or part.get("reason") == "stop"
+        elif kind == "error":
+            errors.append(json.dumps(ev.get("error", ev))[:300])
+    if not steps:
+        return {"error": (errors[0] if errors else (err or "no output"))[:300], "seconds": seconds}
+    text = "\n".join(texts)
+    answer = parse_answer(text)
+    return {
+        "answer": answer, "answered": bool(answer), "malformed": 0, "turns": steps,
+        "input_tokens": tin + tread + twrite, "input_tokens_uncached": tin,
+        "cache_read_tokens": tread, "output_tokens": tout,
+        "tool_tokens": tool_tokens, "peak_context": peak, "seconds": seconds,
+        "tool_calls": tools, "stop": "finish" if finished else (errors[0][:80] if errors else "steps"),
+        "final_text": text[-1500:],
+    }
+
+
 def run(args) -> None:
-    binary = claude_bin(args.claude)
+    opencode = args.agent == "opencode"
+    binary = opencode_bin(args.binary) if opencode else claude_bin(args.binary)
     tok_name, count, tok_exact = bench.make_tokenizer(args.tokenizer)
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
@@ -209,6 +313,8 @@ def run(args) -> None:
             setattr(args, k, sel.get(k))
         args.model, args.embed, args.max_turns = (meta["run"]["model"], meta["run"]["embed"],
                                                   meta["run"]["max_turns"])
+        if meta["run"].get("agent", "claude-code") != ("opencode" if opencode else "claude-code"):
+            sys.exit(f"{out} was run with {meta['run'].get('agent')}; pass the same --agent")
         rows = [json.loads(l) for l in (out / "runs.jsonl").read_text(encoding="utf-8").splitlines() if l]
         done = {(r["question_id"], r["condition"]) for r in rows}
         print(f"resuming {out}: {len(done)} session(s) already done")
@@ -224,8 +330,10 @@ def run(args) -> None:
         sys.exit("no tasks selected")
 
     version = subprocess.run([binary, "--version"], capture_output=True, text=True).stdout.strip()
+    agent = "opencode" if opencode else "claude-code"
     if not args.resume:
-        out = Path(args.out) / f"{stamp}-claude-{re.sub(r'[^A-Za-z0-9.]+', '-', args.model)}"
+        out = Path(args.out) / (f"{stamp}-{'opencode' if opencode else 'claude'}-"
+                                f"{re.sub(r'[^A-Za-z0-9.]+', '-', args.model)}")
         out.mkdir(parents=True, exist_ok=True)
         meta = {
             "dataset": {"name": f"swebench-{args.split}", "source": swe.SPLITS[args.split],
@@ -239,10 +347,11 @@ def run(args) -> None:
                           "dirty": bool(bench._git("status", "--porcelain",
                                                    "--untracked-files=no", cwd=REPO))},
             "run": {"utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-                    "agent": "claude-code", "claude_code_version": version,
+                    "agent": agent, "agent_version": version,
                     "model": args.model, "conditions": list(CONDITIONS),
                     "max_turns": args.max_turns, "embed": args.embed,
-                    "base_tools": BASE_TOOLS, "codeorbit_tools": CO_TOOLS,
+                    "base_tools": OC_BASE if opencode else BASE_TOOLS,
+                    "codeorbit_tools": CO_TOOLS,
                     "tokenizer_for_tool_tokens": tok_name, "tasks_selected": len(tasks),
                     "complete": False, "models_seen": []},
             "environment": {"python": sys.version.split()[0], "platform": platform.platform(),
@@ -286,24 +395,29 @@ def run(args) -> None:
             print("    skipped: the fix touches no indexed file", flush=True)
             continue
         cfg = cfg_dir / f"{owner}__{name}.json"
-        cfg.write_text(json.dumps({"mcpServers": {"codeorbit": {
-            "command": mcp_command()[0], "args": mcp_command()[1:] + ["mcp", "--path", str(dest)]}}}),
-            encoding="utf-8")
+        if not opencode:
+            cfg.write_text(json.dumps({"mcpServers": {"codeorbit": {
+                "command": mcp_command()[0],
+                "args": mcp_command()[1:] + ["mcp", "--path", str(dest)]}}}), encoding="utf-8")
         prompt = PROMPT.format(issue=task["problem_statement"][:swe.QUESTION_CHARS])
         kind = swe.question_kind(task["problem_statement"], targets)
         order = todo if n % 2 else todo[::-1]
         marks = []
         for cond in order:
-            rec = session(binary, args.model, cond, prompt, dest, cfg, args.max_turns, count)
+            run_one = session_opencode if opencode else session
+            ccfg = cfg.with_name(f"{owner}__{name}.{cond}.json") if opencode else cfg
+            rec = run_one(binary, args.model, cond, prompt, dest, ccfg, args.max_turns, count)
             if "error" in rec:
-                if LIMIT_WORDS.search(rec["error"]) or "auth" in rec["error"].lower():
+                # An error is the service's, not the agent's: a usage limit, an
+                # unavailable free model, a network failure. Recording it as "no
+                # answer" would count it against one condition, so retry once,
+                # then stop cleanly and resume later.
+                print(f"    {cond}: error ({rec['error'][:120]}); retrying in 60 s", flush=True)
+                time.sleep(60)
+                rec = run_one(binary, args.model, cond, prompt, dest, ccfg, args.max_turns, count)
+                if "error" in rec:
                     stopped, reason = True, rec["error"]
                     break
-                print(f"    {cond}: error, recorded as no answer: {rec['error']}", flush=True)
-                rec = {"answer": None, "answered": False, "malformed": 0, "turns": 0,
-                       "input_tokens": 0, "output_tokens": 0, "tool_tokens": 0,
-                       "peak_context": 0, "seconds": rec["seconds"], "tool_calls": {},
-                       "stop": "error: " + rec["error"][:120]}
             seen_models.update(rec.get("models", []))
             row = {"question_id": iid, "repo": task["repo"], "kind": kind, "condition": cond,
                    "targets": targets, "files": files, "target_files": tfiles,
@@ -317,7 +431,8 @@ def run(args) -> None:
             break
     log.close()
     if reason:
-        print(f"\nstopped: {reason}\nresume with: python scripts/claude_eval.py run --resume {out}")
+        print(f"\nstopped: {reason}\nresume with: python scripts/claude_eval.py run "
+              f"--agent {args.agent} --resume {out}")
     meta["run"]["complete"] = not stopped
     meta["run"]["models_seen"] = sorted(seen_models)
     meta["run"]["wall_s"] = round(meta["run"].get("wall_s", 0) + time.perf_counter() - t_start, 1)
@@ -330,7 +445,9 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
     r = sub.add_parser("run")
-    r.add_argument("--model", default="sonnet", help="Claude Code model alias or ID")
+    r.add_argument("--agent", choices=["claude", "opencode"], default="claude")
+    r.add_argument("--model", default="sonnet",
+                   help="Claude Code alias/ID, or OpenCode provider/model (e.g. opencode/big-pickle)")
     r.add_argument("--split", default="verified", choices=list(swe.SPLITS))
     r.add_argument("--exclude-split", choices=list(swe.SPLITS))
     r.add_argument("--repos")
@@ -345,7 +462,7 @@ def main() -> None:
     r.add_argument("--out", default=str(REPO / "bench" / "agent_runs"))
     r.add_argument("--max-hours", type=float)
     r.add_argument("--resume")
-    r.add_argument("--claude", help="path to the claude binary")
+    r.add_argument("--binary", "--claude", dest="binary", help="path to the agent's binary")
     args = ap.parse_args()
     run(args)
 

@@ -82,3 +82,40 @@ def test_the_index_is_hidden_from_text_search(tmp_path):
 
 def test_codeorbit_tools_match_the_open_model_harness():
     assert [t.split("__")[-1] for t in ce.CO_TOOLS] == list(ce.ae.CO_PARAMS)
+
+
+def test_opencode_events_give_steps_tokens_tools_and_answer():
+    ev = lambda t, **p: json.dumps({"type": t, "part": p})
+    out = "\n".join([
+        ev("step_start"),
+        ev("tool_use", tool="grep", state={"status": "completed", "output": "x" * 40}),
+        ev("tool_use", tool="codeorbit_codeorbit_explore", state={"output": "y" * 80}),
+        ev("step_finish", reason="tool-calls", tokens={"input": 4909, "output": 84, "reasoning": 0,
+                                                       "cache": {"write": 0, "read": 0}}),
+        ev("text", text="It is rebuild_proxies.\n\nANSWER: requests/sessions.py:SessionRedirectMixin.rebuild_proxies"),
+        ev("step_finish", reason="stop", tokens={"input": 2625, "output": 43, "reasoning": 63,
+                                                 "cache": {"write": 0, "read": 4608}}),
+    ])
+    rec = ce.parse_opencode(out, 9.0, lambda s: len(s) // 4)
+    assert rec["answer"] == ["requests/sessions.py:SessionRedirectMixin.rebuild_proxies"]
+    assert rec["turns"] == 2 and rec["stop"] == "finish"
+    assert rec["input_tokens"] == 4909 + 2625 + 4608 and rec["output_tokens"] == 84 + 43 + 63
+    assert rec["tool_calls"] == {"grep": 1, "codeorbit_explore": 1}
+    assert rec["tool_tokens"] == 30 and rec["peak_context"] == 7233
+
+
+def test_opencode_error_with_no_steps_is_an_error():
+    out = json.dumps({"type": "error", "error": {"name": "APIError",
+                                                 "data": {"message": "Model is unavailable."}}})
+    assert "unavailable" in ce.parse_opencode(out, 1.0, len)["error"]
+
+
+def test_opencode_config_denies_everything_but_reading(tmp_path):
+    without = ce.opencode_config("without", tmp_path, 20)
+    perm = without["agent"]["build"]["permission"]
+    assert without["agent"]["build"]["steps"] == 20 and "mcp" not in without
+    assert all(perm[k] == "allow" for k in ce.OC_BASE)
+    assert all(perm[k] == "deny" for k in ("edit", "bash", "webfetch", "task"))
+    with_ = ce.opencode_config("with", tmp_path, 20)
+    assert with_["mcp"]["codeorbit"]["command"][-3:] == ["mcp", "--path", str(tmp_path)]
+    assert with_["agent"]["build"]["permission"]["codeorbit_codeorbit_audit"] == "deny"
