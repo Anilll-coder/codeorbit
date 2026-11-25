@@ -73,7 +73,7 @@ and the end of the last.
 - Primary: exact two-sided McNemar test on the issues where exactly one
   condition succeeds; significance level 0.05. One test per model; no other
   test is used to claim H1.
-- Secondary: paired bootstrap 95% intervals (2,000 resamples) for differences;
+- Secondary: paired bootstrap 95% intervals (10,000 resamples) for differences;
   results split by whether the issue names a gold function (named / unnamed)
   are reported as exploratory.
 - Issues that fail setup (checkout, indexing) are excluded from both conditions
