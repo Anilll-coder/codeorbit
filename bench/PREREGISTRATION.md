@@ -334,6 +334,7 @@ full whatever this test or it shows. Its results are never pooled with these
   run. The earlier qwen3:8b run used the previous rule (text on the final turn
   counted as no answer).
 - Kaggle quota (7.4 h left): the qwen3:14b pilots were not re-run after that fix,
-  and the Multilingual pilot was not run for qwen3:14b; both main samples run
-  back to back in one session under one time budget. Issues not reached are
-  resumed later in the same fixed order and reported as such.
+  and the Multilingual pilot was not run for qwen3:14b. Its Multilingual sample
+  runs first, in one session under one time budget; its Verified sample runs
+  after the quota resets. Issues not reached are resumed later in the same fixed
+  order and reported as such.
