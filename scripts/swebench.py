@@ -88,17 +88,34 @@ def task_deadline(seconds: int):
 
 # --------------------------------------------------------------- dataset
 
+def _rows_page(url: str, params: dict, attempts: int = 6) -> dict:
+    """One page from the datasets-server, retried: it answers 503 now and then
+    (a Kaggle run once died on page 4 of 5), and a failed download should wait
+    and try again, not end the run."""
+    for i in range(attempts):
+        try:
+            r = requests.get(url, params=params, timeout=60)
+            if r.status_code < 500 and r.status_code != 429:
+                r.raise_for_status()
+                return r.json()
+            err = f"HTTP {r.status_code}"
+        except requests.ConnectionError as e:
+            err = type(e).__name__
+        if i < attempts - 1:
+            wait = 5 * 2 ** i
+            print(f"  {err} at offset {params['offset']}; retrying in {wait} s", flush=True)
+            time.sleep(wait)
+    sys.exit(f"datasets-server kept failing ({err}) at offset {params['offset']}; try again later")
+
+
 def download(split: str) -> Path:
     """Fetch every task through the Hugging Face datasets-server, 100 at a time."""
     out = CACHE / f"{split}.jsonl"
     url = "https://datasets-server.huggingface.co/rows"
     rows, offset, total = [], 0, None
     while total is None or offset < total:
-        r = requests.get(url, params={"dataset": SPLITS[split], "config": "default",
-                                      "split": "test", "offset": offset, "length": 100},
-                         timeout=60)
-        r.raise_for_status()
-        page = r.json()
+        page = _rows_page(url, {"dataset": SPLITS[split], "config": "default",
+                                "split": "test", "offset": offset, "length": 100})
         total = page["num_rows_total"]
         rows += [x["row"] for x in page["rows"]]
         offset += len(page["rows"])
