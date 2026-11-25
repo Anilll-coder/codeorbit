@@ -285,6 +285,8 @@ def parse_opencode(out: str, seconds: float, count, err: str = "") -> dict:
             finished = finished or part.get("reason") == "stop"
         elif kind == "error":
             errors.append(json.dumps(ev.get("error", ev))[:300])
+    if err == "timeout":            # a hung session is the service's fault, not a miss
+        return {"error": "timeout", "seconds": seconds}
     if not steps:
         return {"error": (errors[0] if errors else (err or "no output"))[:300], "seconds": seconds}
     text = "\n".join(texts)
