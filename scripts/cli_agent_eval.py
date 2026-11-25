@@ -12,7 +12,7 @@ Claude must not edit or run anything; it ends its reply with ANSWER: and up to
 five locations. Issues, gold targets and scoring are exactly those of
 scripts/agent_eval.py, and the rows it writes are in the same format, so
 
-    python scripts/claude_eval.py run --split verified --exclude-split lite --sample 100 --seed 3 --embed
+    python scripts/cli_agent_eval.py run --split verified --exclude-split lite --sample 100 --seed 3 --embed
     python scripts/agent_eval.py report bench/agent_runs/<run>
 
 reports both models the same way. Authentication is Claude Code's own: on a
@@ -431,7 +431,7 @@ def run(args) -> None:
             break
     log.close()
     if reason:
-        print(f"\nstopped: {reason}\nresume with: python scripts/claude_eval.py run "
+        print(f"\nstopped: {reason}\nresume with: python scripts/cli_agent_eval.py run "
               f"--agent {args.agent} --resume {out}")
     meta["run"]["complete"] = not stopped
     meta["run"]["models_seen"] = sorted(seen_models)

@@ -47,7 +47,7 @@ The agent must answer with up to 5 locations written `path:Function` or
    context, at most 20 turns, at most 12,000 characters per tool result.
 2. **OpenCode** (a real, open-source coding agent; version recorded in the run)
    with the free hosted model `opencode/big-pickle`, run non-interactively
-   (`opencode run`) on an ordinary laptop with `scripts/claude_eval.py --agent
+   (`opencode run`) on an ordinary laptop with `scripts/cli_agent_eval.py --agent
    opencode`. Tools: OpenCode's read, grep, glob and list in *without*, plus
    CodeOrbit's MCP server in *with*; edit, bash, web, sub-agents and the rest are
    denied; at most 20 agentic steps (`steps: 20`). Two differences from the

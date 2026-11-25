@@ -7,7 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 
-import claude_eval as ce  # noqa: E402
+import cli_agent_eval as ce  # noqa: E402
 
 
 def test_the_answer_block_is_read_from_the_last_answer_line():
