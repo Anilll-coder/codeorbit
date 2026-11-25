@@ -32,6 +32,7 @@ import platform
 import re
 import shutil
 import subprocess
+import tempfile
 import sys
 import time
 from datetime import datetime, timezone
@@ -242,15 +243,30 @@ def session_opencode(binary: str, model: str, cond: str, prompt: str, dest: Path
     env = dict(os.environ, OPENCODE_CONFIG=str(cfg))
     cmd = [binary, "run", "--agent", "build", "--model", model, "--format", "json", prompt]
     t0 = time.perf_counter()
-    try:
-        p = subprocess.run(cmd, cwd=dest, env=env, capture_output=True, text=True,
-                           encoding="utf-8", errors="replace", timeout=SESSION_TIMEOUT)
-        out, err = p.stdout, p.stderr
-    except subprocess.TimeoutExpired as e:
-        out = e.stdout or ""
-        err = "timeout"
-        if isinstance(out, bytes):
-            out = out.decode("utf-8", "replace")
+    # On a usage limit OpenCode retries quietly instead of exiting; its own log
+    # says why, so watch the log and stop the session as soon as it appears.
+    oclog = Path.home() / ".local" / "share" / "opencode" / "log" / "opencode.log"
+    start = oclog.stat().st_size if oclog.exists() else 0
+    with tempfile.TemporaryFile() as fo, tempfile.TemporaryFile() as fe:
+        p = subprocess.Popen(cmd, cwd=dest, env=env, stdout=fo, stderr=fe)
+        err = ""
+        while p.poll() is None:
+            time.sleep(5)
+            if time.perf_counter() - t0 > SESSION_TIMEOUT:
+                err = "timeout"
+            elif oclog.exists() and oclog.stat().st_size > start:
+                with open(oclog, encoding="utf-8", errors="replace") as f:
+                    f.seek(start)
+                    hit = re.search(r"Free usage limit reached|usage limit|rate limit", f.read(), re.I)
+                if hit:
+                    err = f"usage limit ({hit.group(0)})"
+            if err:
+                p.kill()
+                p.wait()
+        fo.seek(0)
+        fe.seek(0)
+        out = fo.read().decode("utf-8", "replace")
+        err = err or fe.read().decode("utf-8", "replace")
     return parse_opencode(out, round(time.perf_counter() - t0, 1), count, err)
 
 
@@ -285,8 +301,8 @@ def parse_opencode(out: str, seconds: float, count, err: str = "") -> dict:
             finished = finished or part.get("reason") == "stop"
         elif kind == "error":
             errors.append(json.dumps(ev.get("error", ev))[:300])
-    if err == "timeout":            # a hung session is the service's fault, not a miss
-        return {"error": "timeout", "seconds": seconds}
+    if err == "timeout" or err.startswith("usage limit"):   # the service's fault, not a miss
+        return {"error": err, "seconds": seconds}
     if not steps:
         return {"error": (errors[0] if errors else (err or "no output"))[:300], "seconds": seconds}
     text = "\n".join(texts)
