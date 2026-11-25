@@ -333,3 +333,7 @@ full whatever this test or it shows. Its results are never pooled with these
   in both conditions alike, and the final message's text is saved with every
   run. The earlier qwen3:8b run used the previous rule (text on the final turn
   counted as no answer).
+- Kaggle quota (7.4 h left): the qwen3:14b pilots were not re-run after that fix,
+  and the Multilingual pilot was not run for qwen3:14b; both main samples run
+  back to back in one session under one time budget. Issues not reached are
+  resumed later in the same fixed order and reported as such.
