@@ -79,6 +79,13 @@ and the end of the last.
 - Issues that fail setup (checkout, indexing) are excluded from both conditions
   and listed by ID. No issue is excluded for any other reason.
 
+## Follow-up
+
+A larger follow-up may be run after this test. If it is, it uses issues outside
+this sample, is pre-registered separately before it starts, and is reported in
+full whatever this test or it shows. Its results are never pooled with these
+100 issues.
+
 ## Main sample (100 issues)
 
 1. `astropy__astropy-7606`
