@@ -120,13 +120,12 @@ def test_asking_again_brings_new_candidates_not_the_same_ones(project):
     assert set(headers(first)).isdisjoint(headers(second))
 
 
-def test_from_the_third_call_it_names_what_was_already_shown(project):
-    # On this small project the third call has nothing new left, so it answers
-    # with the "everything was shown" form; either way it leads with the names.
-    calls = _session_calls(project, "proxy header", 3)
-    assert "Already shown in this session" not in calls[1]
+def test_from_the_second_call_it_names_what_was_already_shown(project):
+    # Either form leads with the names already sent.
+    calls = _session_calls(project, "proxy header", 2)
+    assert "Already shown in this session" not in calls[0]
     shown_first = headers(calls[0])[0].split()[-1]
-    first_line = calls[2].split("\n", 1)[0]
+    first_line = calls[1].split("\n", 1)[0]
     assert first_line.startswith(("Already shown in this session",
                                   "Everything that matches this was already shown"))
     assert shown_first in first_line
@@ -146,3 +145,9 @@ def test_full_detail_resends_what_was_shown(project):
     finally:
         conn.close()
     assert headers(a) == headers(b)
+
+
+def test_explore_ends_with_the_best_match_to_answer_with(project):
+    out = _session_calls(project, "proxy header", 1)[0]
+    last = out.strip().splitlines()[-1]
+    assert last.startswith("Best match: ") and ".py:" in last

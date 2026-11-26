@@ -50,32 +50,13 @@ MAX_CHARS = 24_000          # keep one response inside a sane slice of context
 LEDGER = budgetmod.Ledger()
 
 INSTRUCTIONS = """\
-CodeOrbit serves a structural knowledge graph of this repository: its symbols,
-their call relationships, and the real source behind them.
-
-Prefer codeorbit_explore over reading files. It returns verbatim source for the
-best matches, with who calls each symbol and what it calls, and lists the next
-likely candidates one line each - treat what comes back as already read, and do
-not re-open those files. To check a listed candidate, call codeorbit_node on
-its name rather than reading its file.
-
-Typical order: codeorbit_overview on an unfamiliar project, codeorbit_explore
-for any "how does X work" question, codeorbit_node for one symbol in full,
-codeorbit_impact before changing something, codeorbit_path for "how does A reach
-B". When explore has not found it, codeorbit_outline shows what a file holds
-for a fraction of reading it - outline first, then node, never the whole file.
-
-Edges marked [uncertain] were resolved by name rather than by an import, so
-treat them as likely rather than certain. Static parsing cannot see dynamic
-dispatch, so a missing edge means "not statically visible", never "does not
-happen".
-
-These tools spend your context deliberately. The best match in a response gets
-the longest body and later ones get less; a body already sent to you in this
-session comes back as a citation instead of a second copy. If a response says
-source was returned earlier and you no longer have it, call the same tool with
-detail="full" - that is what it is for. detail="signatures" returns structure
-with no bodies, which is the cheapest way to survey an unfamiliar area.
+CodeOrbit: a call graph of this repository with the real source behind it.
+Start with codeorbit_explore: it returns the best-matching functions with their
+source, callers and callees, and lists further candidates one line each. Treat
+returned source as read - do not re-open those files; check a listed candidate
+with codeorbit_node instead. When a response already shows what you need, stop
+searching and answer. A body sent earlier comes back as a citation;
+detail="full" resends it. [uncertain] edges were resolved by name only.
 """
 
 
@@ -311,24 +292,10 @@ mcp = MCPServer(name="codeorbit", instructions=INSTRUCTIONS)
 @graph_tool
 def codeorbit_explore(root, conn, query_text: str, max_symbols: int = 2,
                       detail: str = "auto") -> str:
-    """PRIMARY TOOL. Answer a question about this codebase from its call graph.
-
-    Retrieves the symbols the question is about, their real source, who calls
-    them and what they call. Use this FIRST for any "how does X work", "where is
-    Y handled" or "what happens when Z" question. Naming concrete symbols
-    (including qualified ones like Class.method) sharpens the result. Treat the
-    source it returns as already read - do not open those files again.
-
-    max_symbols: how many of the best matches arrive with source (default 2).
-    The next ones are listed one line each - kind, name, file:lines - so a
-    candidate is visible without paying for its body; call codeorbit_node on
-    one to read it.
-
-    detail: "auto" spends the most lines on the best match and tapers, and
-    omits a body this session has already sent you. "full" resends everything
-    - use it if the earlier response has fallen out of your context.
-    "signatures" returns names, docs and call relationships with no bodies at
-    all, which is the cheapest way to see the shape of an area.
+    """Start here. Finds the functions a question or issue is about: their
+    source, callers and callees, then more candidates one line each. Naming
+    symbols sharpens it. max_symbols: matches sent with source (default 2).
+    detail: "auto"; "full" resends; "signatures" sends no bodies.
     """
     return explore_text(root, conn, query_text, max_symbols, detail)
 
@@ -339,7 +306,8 @@ def codeorbit_explore(root, conn, query_text: str, max_symbols: int = 2,
 EXPLORE_BODY_LINES = 80     # the best match's source; the next gets about half
 EXPLORE_MORE = 6            # further candidates, one line each
 EXPLORE_NEIGHBOURS = (5, 6)  # callers, callees per symbol
-EXPLORE_REMIND_AFTER = 3    # from this call on, name what was already shown
+EXPLORE_REMIND_AFTER = 2    # from this call on, name what was already shown
+IMPACT_LINES, IMPACT_TESTS = 25, 10
 
 
 def explore_text(root: Path, conn, query_text: str, max_symbols: int = 2,
@@ -413,6 +381,11 @@ def explore_text(root: Path, conn, query_text: str, max_symbols: int = 2,
     if more:
         body += "\n\nAlso likely (codeorbit_node <name> for any one):\n" + "\n".join(
             _one_line(conn, r) for r in more)
+    if style != "classic":
+        # One line a small model can act on, instead of more turns confirming it.
+        best = picks[0]
+        body += (f"\n\nBest match: {best['path']}:{best['qname']}. If it fits, "
+                 "answer now; if not, ask about what is missing.")
     return _clip(header + "\n\n" + body)
 
 
@@ -445,10 +418,7 @@ def explore_rows(root: Path, conn, query_text: str, limit: int) -> list:
 @mcp.tool()
 @graph_tool
 def codeorbit_search(root, conn, term: str, limit: int = 20) -> str:
-    """Find symbols by name. Returns kind, qualified name and file:line.
-
-    Use to locate something, or to disambiguate before calling codeorbit_node.
-    """
+    """Find symbols by name: kind, qualified name, file:line."""
     rows = query.search(conn, term, limit)
     if not rows:
         return (f"No symbol matching {term!r}. Names match exactly first, "
@@ -463,14 +433,8 @@ def codeorbit_search(root, conn, term: str, limit: int = 20) -> str:
 @mcp.tool()
 @graph_tool
 def codeorbit_node(root, conn, name: str, detail: str = "auto") -> str:
-    """Everything about one symbol in a single call.
-
-    Full source, its callers, and what it calls. If the name is ambiguous, the
-    other candidates are listed too so no follow-up call is needed. Treat the
-    returned source as already read.
-
-    detail="full" resends a body this session already gave you, for when the
-    earlier response is no longer in your context.
+    """One symbol: its source, callers and callees; others sharing the name are
+    listed. detail="full" resends a body already sent.
     """
     hits = query.search(conn, name, limit=6)
     if not hits:
@@ -479,7 +443,7 @@ def codeorbit_node(root, conn, name: str, detail: str = "auto") -> str:
     ledger = _ledger_for(detail, [hits[0]["id"]])
     parts = [_fmt_symbol(root, conn, hits[0],
                          body_lines=FULL_BODY_LINES if detail == "full"
-                         else MAX_BODY_LINES,
+                         else EXPLORE_BODY_LINES,
                          ledger=ledger, source=detail != "signatures")]
     if len(hits) > 1:
         parts.append("\nOther symbols share this name:")
@@ -491,11 +455,8 @@ def codeorbit_node(root, conn, name: str, detail: str = "auto") -> str:
 @mcp.tool()
 @graph_tool
 def codeorbit_outline(root, conn, path: str) -> str:
-    """What is in one file - every function and class with its lines and signature, no code.
-
-    Use it INSTEAD of opening a file to find out what is in it: it costs a small
-    fraction of reading the file. Then call codeorbit_node on the one you need.
-    `path` can be repo-relative or any unambiguous tail, e.g. "models.py".
+    """A file's functions and classes with lines and signatures, no code -
+    cheaper than reading it. `path` may be any unambiguous tail, e.g. "models.py".
     """
     found, rows = query.outline(conn, path)
     if found is None:
@@ -512,10 +473,8 @@ def codeorbit_outline(root, conn, path: str) -> str:
 @mcp.tool()
 @graph_tool
 def codeorbit_impact(root, conn, name: str, depth: int = 3) -> str:
-    """Blast radius: everything that transitively reaches a symbol, plus its tests.
-
-    Use before changing something, or to judge how risky a change is. Reports
-    explicitly when no test covers the symbol.
+    """What transitively calls a symbol, and which tests reach it - for judging
+    a change's risk, not for finding where a bug is.
     """
     hits = query.search(conn, name, limit=3)
     if not hits:
@@ -528,13 +487,13 @@ def codeorbit_impact(root, conn, name: str, depth: int = 3) -> str:
            f"can affect {len(reach)} symbol(s) within {depth} hops.", ""]
     if reach:
         out += [f"  {'  ' * (d - 1)}[{d}] {r['qname']}  ({r['path']})"
-                for d, r in reach[:60]]
+                for d, r in reach[:IMPACT_LINES]]
     else:
         out.append("  Nothing in this project calls it.")
     out.append("")
     if tests:
         out.append(f"Tests that reach it ({len(tests)}):")
-        out += [f"  {t['qname']}  ({t['path']})" for t in tests[:25]]
+        out += [f"  {t['qname']}  ({t['path']})" for t in tests[:IMPACT_TESTS]]
     else:
         out.append("NO test reaches this symbol.")
     return _clip("\n".join(out))
