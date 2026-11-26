@@ -354,3 +354,26 @@ full whatever this test or it shows. Its results are never pooled with these
   --exclude-seed 3 --exclude-next 30:5 --langs javascript,typescript --sample 15
   --seed 7`); Verified has no JavaScript or TypeScript. For OpenCode with
   deepseek-v4.1-flash-free: 30 Verified dev issues (as above, `--sample 30`).
+
+## Second test: the revised CodeOrbit on fresh issues (added before any run on them)
+
+The revised version (f52e06d and later; ranking unchanged, less context per
+turn) is tested on 200 issues none of the runs above touched, replacing the
+30-issue dev check. Conditions, measures and analysis are as above; the result is
+reported in full whatever it shows and never pooled with the first test.
+
+- **Multilingual-2, 100 issues:** the Multilingual issues outside the first
+  sample, fix mostly in Go, Java, Rust, PHP, Ruby, C or C++ (`--split
+  multilingual --exclude-sample 100 --exclude-seed 3 --langs
+  go,java,rust,php,ruby,c,cpp --sample 100 --seed 11`; Go 20, Ruby 18, Java 16,
+  Rust 16, C 16, PHP 13, C++ 1; 33 projects; ids sha256 `6f071965d606dbf1…`).
+- **Mixed-2, 100 issues:** 72 Python issues (`--split verified --exclude-split
+  lite --exclude-sample 100 --exclude-seed 3 --sample 72 --seed 11`; 9 projects;
+  `f9b1e3194718c89a…`) and every JavaScript/TypeScript issue outside the first
+  Multilingual sample (`--split multilingual --exclude-sample 100 --exclude-seed
+  3 --langs javascript,typescript`; 15 JavaScript, 13 TypeScript; 7 projects;
+  `edd826f2cad7b13b…`). Verified has no JavaScript or TypeScript, so those come
+  from Multilingual. Reported together and per part.
+- **Models:** qwen3:14b (Kaggle) on both; OpenCode with
+  deepseek-v4.1-flash-free (laptop) on Mixed-2.
+- The id hash is over the sorted instance ids joined by newlines.
