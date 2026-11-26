@@ -240,7 +240,7 @@ def opencode_config(cond: str, dest: Path, max_turns: int) -> dict:
 def session_opencode(binary: str, model: str, cond: str, prompt: str, dest: Path,
                      cfg: Path, max_turns: int, count) -> dict:
     cfg.write_text(json.dumps(opencode_config(cond, dest, max_turns)), encoding="utf-8")
-    env = dict(os.environ, OPENCODE_CONFIG=str(cfg))
+    env = dict(os.environ, OPENCODE_CONFIG=str(cfg.resolve()))
     cmd = [binary, "run", "--agent", "build", "--model", model, "--format", "json", prompt]
     t0 = time.perf_counter()
     # On a usage limit OpenCode retries quietly instead of exiting; its own log
@@ -324,7 +324,7 @@ def run(args) -> None:
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
     if args.resume:
-        out = Path(args.resume)
+        out = Path(args.resume).resolve()
         meta = json.loads((out / "meta.json").read_text(encoding="utf-8"))
         sel = meta["dataset"]["selection"]
         for k in ("split", "repos", "instances", "limit", "sample", "seed", "exclude_split",
@@ -358,7 +358,7 @@ def run(args) -> None:
     version = subprocess.run([binary, "--version"], capture_output=True, text=True).stdout.strip()
     agent = "opencode" if opencode else "claude-code"
     if not args.resume:
-        out = Path(args.out) / (f"{stamp}-{'opencode' if opencode else 'claude'}-"
+        out = Path(args.out).resolve() / (f"{stamp}-{'opencode' if opencode else 'claude'}-"
                                 f"{re.sub(r'[^A-Za-z0-9.]+', '-', args.model)}")
         out.mkdir(parents=True, exist_ok=True)
         meta = {
@@ -447,6 +447,12 @@ def run(args) -> None:
                 if "error" in rec:
                     stopped, reason = True, rec["error"]
                     break
+            banned = sorted(set(rec.get("tool_calls", {})) & set(OC_DENY)) if opencode else []
+            if banned:
+                # The config was not applied (OpenCode's defaults allow these):
+                # the session is not the condition it claims to be. Never record it.
+                stopped, reason = True, f"denied tools were used: {banned} - config not applied"
+                break
             seen_models.update(rec.get("models", []))
             row = {"question_id": iid, "repo": task["repo"], "kind": kind, "condition": cond,
                    "targets": targets, "files": files, "target_files": tfiles,
