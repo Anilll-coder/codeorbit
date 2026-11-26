@@ -485,14 +485,14 @@ def run(args) -> None:
         done = set()
 
     all_tasks = swe.load_tasks(args.split)
-    if args.exclude_sample:
-        seen = {t["instance_id"] for t in swe.select(all_tasks, None, None, None,
-                                                     args.exclude_sample, args.exclude_seed)}
-        all_tasks = [t for t in all_tasks if t["instance_id"] not in seen]
     if args.exclude_split:
         # e.g. Verified minus Lite: issues no earlier run of ours has touched.
         used = {t["instance_id"] for t in swe.load_tasks(args.exclude_split)}
         all_tasks = [t for t in all_tasks if t["instance_id"] not in used]
+    if args.exclude_sample:
+        seen = {t["instance_id"] for t in swe.select(all_tasks, None, None, None,
+                                                     args.exclude_sample, args.exclude_seed)}
+        all_tasks = [t for t in all_tasks if t["instance_id"] not in seen]
     tasks = swe.select(all_tasks, args.repos, args.instances, args.limit,
                        args.sample, args.seed)
     if args.shard:

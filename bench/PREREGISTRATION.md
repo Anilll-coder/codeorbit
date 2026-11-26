@@ -338,3 +338,12 @@ full whatever this test or it shows. Its results are never pooled with these
   runs first, in one session under one time budget; its Verified sample runs
   after the quota resets. Issues not reached are resumed later in the same fixed
   order and reported as such.
+- After the qwen3:14b Multilingual result (CodeOrbit used more input tokens
+  per issue, 98k vs 54k), a new CodeOrbit version was made (f52e06d: shorter
+  server instructions and tool descriptions, lighter repeat explores, capped
+  node and impact output, a "Best match" line). The pre-registered tests above
+  keep the version they started with: the OpenCode run finishes on a frozen copy
+  of 7d8ad89. The new version is tried first on 30 dev issues outside each main
+  sample (`--exclude-sample 100 --exclude-seed 3 --sample 30 --seed 5`), and any
+  claim about it is made only on a fresh sample pre-registered here before it
+  runs, never on the issues above.
