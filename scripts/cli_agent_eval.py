@@ -327,7 +327,8 @@ def run(args) -> None:
         out = Path(args.resume)
         meta = json.loads((out / "meta.json").read_text(encoding="utf-8"))
         sel = meta["dataset"]["selection"]
-        for k in ("split", "repos", "instances", "limit", "sample", "seed", "exclude_split"):
+        for k in ("split", "repos", "instances", "limit", "sample", "seed", "exclude_split",
+                  "exclude_sample", "exclude_seed"):
             setattr(args, k, sel.get(k))
         args.model, args.embed, args.max_turns = (meta["run"]["model"], meta["run"]["embed"],
                                                   meta["run"]["max_turns"])
@@ -343,6 +344,10 @@ def run(args) -> None:
     if args.exclude_split:
         used = {t["instance_id"] for t in swe.load_tasks(args.exclude_split)}
         tasks = [t for t in tasks if t["instance_id"] not in used]
+    if args.exclude_sample:     # e.g. dev issues outside a pre-registered sample
+        seen = {t["instance_id"] for t in swe.select(tasks, None, None, None,
+                                                     args.exclude_sample, args.exclude_seed)}
+        tasks = [t for t in tasks if t["instance_id"] not in seen]
     tasks = swe.select(tasks, args.repos, args.instances, args.limit, args.sample, args.seed)
     if not tasks:
         sys.exit("no tasks selected")
@@ -360,7 +365,9 @@ def run(args) -> None:
                         "selection": {"split": args.split, "repos": args.repos,
                                       "instances": args.instances, "limit": args.limit,
                                       "sample": args.sample, "seed": args.seed,
-                                      "exclude_split": args.exclude_split}},
+                                      "exclude_split": args.exclude_split,
+                                      "exclude_sample": args.exclude_sample,
+                                      "exclude_seed": args.exclude_seed}},
             "codeorbit": {"commit": bench._git("rev-parse", "HEAD", cwd=REPO),
                           "dirty": bool(bench._git("status", "--porcelain",
                                                    "--untracked-files=no", cwd=REPO))},
@@ -468,6 +475,8 @@ def main() -> None:
                    help="Claude Code alias/ID, or OpenCode provider/model (e.g. opencode/big-pickle)")
     r.add_argument("--split", default="verified", choices=list(swe.SPLITS))
     r.add_argument("--exclude-split", choices=list(swe.SPLITS))
+    r.add_argument("--exclude-sample", type=int, help="leave out this sample (with --exclude-seed)")
+    r.add_argument("--exclude-seed", type=int, default=0)
     r.add_argument("--repos")
     r.add_argument("--instances")
     r.add_argument("--limit", type=int)
