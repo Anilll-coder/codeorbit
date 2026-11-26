@@ -1,0 +1,89 @@
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+[1/15] apache__druid-15402
+    without: miss 20t 44763tok 45.4s | with: file 20t 145918tok 143.7s
+[2/15] axios__axios-5085
+    with: file 19t 62650tok 41.2s | without: file 12t 31497tok 32.8s
+[3/15] caddyserver__caddy-4943
+    without: miss 20t 41125tok 42.7s | with: fn 14t 57815tok 41.1s
+[4/15] fastlane__fastlane-19765
+    with: fn 6t 26464tok 33.1s | without: file 15t 61084tok 52.6s
+[5/15] gin-gonic__gin-1805
+    without: miss 20t 28339tok 46.7s | with: miss 20t 98457tok 81.1s
+[6/15] gohugoio__hugo-12562
+    with: miss 20t 115263tok 88.3s | without: miss 20t 100171tok 69.3s
+[7/15] jqlang__jq-2839
+    without: miss 17t 118140tok 85.8s | with: miss 6t 41462tok 45.9s
+[8/15] laravel__framework-51890
+    with: file 20t 150258tok 123.7s | without: miss 11t 29245tok 35.8s
+[9/15] php-cs-fixer__php-cs-fixer-8064
+    without: file 20t 130720tok 97.2s | with: fn 20t 91272tok 74.3s
+[10/15] preactjs__preact-3454
+    with: fn 10t 38781tok 30.0s | without: file 5t 5107tok 10.5s
+[11/15] projectlombok__lombok-3371
+    without: miss 20t 60224tok 55.6s | with: file 13t 63945tok 49.7s
+[12/15] rubocop__rubocop-13424
+    with: file 10t 41729tok 33.7s | without: miss 20t 79351tok 54.1s
+[13/15] tokio-rs__axum-1730
+    without: miss 20t 72023tok 65.7s | with: file 7t 21169tok 26.1s
+[14/15] tokio-rs__tokio-6838
+    with: fn 12t 58327tok 40.3s | without: fn 6t 9007tok 22.9s
+[15/15] valkey-io__valkey-790
+    without: miss 20t 50369tok 46.5s | with: fn 10t 51565tok 58.2s
+
+wrote /kaggle/working/codeorbit-agent-runs/20261126T140740Z-agent-qwen3-14b-shard1of2
+
+=== qwen3:14b  (20261126T140740Z-agent-qwen3-14b-shard1of2)
+
+all tasks: 15 tasks with both runs (14 with a function target)
+                        without     with   diff 95% CI        with only  w/o only       p
+function found (top 5)       7%      43%   +14% to +64%               5         0   0.062
+function first               7%      43%   +14% to +64%               5         0   0.062
+all functions found          7%      36%   +7% to +57%                4         0   0.125
+file found                  33%      80%   +20% to +73%               7         0   0.016
+file first                  33%      73%   +13% to +67%               6         0   0.031
+
+                        without     with   mean diff 95% CI       with lower
+input tokens (median)    50,369   58,327   -13,233 to +41,909          5/15
+output tokens (median)      431      347   -137 to +106                7/15
+tool output tokens (median)    3,278    4,937   +715 to +4,062              4/15
+turns (median)               20       13   -6 to +1                    7/15
+seconds (median)             47       46   -8 to +31                   7/15
+tokens per success      794,731  174,923
+gave an answer              60%      93%
+tool calls (with): codeorbit_node 102, codeorbit_search 44, codeorbit_explore 42, finish 12, grep 3, codeorbit_outline 1
+
+named issues: 2 tasks with both runs (2 with a function target)
+                        without     with   diff 95% CI        with only  w/o only       p
+function found (top 5)      50%      50%   +0% to +0%                 0         0   1.000
+function first              50%      50%   +0% to +0%                 0         0   1.000
+all functions found         50%      50%   +0% to +0%                 0         0   1.000
+file found                 100%     100%   +0% to +0%                 0         0   1.000
+file first                 100%     100%   +0% to +0%                 0         0   1.000
+
+                        without     with   mean diff 95% CI       with lower
+input tokens (median)    20,252   60,488   +31,153 to +49,320          0/2
+output tokens (median)      210      344   +90 to +177                 0/2
+tool output tokens (median)    3,164    3,922   -2,811 to +4,327            1/2
+turns (median)                9       16   +6 to +7                    0/2
+seconds (median)             28       41   +8 to +17                   0/2
+tokens per success       40,925  121,665
+gave an answer             100%     100%
+tool calls (with): codeorbit_search 15, codeorbit_node 9, codeorbit_explore 5, finish 2
+
+unnamed issues: 13 tasks with both runs (12 with a function target)
+                        without     with   diff 95% CI        with only  w/o only       p
+function found (top 5)       0%      42%   +17% to +67%               5         0   0.062
+function first               0%      42%   +17% to +67%               5         0   0.062
+all functions found          0%      33%   +8% to +58%                4         0   0.125
+file found                  23%      77%   +23% to +77%               7         0   0.016
+file first                  23%      69%   +23% to +69%               6         0   0.031
+
+                        without     with   mean diff 95% CI       with lower
+input tokens (median)    60,224   57,815   -21,454 to +41,828          5/13
+output tokens (median)      442      351   -178 to +102                7/13
+tool output tokens (median)    3,278    6,528   +885 to +4,355              3/13
+turns (median)               20       13   -7 to -0                    7/13
+seconds (median)             53       50   -13 to +34                  7/13
+tokens per success            -  185,574
+gave an answer              54%      92%
+tool calls (with): codeorbit_node 93, codeorbit_explore 37, codeorbit_search 29, finish 10, grep 3, codeorbit_outline 1
