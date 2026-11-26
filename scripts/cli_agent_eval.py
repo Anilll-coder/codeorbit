@@ -328,7 +328,7 @@ def run(args) -> None:
         meta = json.loads((out / "meta.json").read_text(encoding="utf-8"))
         sel = meta["dataset"]["selection"]
         for k in ("split", "repos", "instances", "limit", "sample", "seed", "exclude_split",
-                  "exclude_sample", "exclude_seed"):
+                  "exclude_sample", "exclude_seed", "langs"):
             setattr(args, k, sel.get(k))
         args.model, args.embed, args.max_turns = (meta["run"]["model"], meta["run"]["embed"],
                                                   meta["run"]["max_turns"])
@@ -348,6 +348,9 @@ def run(args) -> None:
         seen = {t["instance_id"] for t in swe.select(tasks, None, None, None,
                                                      args.exclude_sample, args.exclude_seed)}
         tasks = [t for t in tasks if t["instance_id"] not in seen]
+    if args.langs:              # only issues whose fix is mostly in these languages
+        want = set(args.langs.split(","))
+        tasks = [t for t in tasks if swe.task_language(t) in want]
     tasks = swe.select(tasks, args.repos, args.instances, args.limit, args.sample, args.seed)
     if not tasks:
         sys.exit("no tasks selected")
@@ -367,7 +370,8 @@ def run(args) -> None:
                                       "sample": args.sample, "seed": args.seed,
                                       "exclude_split": args.exclude_split,
                                       "exclude_sample": args.exclude_sample,
-                                      "exclude_seed": args.exclude_seed}},
+                                      "exclude_seed": args.exclude_seed,
+                                      "langs": args.langs}},
             "codeorbit": {"commit": bench._git("rev-parse", "HEAD", cwd=REPO),
                           "dirty": bool(bench._git("status", "--porcelain",
                                                    "--untracked-files=no", cwd=REPO))},
@@ -477,6 +481,7 @@ def main() -> None:
     r.add_argument("--exclude-split", choices=list(swe.SPLITS))
     r.add_argument("--exclude-sample", type=int, help="leave out this sample (with --exclude-seed)")
     r.add_argument("--exclude-seed", type=int, default=0)
+    r.add_argument("--langs", help="only issues whose fix is mostly in these languages")
     r.add_argument("--repos")
     r.add_argument("--instances")
     r.add_argument("--limit", type=int)
