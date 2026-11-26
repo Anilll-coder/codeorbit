@@ -130,6 +130,20 @@ def download(split: str) -> Path:
     return out
 
 
+def task_language(task: dict) -> str | None:
+    """The language most of the fix is written in, from the patch's code files
+    (docs, changelogs and configs do not count). TSX counts as TypeScript."""
+    import re as _re
+    from collections import Counter
+    from codeorbit.langs import SUFFIX
+    langs = Counter()
+    for path in _re.findall(r"^\+\+\+ b/(\S+)", task.get("patch", ""), _re.M):
+        lang = SUFFIX.get("." + path.rsplit(".", 1)[-1].lower()) if "." in path else None
+        if lang:
+            langs["typescript" if lang == "tsx" else lang] += 1
+    return langs.most_common(1)[0][0] if langs else None
+
+
 def load_tasks(split: str) -> list[dict]:
     path = CACHE / f"{split}.jsonl"
     if not path.exists():

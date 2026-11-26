@@ -476,6 +476,7 @@ def run(args) -> None:
         for k in ("repos", "instances", "limit", "sample", "seed", "exclude_sample",
                   "exclude_seed"):
             setattr(args, k, sel[k])
+        args.exclude_next, args.langs = sel.get("exclude_next"), sel.get("langs")
         args.exclude_split = sel.get("exclude_split")
         args.shard = sel.get("shard")
         done = {(x["question_id"], x["condition"]) for x in
@@ -493,6 +494,14 @@ def run(args) -> None:
         seen = {t["instance_id"] for t in swe.select(all_tasks, None, None, None,
                                                      args.exclude_sample, args.exclude_seed)}
         all_tasks = [t for t in all_tasks if t["instance_id"] not in seen]
+    if args.exclude_next:
+        # then also leave out another sample of what remains, e.g. a dev set
+        n, seed = map(int, args.exclude_next.split(":"))
+        seen = {t["instance_id"] for t in swe.select(all_tasks, None, None, None, n, seed)}
+        all_tasks = [t for t in all_tasks if t["instance_id"] not in seen]
+    if args.langs:
+        want = set(args.langs.split(","))
+        all_tasks = [t for t in all_tasks if swe.task_language(t) in want]
     tasks = swe.select(all_tasks, args.repos, args.instances, args.limit,
                        args.sample, args.seed)
     if args.shard:
@@ -535,6 +544,8 @@ def run(args) -> None:
                                       "exclude_sample": args.exclude_sample,
                                       "exclude_seed": args.exclude_seed,
                                       "exclude_split": args.exclude_split,
+                                      "exclude_next": args.exclude_next,
+                                      "langs": args.langs,
                                       "shard": args.shard}},
             "codeorbit": {"commit": bench._git("rev-parse", "HEAD", cwd=REPO),
                           "dirty": bool(bench._git("status", "--porcelain",
@@ -784,6 +795,10 @@ def main() -> None:
     r.add_argument("--seed", type=int, default=0, help="task sample seed")
     r.add_argument("--exclude-sample", type=int, help="leave out the development sample")
     r.add_argument("--exclude-seed", type=int, default=0)
+    r.add_argument("--exclude-next", metavar="N:SEED",
+                   help="then also leave out this sample of what remains")
+    r.add_argument("--langs", help="only issues whose fix is mostly in these languages, "
+                                   "e.g. javascript,typescript")
     r.add_argument("--exclude-split", choices=list(swe.SPLITS),
                    help="leave out every issue that is also in this split")
     r.add_argument("--shard", metavar="K/N", help="run the K-th of N interleaved slices")

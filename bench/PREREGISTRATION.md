@@ -347,3 +347,10 @@ full whatever this test or it shows. Its results are never pooled with these
   sample (`--exclude-sample 100 --exclude-seed 3 --sample 30 --seed 5`), and any
   claim about it is made only on a fresh sample pre-registered here before it
   runs, never on the issues above.
+  The dev issues for qwen3:14b: 30 Multilingual (`--exclude-sample 100
+  --exclude-seed 3 --sample 30 --seed 5`), and a mixed set of 15 Python
+  (Verified minus Lite, `--exclude-sample 100 --exclude-seed 3 --sample 15
+  --seed 5`) plus 15 JavaScript/TypeScript (Multilingual, `--exclude-sample 100
+  --exclude-seed 3 --exclude-next 30:5 --langs javascript,typescript --sample 15
+  --seed 7`); Verified has no JavaScript or TypeScript. For OpenCode with
+  deepseek-v4.1-flash-free: 30 Verified dev issues (as above, `--sample 30`).
