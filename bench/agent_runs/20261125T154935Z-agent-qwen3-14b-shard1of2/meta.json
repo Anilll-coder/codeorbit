@@ -1,0 +1,69 @@
+{
+  "dataset": {
+    "name": "swebench-multilingual",
+    "source": "SWE-bench/SWE-bench_Multilingual",
+    "sha256": "91e7218b734c89b481325fe5ee6b678f8cca35c9b639bacf1baf47818e08d278",
+    "selection": {
+      "repos": null,
+      "instances": null,
+      "limit": null,
+      "sample": 100,
+      "seed": 3,
+      "exclude_sample": null,
+      "exclude_seed": 0,
+      "exclude_split": null,
+      "shard": "1/2"
+    }
+  },
+  "codeorbit": {
+    "commit": "3d7338220cb29ac49b3742911cafa1c915eb3a80",
+    "dirty": false
+  },
+  "run": {
+    "utc": "2026-11-25T15:49:35+00:00",
+    "model": "qwen3:14b",
+    "conditions": [
+      "without",
+      "with"
+    ],
+    "seed": 0,
+    "temperature": 0,
+    "think": false,
+    "num_ctx": 16384,
+    "max_turns": 20,
+    "tool_chars": 12000,
+    "grep_matches": 60,
+    "read_lines": 200,
+    "question_chars": 4000,
+    "embed": true,
+    "codeorbit_tools": [
+      "codeorbit_explore",
+      "codeorbit_search",
+      "codeorbit_node",
+      "codeorbit_outline",
+      "codeorbit_impact"
+    ],
+    "tokenizer": "hf microsoft/Phi-4-mini-instruct (tokenizers 0.23.3)",
+    "tokenizer_exact": true,
+    "tasks_selected": 50,
+    "complete": true,
+    "wall_s": 13047.9
+  },
+  "environment": {
+    "python": "3.13.16",
+    "platform": "Linux-6.18.55+-x86_64-with-glibc2.39",
+    "packages": {
+      "codeorbit": "0.1.0",
+      "tree-sitter": "0.27.0",
+      "tree-sitter-language-pack": "1.25.2",
+      "tree-sitter-python": "0.25.0",
+      "tree-sitter-javascript": "0.25.0",
+      "tree-sitter-typescript": "0.23.2",
+      "tiktoken": "0.14.0",
+      "tokenizers": "0.23.3"
+    },
+    "ollama": {
+      "version": "0.40.18"
+    }
+  }
+}
