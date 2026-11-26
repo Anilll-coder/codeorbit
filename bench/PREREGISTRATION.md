@@ -377,3 +377,8 @@ reported in full whatever it shows and never pooled with the first test.
 - **Models:** qwen3:14b (Kaggle) on both; OpenCode with
   deepseek-v4.1-flash-free (laptop) on Mixed-2.
 - The id hash is over the sorted instance ids joined by newlines.
+- OpenCode run (big-pickle): after a resume from a relative folder path, OpenCode
+  could not find its config file and ran 33 sessions (17 issues) with its default
+  permissions - bash, web search and web fetch allowed in both conditions. Those
+  sessions were deleted unread for scoring and their issues rerun; the harness now
+  uses absolute paths and stops if any denied tool is ever used.
