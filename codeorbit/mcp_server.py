@@ -34,7 +34,7 @@ from mcp.server import MCPServer
 from . import audit as auditmod
 from . import budget as budgetmod
 from . import context as ctxmod
-from . import db, query
+from . import db, freshness, query
 from .db import DB_DIRNAME
 
 # Set from the CLI; any tool may override it per-call with project_path.
@@ -191,7 +191,7 @@ def _body(root: Path, row, body_lines: int, ledger: budgetmod.Ledger | None,
     if not src:
         return ""
     if ledger is not None:
-        ledger.record(row["id"])
+        ledger.record(row["id"], row["path"])
 
     tail = ((f"\n[{body_lines} of {end - start + 1} lines, chosen by the question; "
              if focus else f"\n[body continues to line {end}; ")
@@ -223,6 +223,14 @@ def _clip(text: str) -> str:
 def _with_graph(project_path: str | None):
     """Yield (root, conn) or (root, None) when the project has no index."""
     root = _resolve_root(project_path)
+    try:
+        changed = freshness.refresh(root)       # files edited since the last call
+        if changed:
+            LEDGER.forget_paths(changed)
+            log(f"re-indexed after edits: {', '.join(changed[:5])}"
+                + (f" (+{len(changed) - 5} more)" if len(changed) > 5 else ""))
+    except Exception as e:  # noqa: BLE001 - a stale graph beats no answer
+        log(f"refresh failed: {e!r}")
     try:
         return root, db.connect(root)
     except FileNotFoundError:
@@ -368,7 +376,7 @@ def explore_text(root: Path, conn, query_text: str, max_symbols: int = 2,
     if style != "classic":
         LEDGER.explore_calls += 1
         for r in picks + more:
-            LEDGER.shown.setdefault(r["id"], r["qname"])
+            LEDGER.note_shown(r["id"], r["qname"], r["path"])
         if LEDGER.explore_calls >= EXPLORE_REMIND_AFTER and earlier:
             header = (f"Already shown in this session (best first): "
                       f"{', '.join(earlier[:EXPLORE_MORE])}. If one of these is what "

@@ -100,6 +100,9 @@ class Ledger:
         # 63% of its tokens - because each call mostly repeated the last.
         self.shown: dict[int, str] = {}
         self.explore_calls = 0
+        # Which file each sent or shown symbol came from, so an edit to that
+        # file can withdraw the claim that the agent already has it.
+        self._path_of: dict[int, str] = {}
 
     # ------------------------------------------------- within one response
 
@@ -129,7 +132,9 @@ class Ledger:
             return True
         return rec.times < self._full_sends
 
-    def record(self, node_id: int) -> None:
+    def record(self, node_id: int, path: str | None = None) -> None:
+        if path is not None:
+            self._path_of[node_id] = path
         rec = self._sent.setdefault(node_id, _Sent())
         if time.time() - rec.when > self._stale_after:
             rec.times = 0
@@ -143,6 +148,19 @@ class Ledger:
             self._sent.clear()
         else:
             self._sent.pop(node_id, None)
+
+    def note_shown(self, node_id: int, qname: str, path: str) -> None:
+        self.shown.setdefault(node_id, qname)
+        self._path_of[node_id] = path
+
+    def forget_paths(self, paths) -> None:
+        """A file was edited: nothing sent from it can be assumed current, and
+        its symbols were re-indexed under new ids."""
+        paths = set(paths)
+        for nid in [n for n, p in self._path_of.items() if p in paths]:
+            self._sent.pop(nid, None)
+            self.shown.pop(nid, None)
+            del self._path_of[nid]
 
 
 def trim_source(text: str) -> str:
