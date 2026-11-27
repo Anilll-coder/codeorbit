@@ -174,6 +174,9 @@ def parse_stream(out: str, seconds: float, count) -> dict:
             final = ev
     if final is None:
         return {"error": "no result event (timeout or crash)", "seconds": seconds}
+    if final.get("terminal_reason") == "api_error" or final.get("subtype") == "api_error":
+        # e.g. an expired login: the agent never ran, so this is no miss
+        return {"error": str(final.get("result", ""))[:300], "seconds": seconds}
     if final.get("is_error") and not texts:
         return {"error": str(final.get("result", ""))[:300], "seconds": seconds}
 
