@@ -83,11 +83,27 @@ def claude_bin(path: str | None) -> str:
 
 
 def mcp_command() -> list[str]:
-    exe = shutil.which("codeorbit")
-    if exe:
-        return [exe]
-    return [sys.executable, "-c", "import sys; from codeorbit.entry import main; "
-            "sys.argv[0] = 'codeorbit'; main()"]
+    """The MCP server, run by THIS interpreter, so it is the code under test.
+
+    Not `shutil.which("codeorbit")`: that found an older CodeOrbit installed on
+    PATH, and every with-CodeOrbit session silently ran it instead of this
+    checkout (or the frozen version on PYTHONPATH)."""
+    return [sys.executable, "-c", "import sys; "
+            "sys.path[:] = [p for p in sys.path if p not in ('', '.')]; "
+            "from codeorbit.entry import main; sys.argv[0] = 'codeorbit'; main()"]
+
+
+def mcp_code_version() -> dict:
+    """Where the MCP server's codeorbit is imported from, checked in the same
+    environment the agent will launch it in."""
+    out = subprocess.run(mcp_command()[:2] + [
+        "import sys; sys.path[:] = [p for p in sys.path if p not in ('', '.')]; "
+        "import codeorbit, hashlib, pathlib; p = pathlib.Path(codeorbit.__file__).parent; "
+        "print(p); print(hashlib.sha1(b''.join(f.read_bytes() for f in "
+        "sorted(p.rglob('*.py')))).hexdigest()[:12])"],
+        capture_output=True, text=True, env=os.environ)
+    path, _, digest = out.stdout.strip().partition("\n")
+    return {"path": path, "sha1_of_py": digest}
 
 
 def hide_index(dest: Path) -> None:
@@ -351,6 +367,14 @@ def run(args) -> None:
         print(f"resuming {out}: {len(done)} session(s) already done")
     else:
         done = set()
+    if args.resume:
+        # A run must not change code halfway: the server's code is pinned in meta.
+        now = mcp_code_version()
+        was = meta["run"].get("mcp_code")
+        if was and was.get("sha1_of_py") != now["sha1_of_py"]:
+            sys.exit(f"MCP server code changed since this run started: {was} -> {now}")
+        if not was:
+            meta["run"]["mcp_code_from_resume"] = now
     LEAN = bool(args.lean)
     if LEAN and opencode:
         sys.exit("--lean is wired for Claude Code only")
@@ -398,6 +422,7 @@ def run(args) -> None:
                     "base_tools": OC_BASE if opencode else BASE_TOOLS,
                     "codeorbit_tools": CO_TOOLS_LEAN if LEAN else CO_TOOLS,
                     "profile": "lean" if LEAN else "full",
+                    "mcp_code": mcp_code_version(),
                     "tokenizer_for_tool_tokens": tok_name, "tasks_selected": len(tasks),
                     "complete": False, "models_seen": []},
             "environment": {"python": sys.version.split()[0], "platform": platform.platform(),
