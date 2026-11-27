@@ -1,0 +1,63 @@
+{
+  "dataset": {
+    "name": "swebench-verified",
+    "source": "princeton-nlp/SWE-bench_Verified",
+    "sha256": "36208eba46969ebc31e68d8da059f30e28de7cb6ade337e810b7970e1adb0a94",
+    "selection": {
+      "split": "verified",
+      "repos": null,
+      "instances": null,
+      "limit": null,
+      "sample": 100,
+      "seed": 3,
+      "exclude_split": "lite"
+    }
+  },
+  "codeorbit": {
+    "commit": "7d8ad89f833b3572e915eb43fac6d390ddb636f6",
+    "dirty": false
+  },
+  "run": {
+    "utc": "2026-11-25T14:52:43+00:00",
+    "agent": "opencode",
+    "agent_version": "1.18.27",
+    "model": "opencode/big-pickle",
+    "conditions": [
+      "without",
+      "with"
+    ],
+    "max_turns": 20,
+    "embed": false,
+    "base_tools": [
+      "read",
+      "grep",
+      "glob",
+      "list"
+    ],
+    "codeorbit_tools": [
+      "mcp__codeorbit__codeorbit_explore",
+      "mcp__codeorbit__codeorbit_search",
+      "mcp__codeorbit__codeorbit_node",
+      "mcp__codeorbit__codeorbit_outline",
+      "mcp__codeorbit__codeorbit_impact"
+    ],
+    "tokenizer_for_tool_tokens": "hf microsoft/Phi-4-mini-instruct (tokenizers 0.23.3)",
+    "tasks_selected": 100,
+    "complete": false,
+    "models_seen": [],
+    "wall_s": 32342.7
+  },
+  "environment": {
+    "python": "3.13.7",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "packages": {
+      "codeorbit": "0.1.0",
+      "tree-sitter": "0.26.1",
+      "tree-sitter-language-pack": "1.25.2",
+      "tree-sitter-python": "0.25.0",
+      "tree-sitter-javascript": "0.25.0",
+      "tree-sitter-typescript": "0.23.2",
+      "tokenizers": "0.23.3"
+    }
+  }
+}

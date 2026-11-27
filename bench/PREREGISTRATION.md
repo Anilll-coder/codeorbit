@@ -354,6 +354,17 @@ full whatever this test or it shows. Its results are never pooled with these
   --exclude-seed 3 --exclude-next 30:5 --langs javascript,typescript --sample 15
   --seed 7`); Verified has no JavaScript or TypeScript. For OpenCode with
   deepseek-v4.1-flash-free: 30 Verified dev issues (as above, `--sample 30`).
+- 2026-11-27: the OpenCode (big-pickle) run did not test 7d8ad89. The harness
+  started the MCP server as whatever `codeorbit` was first on PATH, and that was
+  an older CodeOrbit 0.1.0 installed on 2026-11-11 (its mcp_server.py matches
+  commits up to dea91f3; it has no rank.py, so no fusion ranking). Every
+  with-CodeOrbit session in that run used it. Found while adding a new MCP
+  profile that the sessions never saw. The run was stopped at 73 of 100 issues
+  and is reported as it is, as a result for that older build, not as the
+  pre-registered test of 7d8ad89. The harness now launches the server with its
+  own interpreter (341804e) and records which code the server imports
+  (`run.mcp_code` in meta.json); a resume refuses if that code changed. The
+  Kaggle qwen3 runs (agent_eval.py, no installed copy) are not affected.
 
 ## Second test: the revised CodeOrbit on fresh issues (added before any run on them)
 
