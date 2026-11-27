@@ -1,0 +1,385 @@
+{
+  "all": {
+    "tasks": 30,
+    "fn_tasks": 29,
+    "fn_hit": {
+      "without": 0.9310344827586207,
+      "with": 0.9310344827586207,
+      "only_with": 0,
+      "only_without": 0,
+      "p": 1.0,
+      "ci_diff": [
+        0.0,
+        0.0
+      ]
+    },
+    "fn_hit1": {
+      "without": 0.7931034482758621,
+      "with": 0.7931034482758621,
+      "only_with": 1,
+      "only_without": 1,
+      "p": 1.0,
+      "ci_diff": [
+        -0.10344827586206896,
+        0.10344827586206896
+      ]
+    },
+    "fn_all": {
+      "without": 0.6896551724137931,
+      "with": 0.6551724137931034,
+      "only_with": 0,
+      "only_without": 1,
+      "p": 1.0,
+      "ci_diff": [
+        -0.10344827586206896,
+        0.0
+      ]
+    },
+    "file_hit": {
+      "without": 1.0,
+      "with": 1.0,
+      "only_with": 0,
+      "only_without": 0,
+      "p": 1.0,
+      "ci_diff": [
+        0.0,
+        0.0
+      ]
+    },
+    "file_hit1": {
+      "without": 0.9666666666666667,
+      "with": 0.9666666666666667,
+      "only_with": 0,
+      "only_without": 0,
+      "p": 1.0,
+      "ci_diff": [
+        0.0,
+        0.0
+      ]
+    },
+    "input_tokens": {
+      "without_mean": 28396.0,
+      "with_mean": 30957.866666666665,
+      "without_median": 23639.0,
+      "with_median": 21597.5,
+      "with_lower": 11,
+      "ci_diff": [
+        -1768.3666666666666,
+        6703.466666666666
+      ]
+    },
+    "output_tokens": {
+      "without_mean": 1015.6,
+      "with_mean": 913.2333333333333,
+      "without_median": 844.5,
+      "with_median": 758.5,
+      "with_lower": 19,
+      "ci_diff": [
+        -207.9,
+        -9.733333333333333
+      ]
+    },
+    "tool_tokens": {
+      "without_mean": 3528.633333333333,
+      "with_mean": 3830.3333333333335,
+      "without_median": 2615.5,
+      "with_median": 2864.5,
+      "with_lower": 10,
+      "ci_diff": [
+        -593.4666666666667,
+        1106.9666666666667
+      ]
+    },
+    "turns": {
+      "without_mean": 3.7333333333333334,
+      "with_mean": 2.933333333333333,
+      "without_median": 3.0,
+      "with_median": 2.5,
+      "with_lower": 14,
+      "ci_diff": [
+        -1.3333333333333333,
+        -0.3
+      ]
+    },
+    "seconds": {
+      "without_mean": 11.556666666666667,
+      "with_mean": 12.623333333333333,
+      "without_median": 10.5,
+      "with_median": 11.25,
+      "with_lower": 5,
+      "ci_diff": [
+        0.39333333333333337,
+        1.656666666666667
+      ]
+    },
+    "tokens_per_success": {
+      "without": 31259.666666666668,
+      "with": 33645.11111111111
+    },
+    "answered": {
+      "without": 1.0,
+      "with": 1.0
+    },
+    "with_tool_calls": {
+      "codeorbit_node": 7,
+      "codeorbit_explore": 32,
+      "Grep": 12,
+      "Read": 7
+    }
+  },
+  "named": {
+    "tasks": 15,
+    "fn_tasks": 15,
+    "fn_hit": {
+      "without": 0.8666666666666667,
+      "with": 0.8666666666666667,
+      "only_with": 0,
+      "only_without": 0,
+      "p": 1.0,
+      "ci_diff": [
+        0.0,
+        0.0
+      ]
+    },
+    "fn_hit1": {
+      "without": 0.7333333333333333,
+      "with": 0.8,
+      "only_with": 1,
+      "only_without": 0,
+      "p": 1.0,
+      "ci_diff": [
+        0.0,
+        0.2
+      ]
+    },
+    "fn_all": {
+      "without": 0.6666666666666666,
+      "with": 0.6,
+      "only_with": 0,
+      "only_without": 1,
+      "p": 1.0,
+      "ci_diff": [
+        -0.2,
+        0.0
+      ]
+    },
+    "file_hit": {
+      "without": 1.0,
+      "with": 1.0,
+      "only_with": 0,
+      "only_without": 0,
+      "p": 1.0,
+      "ci_diff": [
+        0.0,
+        0.0
+      ]
+    },
+    "file_hit1": {
+      "without": 1.0,
+      "with": 1.0,
+      "only_with": 0,
+      "only_without": 0,
+      "p": 1.0,
+      "ci_diff": [
+        0.0,
+        0.0
+      ]
+    },
+    "input_tokens": {
+      "without_mean": 25150.533333333333,
+      "with_mean": 28639.333333333332,
+      "without_median": 22783,
+      "with_median": 21323,
+      "with_lower": 5,
+      "ci_diff": [
+        238.86666666666667,
+        6716.533333333334
+      ]
+    },
+    "output_tokens": {
+      "without_mean": 885.5333333333333,
+      "with_mean": 848.9333333333333,
+      "without_median": 755,
+      "with_median": 747,
+      "with_lower": 7,
+      "ci_diff": [
+        -141.33333333333334,
+        48.6
+      ]
+    },
+    "tool_tokens": {
+      "without_mean": 2698.2,
+      "with_mean": 3734.866666666667,
+      "without_median": 1797,
+      "with_median": 1828,
+      "with_lower": 3,
+      "ci_diff": [
+        272.6666666666667,
+        1805.9333333333334
+      ]
+    },
+    "turns": {
+      "without_mean": 3.3333333333333335,
+      "with_mean": 2.6666666666666665,
+      "without_median": 3,
+      "with_median": 2,
+      "with_lower": 6,
+      "ci_diff": [
+        -1.3333333333333333,
+        -0.06666666666666667
+      ]
+    },
+    "seconds": {
+      "without_mean": 10.5,
+      "with_mean": 11.846666666666666,
+      "without_median": 10.0,
+      "with_median": 10.7,
+      "with_lower": 2,
+      "ci_diff": [
+        0.4800000000000003,
+        2.0533333333333332
+      ]
+    },
+    "tokens_per_success": {
+      "without": 30041.615384615383,
+      "with": 34024.92307692308
+    },
+    "answered": {
+      "without": 1.0,
+      "with": 1.0
+    },
+    "with_tool_calls": {
+      "codeorbit_node": 5,
+      "codeorbit_explore": 17,
+      "Grep": 3
+    }
+  },
+  "unnamed": {
+    "tasks": 15,
+    "fn_tasks": 14,
+    "fn_hit": {
+      "without": 1.0,
+      "with": 1.0,
+      "only_with": 0,
+      "only_without": 0,
+      "p": 1.0,
+      "ci_diff": [
+        0.0,
+        0.0
+      ]
+    },
+    "fn_hit1": {
+      "without": 0.8571428571428571,
+      "with": 0.7857142857142857,
+      "only_with": 0,
+      "only_without": 1,
+      "p": 1.0,
+      "ci_diff": [
+        -0.21428571428571427,
+        0.0
+      ]
+    },
+    "fn_all": {
+      "without": 0.7142857142857143,
+      "with": 0.7142857142857143,
+      "only_with": 0,
+      "only_without": 0,
+      "p": 1.0,
+      "ci_diff": [
+        0.0,
+        0.0
+      ]
+    },
+    "file_hit": {
+      "without": 1.0,
+      "with": 1.0,
+      "only_with": 0,
+      "only_without": 0,
+      "p": 1.0,
+      "ci_diff": [
+        0.0,
+        0.0
+      ]
+    },
+    "file_hit1": {
+      "without": 0.9333333333333333,
+      "with": 0.9333333333333333,
+      "only_with": 0,
+      "only_without": 0,
+      "p": 1.0,
+      "ci_diff": [
+        0.0,
+        0.0
+      ]
+    },
+    "input_tokens": {
+      "without_mean": 31641.466666666667,
+      "with_mean": 33276.4,
+      "without_median": 25015,
+      "with_median": 25477,
+      "with_lower": 6,
+      "ci_diff": [
+        -6201.266666666666,
+        9113.466666666667
+      ]
+    },
+    "output_tokens": {
+      "without_mean": 1145.6666666666667,
+      "with_mean": 977.5333333333333,
+      "without_median": 922,
+      "with_median": 823,
+      "with_lower": 12,
+      "ci_diff": [
+        -345.26666666666665,
+        -15.866666666666667
+      ]
+    },
+    "tool_tokens": {
+      "without_mean": 4359.066666666667,
+      "with_mean": 3925.8,
+      "without_median": 3209,
+      "with_median": 4114,
+      "with_lower": 7,
+      "ci_diff": [
+        -1889.2666666666667,
+        880.2666666666667
+      ]
+    },
+    "turns": {
+      "without_mean": 4.133333333333334,
+      "with_mean": 3.2,
+      "without_median": 4,
+      "with_median": 3,
+      "with_lower": 8,
+      "ci_diff": [
+        -1.8,
+        -0.2
+      ]
+    },
+    "seconds": {
+      "without_mean": 12.613333333333333,
+      "with_mean": 13.4,
+      "without_median": 11.1,
+      "with_median": 12.6,
+      "with_lower": 3,
+      "ci_diff": [
+        -0.27333333333333354,
+        1.653333333333333
+      ]
+    },
+    "tokens_per_success": {
+      "without": 32390.714285714286,
+      "with": 33292.42857142857
+    },
+    "answered": {
+      "without": 1.0,
+      "with": 1.0
+    },
+    "with_tool_calls": {
+      "codeorbit_explore": 15,
+      "Grep": 9,
+      "Read": 7,
+      "codeorbit_node": 2
+    }
+  }
+}

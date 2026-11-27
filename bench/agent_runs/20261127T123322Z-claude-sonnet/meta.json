@@ -1,0 +1,67 @@
+{
+  "dataset": {
+    "name": "swebench-verified",
+    "source": "princeton-nlp/SWE-bench_Verified",
+    "sha256": "36208eba46969ebc31e68d8da059f30e28de7cb6ade337e810b7970e1adb0a94",
+    "selection": {
+      "split": "verified",
+      "repos": null,
+      "instances": "astropy__astropy-14096,astropy__astropy-14539,astropy__astropy-7671,django__django-11211,django__django-11265,django__django-11820,django__django-12155,django__django-13112,django__django-13516,django__django-14170,django__django-14311,django__django-14349,django__django-15161,django__django-15277,django__django-15916,django__django-16032,django__django-16263,django__django-16899,django__django-17084,matplotlib__matplotlib-21568,matplotlib__matplotlib-22871,matplotlib__matplotlib-25122,matplotlib__matplotlib-25960,psf__requests-2931,pydata__xarray-4695,pydata__xarray-6938,pytest-dev__pytest-10051,pytest-dev__pytest-5262,pytest-dev__pytest-5631,pytest-dev__pytest-6202",
+      "limit": null,
+      "sample": null,
+      "seed": 0,
+      "exclude_split": null,
+      "exclude_sample": null,
+      "exclude_seed": 0,
+      "langs": null
+    }
+  },
+  "codeorbit": {
+    "commit": "b1468c007402c4acbde07667547df9ccf242f980",
+    "dirty": false
+  },
+  "run": {
+    "utc": "2026-11-27T12:33:22+00:00",
+    "agent": "claude-code",
+    "agent_version": "2.1.332 (Claude Code)",
+    "model": "sonnet",
+    "conditions": [
+      "without",
+      "with"
+    ],
+    "max_turns": 20,
+    "embed": false,
+    "base_tools": [
+      "Read",
+      "Grep",
+      "Glob"
+    ],
+    "codeorbit_tools": [
+      "mcp__codeorbit__codeorbit_explore",
+      "mcp__codeorbit__codeorbit_search",
+      "mcp__codeorbit__codeorbit_node",
+      "mcp__codeorbit__codeorbit_outline",
+      "mcp__codeorbit__codeorbit_impact"
+    ],
+    "tokenizer_for_tool_tokens": "hf microsoft/Phi-4-mini-instruct (tokenizers 0.23.3)",
+    "tasks_selected": 30,
+    "complete": true,
+    "models_seen": [
+      "claude-sonnet-5-5"
+    ],
+    "wall_s": 1256.5
+  },
+  "environment": {
+    "python": "3.13.7",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "packages": {
+      "codeorbit": "0.1.0",
+      "tree-sitter": "0.26.1",
+      "tree-sitter-language-pack": "1.25.2",
+      "tree-sitter-python": "0.25.0",
+      "tree-sitter-javascript": "0.25.0",
+      "tree-sitter-typescript": "0.23.2",
+      "tokenizers": "0.23.3"
+    }
+  }
+}
