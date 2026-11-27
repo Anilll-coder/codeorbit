@@ -995,6 +995,8 @@ def why(
 @app.command(rich_help_panel="Connect an AI agent")
 def mcp(
     path: str = typer.Option(None, "--path", "-p", help=PATH_HELP),
+    lean: bool = typer.Option(False, "--lean", help="Two tools and grep-sized answers: "
+                              "fewest tokens, for strong models."),
 ):
     """Serve the graph over MCP so Claude Code, Cursor and other agents can use it."""
     from . import mcp_server
@@ -1010,7 +1012,11 @@ def mcp(
               file=sys.stderr, flush=True)
 
     try:
-        mcp_server.serve(root)
+        if lean:
+            from . import mcp_lean
+            mcp_lean.serve(root)
+        else:
+            mcp_server.serve(root)
     except KeyboardInterrupt:
         pass
 

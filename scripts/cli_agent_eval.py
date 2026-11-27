@@ -53,6 +53,9 @@ CONDITIONS = ("without", "with")
 BASE_TOOLS = ["Read", "Grep", "Glob"]
 CO_TOOLS = [f"mcp__codeorbit__{n}" for n in ae.CO_PARAMS]          # the same five
 CO_HIDDEN = [f"mcp__codeorbit__codeorbit_{n}" for n in ("path", "audit", "overview")]
+# `codeorbit mcp --lean`: two tools, grep-sized answers (codeorbit/mcp_lean.py)
+CO_TOOLS_LEAN = ["mcp__codeorbit__codeorbit_find", "mcp__codeorbit__codeorbit_show"]
+LEAN = False
 SESSION_TIMEOUT = 30 * 60
 LIMIT_WORDS = re.compile(r"usage limit|rate limit|limit reached|quota|overloaded|"
                          r"too many requests|credit balance", re.I)
@@ -124,8 +127,12 @@ def session(binary: str, model: str, cond: str, prompt: str, dest: Path, cfg: Pa
            "--strict-mcp-config", "--tools", ",".join(BASE_TOOLS)]
     allowed = list(BASE_TOOLS)
     if cond == "with":
-        cmd += ["--mcp-config", str(cfg), "--disallowedTools", ",".join(CO_HIDDEN)]
-        allowed += CO_TOOLS
+        if LEAN:
+            cmd += ["--mcp-config", str(cfg)]
+            allowed += CO_TOOLS_LEAN
+        else:
+            cmd += ["--mcp-config", str(cfg), "--disallowedTools", ",".join(CO_HIDDEN)]
+            allowed += CO_TOOLS
     cmd += ["--allowedTools", ",".join(allowed)]
     t0 = time.perf_counter()
     try:
@@ -321,6 +328,7 @@ def parse_opencode(out: str, seconds: float, count, err: str = "") -> dict:
 
 
 def run(args) -> None:
+    global LEAN
     opencode = args.agent == "opencode"
     binary = opencode_bin(args.binary) if opencode else claude_bin(args.binary)
     tok_name, count, tok_exact = bench.make_tokenizer(args.tokenizer)
@@ -335,6 +343,7 @@ def run(args) -> None:
             setattr(args, k, sel.get(k))
         args.model, args.embed, args.max_turns = (meta["run"]["model"], meta["run"]["embed"],
                                                   meta["run"]["max_turns"])
+        args.lean = meta["run"].get("profile") == "lean"
         if meta["run"].get("agent", "claude-code") != ("opencode" if opencode else "claude-code"):
             sys.exit(f"{out} was run with {meta['run'].get('agent')}; pass the same --agent")
         rows = [json.loads(l) for l in (out / "runs.jsonl").read_text(encoding="utf-8").splitlines() if l]
@@ -342,6 +351,9 @@ def run(args) -> None:
         print(f"resuming {out}: {len(done)} session(s) already done")
     else:
         done = set()
+    LEAN = bool(args.lean)
+    if LEAN and opencode:
+        sys.exit("--lean is wired for Claude Code only")
 
     tasks = swe.load_tasks(args.split)
     if args.exclude_split:
@@ -362,7 +374,8 @@ def run(args) -> None:
     agent = "opencode" if opencode else "claude-code"
     if not args.resume:
         out = Path(args.out).resolve() / (f"{stamp}-{'opencode' if opencode else 'claude'}-"
-                                f"{re.sub(r'[^A-Za-z0-9.]+', '-', args.model)}")
+                                f"{re.sub(r'[^A-Za-z0-9.]+', '-', args.model)}"
+                                f"{'-lean' if LEAN else ''}")
         out.mkdir(parents=True, exist_ok=True)
         meta = {
             "dataset": {"name": f"swebench-{args.split}", "source": swe.SPLITS[args.split],
@@ -383,7 +396,8 @@ def run(args) -> None:
                     "model": args.model, "conditions": list(CONDITIONS),
                     "max_turns": args.max_turns, "embed": args.embed,
                     "base_tools": OC_BASE if opencode else BASE_TOOLS,
-                    "codeorbit_tools": CO_TOOLS,
+                    "codeorbit_tools": CO_TOOLS_LEAN if LEAN else CO_TOOLS,
+                    "profile": "lean" if LEAN else "full",
                     "tokenizer_for_tool_tokens": tok_name, "tasks_selected": len(tasks),
                     "complete": False, "models_seen": []},
             "environment": {"python": sys.version.split()[0], "platform": platform.platform(),
@@ -430,7 +444,8 @@ def run(args) -> None:
         if not opencode:
             cfg.write_text(json.dumps({"mcpServers": {"codeorbit": {
                 "command": mcp_command()[0],
-                "args": mcp_command()[1:] + ["mcp", "--path", str(dest)]}}}), encoding="utf-8")
+                "args": mcp_command()[1:] + ["mcp", "--path", str(dest)]
+                + (["--lean"] if LEAN else [])}}}), encoding="utf-8")
         prompt = PROMPT.format(issue=task["problem_statement"][:swe.QUESTION_CHARS])
         kind = swe.question_kind(task["problem_statement"], targets)
         order = todo if n % 2 else todo[::-1]
@@ -503,6 +518,7 @@ def main() -> None:
     r.add_argument("--out", default=str(REPO / "bench" / "agent_runs"))
     r.add_argument("--max-hours", type=float)
     r.add_argument("--resume")
+    r.add_argument("--lean", action="store_true", help="CodeOrbit's lean MCP profile (Claude Code)")
     r.add_argument("--binary", "--claude", dest="binary", help="path to the agent's binary")
     args = ap.parse_args()
     run(args)
