@@ -213,15 +213,25 @@ def call_tool(name: str, args: dict, ws: Workspace, co: dict | None) -> str:
 # --------------------------------------------------------------- the model
 
 def think_setting(model: str):
-    """Thinking models answer without a hidden chain of thought: same budget for all."""
-    return False if model.split(":")[0] in ("qwen3", "deepseek-r1") else None
+    """Thinking models answer without a hidden chain of thought: same budget for all.
+    gpt-oss cannot turn reasoning off; "low" is the least it does."""
+    family = model.split(":")[0]
+    if family == "gpt-oss":
+        return "low"
+    return False if family in ("qwen3", "deepseek-r1") else None
+
+
+def num_predict(model: str) -> int:
+    """Output cap per turn. gpt-oss's reasoning counts against it, and a cap hit
+    mid-reasoning leaves no tool call at all, so it gets room for both."""
+    return 4096 if model.split(":")[0] == "gpt-oss" else 1024
 
 
 def chat(model: str, messages: list[dict], tools: list[dict], seed: int,
          url: str) -> dict:
     body = {"model": model, "messages": messages, "tools": tools, "stream": False,
             "options": {"num_ctx": NUM_CTX, "temperature": 0, "seed": seed,
-                        "num_predict": 1024}}
+                        "num_predict": num_predict(model)}}
     think = think_setting(model)
     if think is not None:
         body["think"] = think
@@ -289,6 +299,7 @@ def conversation_text(messages: list[dict], tools: list[dict]) -> str:
     parts = [json.dumps(tools)]
     for m in messages:
         parts.append(m.get("content") or "")
+        parts.append(m.get("thinking") or "")        # gpt-oss: sent back, so counted
         for c in m.get("tool_calls") or []:
             parts.append(json.dumps(c.get("function", {})))
     return "\n".join(parts)
@@ -332,7 +343,9 @@ def episode(model: str, condition: str, issue: str, ws: Workspace, count,
         calls = _calls(msg)
         rec["output_tokens"] += count((msg.get("content") or "") +
                                       "".join(json.dumps(a) + n for n, a in calls))
-        messages.append({k: msg[k] for k in ("role", "content", "tool_calls") if k in msg})
+        # gpt-oss continues its reasoning across tool calls: Ollama expects it back
+        keep = ("role", "content", "tool_calls", "thinking")
+        messages.append({k: msg[k] for k in keep if k in msg})
         rec["final_text"] = (msg.get("content") or "")[-1500:]
         if not calls:
             rec["malformed"] += 1
@@ -552,7 +565,7 @@ def run(args) -> None:
                                                    "--untracked-files=no", cwd=REPO))},
             "run": {"utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
                     "model": args.model, "conditions": list(CONDITIONS),
-                    "seed": args.seed_runs, "temperature": 0, "think": think_setting(args.model),
+                    "seed": args.seed_runs, "temperature": 0, "think": think_setting(args.model), "num_predict": num_predict(args.model),
                     "num_ctx": NUM_CTX, "max_turns": MAX_TURNS, "tool_chars": TOOL_CHARS,
                     "grep_matches": GREP_MATCHES, "read_lines": READ_LINES,
                     "question_chars": swe.QUESTION_CHARS, "embed": args.embed,

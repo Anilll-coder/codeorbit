@@ -26,12 +26,15 @@ from . import context as ctxmod
 from . import mcp_server as ms
 from . import query
 
-INSTRUCTIONS = ("CodeOrbit: ranked code search over this repo's call graph. "
-                "codeorbit_find answers like grep but ranks whole functions by "
-                "the question; codeorbit_show gives one function's code.")
+INSTRUCTIONS = ("CodeOrbit: ranked code search over this repo's call graph. To locate "
+                "code, call codeorbit_find first instead of Grep: one call ranks the "
+                "functions a question is about with their matching lines. If those "
+                "lines settle it, answer without reading more; otherwise Read only "
+                "the line range it gives, or codeorbit_show one function.")
 
 FIND_RESULTS = 6           # locations listed
 FIND_LINES = (4, 2)        # matching lines shown: the best match, each other one
+EXCERPT_LINES = 20        # the best match's focused lines
 LINE_CHARS = 100
 SIG_CHARS = 90
 SHOW_LINES = 60
@@ -55,6 +58,12 @@ def _terms(text: str) -> set[str]:
     return {t for t in code_tokens(text) if t not in ctxmod.STOP and len(t) > 2}
 
 
+def _in_sig(code: str, sig: str) -> bool:
+    """Is this line part of the signature the header already prints?"""
+    c = " ".join(code.split()).rstrip(":{ ")
+    return bool(c) and c in sig
+
+
 def _matching_lines(root, row, terms: set[str], k: int) -> list[str]:
     """The k body lines that name the most question words, in file order.
     The signature's own lines are skipped: the header already gives it."""
@@ -65,7 +74,7 @@ def _matching_lines(root, row, terms: set[str], k: int) -> list[str]:
     scored = []
     for i, line in enumerate(lines):
         code = line.split("|", 1)[-1].lower()
-        if " ".join(code.split()) in sig:
+        if _in_sig(code, sig):
             continue                    # a parameter line: the header has it
         hit = sum(1 for t in terms if t in code)
         if hit:
@@ -93,10 +102,50 @@ def _sig(row) -> str:
     return s if len(s) <= SIG_CHARS else s[:SIG_CHARS] + "…"
 
 
+def _enclosing(conn, row):
+    """The outermost function or method a symbol is nested in, or the symbol.
+
+    A method of an anonymous class inside a Java method, or a closure inside a
+    Python function, is part of that function: the fix and the answer are about
+    it. Listed under its own nested name, a model reported that name."""
+    if row["kind"] not in ("function", "method"):
+        return row
+    parts = row["qname"].split(".")
+    for i in range(1, len(parts)):
+        anc = conn.execute(
+            f"SELECT {query.NODE_COLS} FROM nodes n JOIN files f ON f.id = n.file_id "
+            "WHERE n.qname = ? AND f.path = ? AND n.kind IN ('function', 'method')",
+            (".".join(parts[:i]), row["path"])).fetchone()
+        if anc is not None:
+            return anc
+    return row
+
+
+def _excerpt(root, row, terms: set[str]) -> list[str]:
+    """The best match's lines the question is about, numbered: often enough to
+    answer from, where a bare location sends the model to Read the file."""
+    span = row["end_line"] - row["start_line"] + 1
+    src = query.source_of(root, row, max_lines=min(span, 600))
+    if not src:
+        return []
+    sig = " ".join((row["signature"] or "").split()).lower()
+    lines = src.split("\n")
+    body = [l for l in lines[1:] if not _in_sig(l.split("|", 1)[-1].lower(), sig)]
+    kept = ms._focus(body, EXCERPT_LINES, terms)
+    return ["    " + l for l in kept if l.strip()]
+
+
 def find_text(root, conn, query_text: str) -> str:
     seen = ms.LEDGER.shown
-    rows = [r for r in ms.explore_rows(root, conn, query_text, FIND_RESULTS + len(seen))
-            if r["id"] not in seen][:FIND_RESULTS]
+    rows, ids = [], set()
+    for r in ms.explore_rows(root, conn, query_text, FIND_RESULTS + len(seen) + 6):
+        r = _enclosing(conn, r)
+        if r["id"] in seen or r["id"] in ids:
+            continue
+        rows.append(r)
+        ids.add(r["id"])
+        if len(rows) == FIND_RESULTS:
+            break
     if not rows:
         if seen:
             return ("Everything matching this was already listed: "
@@ -114,7 +163,10 @@ def find_text(root, conn, query_text: str) -> str:
             sig = sig[len(r["name"]):]          # "name(...)": the name is already there
         out.append(f"  {r['start_line']}-{r['end_line']} {r['kind']} {name}{sig}")
         if r["kind"] not in ("class", "module"):
-            out += _matching_lines(root, r, terms, FIND_LINES[0] if n == 0 else FIND_LINES[1])
+            if n == 0 and EXCERPT_LINES:
+                out += _excerpt(root, r, terms)
+            else:
+                out += _matching_lines(root, r, terms, FIND_LINES[1])
         ms.LEDGER.note_shown(r["id"], r["qname"], r["path"])
     return "\n".join(out)
 
@@ -122,7 +174,7 @@ def find_text(root, conn, query_text: str) -> str:
 @lean.tool()
 @_lean_tool
 def codeorbit_find(root, conn, query: str) -> str:
-    """Rank the functions an issue or question is about: file:lines, signature, matching lines."""
+    """Use instead of Grep to locate code: ranks the functions an issue is about, with file:lines and matching lines."""
     return find_text(root, conn, query)
 
 

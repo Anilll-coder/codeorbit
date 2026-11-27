@@ -687,6 +687,14 @@
           "required": false,
           "default": "",
           "metavar": ""
+        },
+        {
+          "kind": "option",
+          "name": "--lean",
+          "help": "Two tools and grep-sized answers: fewest tokens, for strong models.",
+          "required": false,
+          "default": "",
+          "metavar": ""
         }
       ],
       "examples": [

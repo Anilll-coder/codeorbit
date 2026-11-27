@@ -393,3 +393,22 @@ reported in full whatever it shows and never pooled with the first test.
   permissions - bash, web search and web fetch allowed in both conditions. Those
   sessions were deleted unread for scoring and their issues rerun; the harness now
   uses absolute paths and stops if any denied tool is ever used.
+
+### Added 2026-11-27, before any run on it: gpt-oss:20b on the same 200 issues
+
+- **Model:** gpt-oss:20b (Ollama, Kaggle 2×T4), on Multilingual-2 and Mixed-2
+  exactly as defined above. Its reasoning cannot be switched off, so it runs at
+  Ollama's lowest effort (`think: "low"`) with an output cap of 4,096 tokens per
+  turn (1,024 for the other models), because reasoning tokens count against the
+  cap. Its reasoning is sent back on later turns and counted in the context.
+  Same tools, prompts, turn limit and context window as qwen3:14b.
+- **CodeOrbit version:** the code on main when the Kaggle run starts (the
+  notebook prints the commit). The default MCP profile, not `--lean`.
+- **Check first:** the notebook runs 7 pilot issues outside every main sample
+  (Python: psf__requests-1921, pytest-dev__pytest-7205, pytest-dev__pytest-10081;
+  gin-gonic__gin-3741, google__gson-2061, sharkdp__bat-1892; JavaScript:
+  axios__axios-4731, from the first Multilingual sample). The main run starts only
+  if every pilot session ran, at least half answered in each condition, and the
+  with-CodeOrbit sessions called CodeOrbit. Pilot results are not part of the test.
+- Reported in full whatever it shows, per sample and per part, never pooled with
+  the qwen3:14b or OpenCode results.
