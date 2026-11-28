@@ -56,6 +56,9 @@ CO_HIDDEN = [f"mcp__codeorbit__codeorbit_{n}" for n in ("path", "audit", "overvi
 # `codeorbit mcp --lean`: two tools, grep-sized answers (codeorbit/mcp_lean.py)
 CO_TOOLS_LEAN = ["mcp__codeorbit__codeorbit_find", "mcp__codeorbit__codeorbit_show"]
 LEAN = False
+# `--inject`: no tools at all; a UserPromptSubmit hook (`codeorbit hook`) adds the
+# ranked code to the prompt before the first turn (codeorbit/hook.py)
+INJECT = False
 SESSION_TIMEOUT = 30 * 60
 LIMIT_WORDS = re.compile(r"usage limit|rate limit|limit reached|quota|overloaded|"
                          r"too many requests|credit balance", re.I)
@@ -91,6 +94,17 @@ def mcp_command() -> list[str]:
     return [sys.executable, "-c", "import sys; "
             "sys.path[:] = [p for p in sys.path if p not in ('', '.')]; "
             "from codeorbit.entry import main; sys.argv[0] = 'codeorbit'; main()"]
+
+
+def hook_command(where: Path) -> str:
+    """`codeorbit hook`, run by this interpreter like the MCP server, as one
+    shell command (Claude Code runs hooks through a shell)."""
+    runner = where / "codeorbit_hook.py"
+    runner.write_text("import sys\n"
+                      "sys.path[:] = [p for p in sys.path if p not in ('', '.')]\n"
+                      "from codeorbit.entry import main\n"
+                      "sys.argv = ['codeorbit', 'hook']\nmain()\n", encoding="utf-8")
+    return f'"{Path(sys.executable).as_posix()}" "{runner.as_posix()}"'
 
 
 def mcp_code_version() -> dict:
@@ -143,7 +157,9 @@ def session(binary: str, model: str, cond: str, prompt: str, dest: Path, cfg: Pa
            "--strict-mcp-config", "--tools", ",".join(BASE_TOOLS)]
     allowed = list(BASE_TOOLS)
     if cond == "with":
-        if LEAN:
+        if INJECT:
+            cmd += ["--settings", str(cfg)]
+        elif LEAN:
             cmd += ["--mcp-config", str(cfg)]
             allowed += CO_TOOLS_LEAN
         else:
@@ -344,7 +360,7 @@ def parse_opencode(out: str, seconds: float, count, err: str = "") -> dict:
 
 
 def run(args) -> None:
-    global LEAN
+    global LEAN, INJECT
     opencode = args.agent == "opencode"
     binary = opencode_bin(args.binary) if opencode else claude_bin(args.binary)
     tok_name, count, tok_exact = bench.make_tokenizer(args.tokenizer)
@@ -360,6 +376,7 @@ def run(args) -> None:
         args.model, args.embed, args.max_turns = (meta["run"]["model"], meta["run"]["embed"],
                                                   meta["run"]["max_turns"])
         args.lean = meta["run"].get("profile") == "lean"
+        args.inject = meta["run"].get("profile") == "inject"
         if meta["run"].get("agent", "claude-code") != ("opencode" if opencode else "claude-code"):
             sys.exit(f"{out} was run with {meta['run'].get('agent')}; pass the same --agent")
         rows = [json.loads(l) for l in (out / "runs.jsonl").read_text(encoding="utf-8").splitlines() if l]
@@ -376,7 +393,10 @@ def run(args) -> None:
         if not was:
             meta["run"]["mcp_code_from_resume"] = now
     LEAN = bool(args.lean)
-    if LEAN and opencode:
+    INJECT = bool(args.inject)
+    if LEAN and INJECT:
+        sys.exit("--lean and --inject are different profiles: choose one")
+    if (LEAN or INJECT) and opencode:
         sys.exit("--lean is wired for Claude Code only")
 
     tasks = swe.load_tasks(args.split)
@@ -399,7 +419,7 @@ def run(args) -> None:
     if not args.resume:
         out = Path(args.out).resolve() / (f"{stamp}-{'opencode' if opencode else 'claude'}-"
                                 f"{re.sub(r'[^A-Za-z0-9.]+', '-', args.model)}"
-                                f"{'-lean' if LEAN else ''}")
+                                f"{'-lean' if LEAN else '-inject' if INJECT else ''}")
         out.mkdir(parents=True, exist_ok=True)
         meta = {
             "dataset": {"name": f"swebench-{args.split}", "source": swe.SPLITS[args.split],
@@ -420,8 +440,8 @@ def run(args) -> None:
                     "model": args.model, "conditions": list(CONDITIONS),
                     "max_turns": args.max_turns, "embed": args.embed,
                     "base_tools": OC_BASE if opencode else BASE_TOOLS,
-                    "codeorbit_tools": CO_TOOLS_LEAN if LEAN else CO_TOOLS,
-                    "profile": "lean" if LEAN else "full",
+                    "codeorbit_tools": CO_TOOLS_LEAN if LEAN else [] if INJECT else CO_TOOLS,
+                    "profile": "lean" if LEAN else "inject" if INJECT else "full",
                     "mcp_code": mcp_code_version(),
                     "tokenizer_for_tool_tokens": tok_name, "tasks_selected": len(tasks),
                     "complete": False, "models_seen": []},
@@ -461,12 +481,19 @@ def run(args) -> None:
         hide_index(dest)
         targets, files = swe.gold_targets(conn, task["patch"])
         tfiles = ae.target_files(conn, targets)
+        if INJECT:
+            # build the hook's ranking index now, so no session waits for it
+            from codeorbit import rank
+            rank.bm25_for(dest, conn)
         conn.close()
         if not files:
             print("    skipped: the fix touches no indexed file", flush=True)
             continue
         cfg = cfg_dir / f"{owner}__{name}.json"
-        if not opencode:
+        if INJECT:
+            cfg.write_text(json.dumps({"hooks": {"UserPromptSubmit": [{"hooks": [
+                {"type": "command", "command": hook_command(cfg_dir)}]}]}}), encoding="utf-8")
+        elif not opencode:
             cfg.write_text(json.dumps({"mcpServers": {"codeorbit": {
                 "command": mcp_command()[0],
                 "args": mcp_command()[1:] + ["mcp", "--path", str(dest)]
@@ -544,6 +571,8 @@ def main() -> None:
     r.add_argument("--max-hours", type=float)
     r.add_argument("--resume")
     r.add_argument("--lean", action="store_true", help="CodeOrbit's lean MCP profile (Claude Code)")
+    r.add_argument("--inject", action="store_true",
+                   help="CodeOrbit as a prompt hook, no tools (Claude Code)")
     r.add_argument("--binary", "--claude", dest="binary", help="path to the agent's binary")
     args = ap.parse_args()
     run(args)

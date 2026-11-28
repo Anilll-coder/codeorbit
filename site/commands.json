@@ -483,6 +483,21 @@
       ]
     },
     {
+      "name": "hook",
+      "panel": "Connect an AI agent",
+      "summary": "Claude Code UserPromptSubmit hook: add the code a request is about to the prompt.",
+      "description": "Reads the hook's JSON on stdin; prints the ranked locations and the best\nmatch's relevant lines, or nothing. Configure it in .claude/settings.json:\n{\"hooks\": {\"UserPromptSubmit\": [{\"hooks\": [{\"type\": \"command\",\n\"command\": \"codeorbit hook\"}]}]}}",
+      "usage": "[OPTIONS]",
+      "arguments": [],
+      "options": [],
+      "examples": [
+        {
+          "cmd": "codeorbit hook",
+          "note": "Claude Code runs this on each prompt (a UserPromptSubmit hook) and adds the ranked code to it."
+        }
+      ]
+    },
+    {
       "name": "impact",
       "panel": "Explore",
       "summary": "Blast radius: everything that transitively reaches this symbol.",
@@ -701,6 +716,10 @@
         {
           "cmd": "codeorbit mcp",
           "note": "Serve the graph over MCP. Agents run this, you rarely do."
+        },
+        {
+          "cmd": "codeorbit mcp --lean",
+          "note": "Two tools and grep-sized answers, for strong models."
         }
       ]
     },

@@ -14,6 +14,7 @@ contents changed - followed by `resolve_project` if anything did.
 """
 from __future__ import annotations
 
+import json
 import os
 import threading
 from pathlib import Path
@@ -88,7 +89,7 @@ def refresh(root: Path) -> list[str]:
         except FileNotFoundError:
             return []
         snap = _snapshot(root, list(before))
-        prev = _SNAP.get(root)
+        prev = _SNAP.get(root) or _load(root)
         dirty = _newer_than(snap, _built_at(root)) if prev is None else snap != prev
         if not dirty:
             _SNAP[root] = snap
@@ -98,8 +99,36 @@ def refresh(root: Path) -> list[str]:
             resolve_project(root)
         after = _hashes(root)
         _SNAP[root] = _snapshot(root, list(after))
+        _save(root, _SNAP[root])
         return sorted(p for p in before.keys() | after.keys()
                       if before.get(p) != after.get(p))
+
+
+# Kept next to the graph, so a new process (a hook runs as one per request)
+# knows what the files looked like when it was last brought up to date. Without
+# it, a re-index that found nothing to change writes nothing, the graph keeps
+# its old time, and every new process would re-check every file again.
+_SNAP_FILE = "fresh.json"
+
+
+def _save(root: Path, snap: dict) -> None:
+    try:
+        data = {f"{k}:{p}": v for (k, p), v in snap.items()}
+        data["built_at"] = _built_at(root)
+        (db.db_path(root).parent / _SNAP_FILE).write_text(json.dumps(data), encoding="utf-8")
+    except OSError:
+        pass
+
+
+def _load(root: Path) -> dict | None:
+    try:
+        data = json.loads((db.db_path(root).parent / _SNAP_FILE).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    if _built_at(root) > data.pop("built_at", 0):
+        return None                 # the graph was rebuilt since (codeorbit index)
+    return {(k[0], k[2:]): (tuple(v) if isinstance(v, list) else v)
+            for k, v in data.items()}
 
 
 def forget(root: Path | None = None) -> None:

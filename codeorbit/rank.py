@@ -167,9 +167,46 @@ def bm25_for(root: Path, conn) -> BM25:
     sig = _graph_signature(conn)
     hit = _BM25_CACHE.get(key)
     if hit is None or hit[0] != sig:
-        hit = (sig, BM25(conn, Sources(Path(root))))
+        bm = _load_bm25(Path(root), sig)
+        if bm is None:
+            bm = BM25(conn, Sources(Path(root)))
+            _save_bm25(Path(root), sig, bm)
+        hit = (sig, bm)
         _BM25_CACHE[key] = hit
     return hit[1]
+
+
+# Also kept on disk, beside the graph: a process that starts per request (the
+# Claude Code hook) would otherwise rebuild it every time - 8 s on Django. The
+# file is named by the graph's signature, so a changed graph never reads a
+# stale index; it is written by this code into the project's own .codeorbit/.
+def _bm25_path(root: Path, sig: str) -> Path:
+    from .db import db_path
+    return db_path(root).parent / f"bm25-{sig[:16]}.pickle"
+
+
+def _load_bm25(root: Path, sig: str) -> BM25 | None:
+    import pickle
+    try:
+        with open(_bm25_path(root, sig), "rb") as f:
+            bm = pickle.load(f)
+    except (OSError, pickle.PickleError, EOFError, AttributeError):
+        return None
+    return bm if isinstance(bm, BM25) else None
+
+
+def _save_bm25(root: Path, sig: str, bm: BM25) -> None:
+    import pickle
+    path = _bm25_path(root, sig)
+    try:
+        for old in path.parent.glob("bm25-*.pickle"):
+            old.unlink()
+        tmp = path.with_suffix(".tmp")
+        with open(tmp, "wb") as f:
+            pickle.dump(bm, f, protocol=pickle.HIGHEST_PROTOCOL)
+        tmp.replace(path)
+    except OSError:
+        pass
 
 
 def fusion_ranking(root: Path, conn, question: str, limit: int = 50) -> list[int]:

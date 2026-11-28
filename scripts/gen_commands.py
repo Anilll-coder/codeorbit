@@ -118,6 +118,11 @@ EXAMPLES: dict[str, list[tuple[str, str]]] = {
     ],
     "mcp": [
         ("codeorbit mcp", "Serve the graph over MCP. Agents run this, you rarely do."),
+        ("codeorbit mcp --lean", "Two tools and grep-sized answers, for strong models."),
+    ],
+    "hook": [
+        ("codeorbit hook", "Claude Code runs this on each prompt (a UserPromptSubmit "
+         "hook) and adds the ranked code to it."),
     ],
     "install-mcp": [
         ("codeorbit install-mcp", "Register with Claude Code."),

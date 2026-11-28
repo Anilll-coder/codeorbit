@@ -1021,6 +1021,19 @@ def mcp(
         pass
 
 
+@app.command(rich_help_panel="Connect an AI agent")
+def hook():
+    """Claude Code UserPromptSubmit hook: add the code a request is about to the prompt.
+
+    Reads the hook's JSON on stdin; prints the ranked locations and the best
+    match's relevant lines, or nothing. Configure it in .claude/settings.json:
+    {"hooks": {"UserPromptSubmit": [{"hooks": [{"type": "command",
+    "command": "codeorbit hook"}]}]}}
+    """
+    from . import hook as hookmod
+    hookmod.main()
+
+
 PROVIDER_HELP = (
     "ollama (default, fully local, no key) | openai (any OpenAI-compatible "
     "server: LM Studio, vLLM, llama.cpp, or the real OpenAI API) | anthropic "
