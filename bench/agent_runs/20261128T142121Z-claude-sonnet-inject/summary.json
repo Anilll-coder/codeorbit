@@ -1,0 +1,380 @@
+{
+  "all": {
+    "tasks": 10,
+    "fn_tasks": 10,
+    "fn_hit": {
+      "without": 1.0,
+      "with": 1.0,
+      "only_with": 0,
+      "only_without": 0,
+      "p": 1.0,
+      "ci_diff": [
+        0.0,
+        0.0
+      ]
+    },
+    "fn_hit1": {
+      "without": 0.9,
+      "with": 0.9,
+      "only_with": 0,
+      "only_without": 0,
+      "p": 1.0,
+      "ci_diff": [
+        0.0,
+        0.0
+      ]
+    },
+    "fn_all": {
+      "without": 0.9,
+      "with": 0.9,
+      "only_with": 0,
+      "only_without": 0,
+      "p": 1.0,
+      "ci_diff": [
+        0.0,
+        0.0
+      ]
+    },
+    "file_hit": {
+      "without": 1.0,
+      "with": 1.0,
+      "only_with": 0,
+      "only_without": 0,
+      "p": 1.0,
+      "ci_diff": [
+        0.0,
+        0.0
+      ]
+    },
+    "file_hit1": {
+      "without": 0.9,
+      "with": 0.9,
+      "only_with": 0,
+      "only_without": 0,
+      "p": 1.0,
+      "ci_diff": [
+        0.0,
+        0.0
+      ]
+    },
+    "input_tokens": {
+      "without_mean": 25719.7,
+      "with_mean": 23816.1,
+      "without_median": 24424.5,
+      "with_median": 20863.0,
+      "with_lower": 6,
+      "ci_diff": [
+        -5607.5,
+        2638.4
+      ]
+    },
+    "output_tokens": {
+      "without_mean": 1034.3,
+      "with_mean": 941.1,
+      "without_median": 820.0,
+      "with_median": 647.5,
+      "with_lower": 7,
+      "ci_diff": [
+        -198.4,
+        29.2
+      ]
+    },
+    "tool_tokens": {
+      "without_mean": 3172.5,
+      "with_mean": 2753.9,
+      "without_median": 2085.0,
+      "with_median": 2190.0,
+      "with_lower": 6,
+      "ci_diff": [
+        -1287.3,
+        307.7
+      ]
+    },
+    "turns": {
+      "without_mean": 3.4,
+      "with_mean": 2.9,
+      "without_median": 3.0,
+      "with_median": 2.0,
+      "with_lower": 5,
+      "ci_diff": [
+        -1.0,
+        0.0
+      ]
+    },
+    "seconds": {
+      "without_mean": 12.58,
+      "with_mean": 14.15,
+      "without_median": 11.2,
+      "with_median": 12.0,
+      "with_lower": 1,
+      "ci_diff": [
+        0.5900000000000004,
+        2.7000000000000006
+      ]
+    },
+    "tokens_per_success": {
+      "without": 26754.0,
+      "with": 24757.2
+    },
+    "answered": {
+      "without": 1.0,
+      "with": 1.0
+    },
+    "with_tool_calls": {
+      "Read": 11,
+      "Grep": 8
+    }
+  },
+  "named": {
+    "tasks": 5,
+    "fn_tasks": 5,
+    "fn_hit": {
+      "without": 1.0,
+      "with": 1.0,
+      "only_with": 0,
+      "only_without": 0,
+      "p": 1.0,
+      "ci_diff": [
+        0.0,
+        0.0
+      ]
+    },
+    "fn_hit1": {
+      "without": 1.0,
+      "with": 1.0,
+      "only_with": 0,
+      "only_without": 0,
+      "p": 1.0,
+      "ci_diff": [
+        0.0,
+        0.0
+      ]
+    },
+    "fn_all": {
+      "without": 1.0,
+      "with": 1.0,
+      "only_with": 0,
+      "only_without": 0,
+      "p": 1.0,
+      "ci_diff": [
+        0.0,
+        0.0
+      ]
+    },
+    "file_hit": {
+      "without": 1.0,
+      "with": 1.0,
+      "only_with": 0,
+      "only_without": 0,
+      "p": 1.0,
+      "ci_diff": [
+        0.0,
+        0.0
+      ]
+    },
+    "file_hit1": {
+      "without": 1.0,
+      "with": 1.0,
+      "only_with": 0,
+      "only_without": 0,
+      "p": 1.0,
+      "ci_diff": [
+        0.0,
+        0.0
+      ]
+    },
+    "input_tokens": {
+      "without_mean": 21044.8,
+      "with_mean": 16402.4,
+      "without_median": 22929,
+      "with_median": 15860,
+      "with_lower": 4,
+      "ci_diff": [
+        -6854.0,
+        -1500.2
+      ]
+    },
+    "output_tokens": {
+      "without_mean": 686.6,
+      "with_mean": 614.0,
+      "without_median": 698,
+      "with_median": 603,
+      "with_lower": 3,
+      "ci_diff": [
+        -178.0,
+        47.8
+      ]
+    },
+    "tool_tokens": {
+      "without_mean": 1229.2,
+      "with_mean": 1229.2,
+      "without_median": 1175,
+      "with_median": 916,
+      "with_lower": 2,
+      "ci_diff": [
+        -915.4,
+        895.0
+      ]
+    },
+    "turns": {
+      "without_mean": 3.0,
+      "with_mean": 2.2,
+      "without_median": 3,
+      "with_median": 2,
+      "with_lower": 3,
+      "ci_diff": [
+        -1.4,
+        -0.2
+      ]
+    },
+    "seconds": {
+      "without_mean": 10.379999999999999,
+      "with_mean": 11.82,
+      "without_median": 10.7,
+      "with_median": 11.4,
+      "with_lower": 0,
+      "ci_diff": [
+        0.42000000000000065,
+        2.5599999999999996
+      ]
+    },
+    "tokens_per_success": {
+      "without": 21731.4,
+      "with": 17016.4
+    },
+    "answered": {
+      "without": 1.0,
+      "with": 1.0
+    },
+    "with_tool_calls": {
+      "Read": 3,
+      "Grep": 3
+    }
+  },
+  "unnamed": {
+    "tasks": 5,
+    "fn_tasks": 5,
+    "fn_hit": {
+      "without": 1.0,
+      "with": 1.0,
+      "only_with": 0,
+      "only_without": 0,
+      "p": 1.0,
+      "ci_diff": [
+        0.0,
+        0.0
+      ]
+    },
+    "fn_hit1": {
+      "without": 0.8,
+      "with": 0.8,
+      "only_with": 0,
+      "only_without": 0,
+      "p": 1.0,
+      "ci_diff": [
+        0.0,
+        0.0
+      ]
+    },
+    "fn_all": {
+      "without": 0.8,
+      "with": 0.8,
+      "only_with": 0,
+      "only_without": 0,
+      "p": 1.0,
+      "ci_diff": [
+        0.0,
+        0.0
+      ]
+    },
+    "file_hit": {
+      "without": 1.0,
+      "with": 1.0,
+      "only_with": 0,
+      "only_without": 0,
+      "p": 1.0,
+      "ci_diff": [
+        0.0,
+        0.0
+      ]
+    },
+    "file_hit1": {
+      "without": 0.8,
+      "with": 0.8,
+      "only_with": 0,
+      "only_without": 0,
+      "p": 1.0,
+      "ci_diff": [
+        0.0,
+        0.0
+      ]
+    },
+    "input_tokens": {
+      "without_mean": 30394.6,
+      "with_mean": 31229.8,
+      "without_median": 28081,
+      "with_median": 23861,
+      "with_lower": 2,
+      "ci_diff": [
+        -5625.2,
+        8024.6
+      ]
+    },
+    "output_tokens": {
+      "without_mean": 1382.0,
+      "with_mean": 1268.2,
+      "without_median": 1458,
+      "with_median": 1169,
+      "with_lower": 4,
+      "ci_diff": [
+        -280.2,
+        96.2
+      ]
+    },
+    "tool_tokens": {
+      "without_mean": 5115.8,
+      "with_mean": 4278.6,
+      "without_median": 4595,
+      "with_median": 3906,
+      "with_lower": 4,
+      "ci_diff": [
+        -2189.0,
+        41.6
+      ]
+    },
+    "turns": {
+      "without_mean": 3.8,
+      "with_mean": 3.6,
+      "without_median": 3,
+      "with_median": 3,
+      "with_lower": 2,
+      "ci_diff": [
+        -0.8,
+        0.4
+      ]
+    },
+    "seconds": {
+      "without_mean": 14.780000000000001,
+      "with_mean": 16.48,
+      "without_median": 15.2,
+      "with_median": 16.6,
+      "with_lower": 1,
+      "ci_diff": [
+        0.019999999999999574,
+        3.6000000000000005
+      ]
+    },
+    "tokens_per_success": {
+      "without": 31776.6,
+      "with": 32498.0
+    },
+    "answered": {
+      "without": 1.0,
+      "with": 1.0
+    },
+    "with_tool_calls": {
+      "Grep": 5,
+      "Read": 8
+    }
+  }
+}

@@ -428,3 +428,15 @@ accuracy, for a strong model) is tested on 30 issues no lean run touched:
   babel; not in any Sonnet run; seed 61; `3a5ac8f402672e61…`): apache__lucene-12022 astral-sh__ruff-15394 astral-sh__ruff-15443 babel__babel-13928 babel__babel-14532 gohugoio__hugo-12204 gohugoio__hugo-12448 prometheus__prometheus-11859 prometheus__prometheus-12874 prometheus__prometheus-9248
 - Claude Code, Sonnet, both conditions, the harness defaults; mean and median
   input tokens, cost, function found. Reported whatever it shows.
+
+### Added 2026-11-28, before any run on it: CodeOrbit as a prompt hook (Claude Code, Sonnet)
+
+`codeorbit hook` (codeorbit/hook.py, commit ee0d04c) adds the lean `find`
+answer for the user's request to the prompt through Claude Code's
+UserPromptSubmit hook: no CodeOrbit tools, no tool definitions. One version was
+run on the 16 dev issues above (not tuned there). Claim to test: fewer input
+tokens than grep alone at the same accuracy, for a strong model. Tested on the
+same 30 held-out issues as the lean profile (listed above; no hook run has
+touched them), Claude Code with Sonnet, `cli_agent_eval.py --inject`, both
+conditions, harness defaults. Mean and median input tokens, cost, function
+found; reported whatever it shows.
