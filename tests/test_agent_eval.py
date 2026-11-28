@@ -98,3 +98,28 @@ def test_locations_written_in_prose_are_read():
     assert text_locations(text) == ["src/_pytest/unittest.py:TestCaseFunction.runtest",
                                     "src/_pytest/unittest.py:_is_skipped"]
     assert text_locations("no locations here") == []
+
+
+def test_inject_profile_puts_codeorbit_in_the_issue_not_in_the_tools(tmp_path, monkeypatch):
+    from codeorbit.indexer import index_project
+    from codeorbit.resolve import resolve_project
+    (tmp_path / "proxy.py").write_text(
+        "def rebuild_proxy_auth(request):\n    request.headers.pop('Proxy-Authorization')\n",
+        encoding="utf-8")
+    index_project(tmp_path)
+    resolve_project(tmp_path)
+    seen = {}
+
+    def fake_chat(model, messages, tools, seed, url):
+        seen["user"], seen["tools"] = messages[1]["content"], [t["function"]["name"] for t in tools]
+        return {"message": {"role": "assistant", "content": "", "tool_calls": [
+            {"function": {"name": "finish",
+                          "arguments": {"locations": ["proxy.py:rebuild_proxy_auth"]}}}]}}
+
+    monkeypatch.setattr(ae, "chat", fake_chat)
+    monkeypatch.setattr(ae, "PROFILE", "inject")
+    rec = ae.episode("m", "with", "Proxy-Authorization kept on redirect", ae.Workspace(tmp_path),
+                     len, 0, "", None)
+    assert rec["answer"] == ["proxy.py:rebuild_proxy_auth"]
+    assert "CodeOrbit (automatic" in seen["user"] and "rebuild_proxy_auth" in seen["user"]
+    assert not any(t.startswith("codeorbit") for t in seen["tools"])

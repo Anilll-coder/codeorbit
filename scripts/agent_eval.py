@@ -305,12 +305,29 @@ def conversation_text(messages: list[dict], tools: list[dict]) -> str:
     return "\n".join(parts)
 
 
+# How CodeOrbit reaches the model in the "with" condition.
+#   full   - its MCP tools beside the base tools (what the tests so far used)
+#   inject - no extra tools: its ranked code (codeorbit/hook.py, the lean `find`
+#            answer) is added to the issue before the first turn
+PROFILE = "full"
+INJECT_NOTE = ("\nThe issue is followed by CodeOrbit's ranking of the code it is most "
+               "likely about, from this repository's call graph: locations, best "
+               "first, with the best match's relevant lines.")
+
+
 def episode(model: str, condition: str, issue: str, ws: Workspace, count,
             seed: int, url: str, co_tools) -> dict:
     tools = list(BASE_TOOLS)
     system = SYSTEM
     co = None
-    if condition == "with":
+    user = f"Issue:\n\n{issue}"
+    if condition == "with" and PROFILE == "inject":
+        from codeorbit import hook
+        system = SYSTEM + INJECT_NOTE
+        context = hook.context_for(ws.root, issue)
+        if context:
+            user += "\n\n" + context
+    elif condition == "with":
         from codeorbit import budget, mcp_server
         mcp_server.LEDGER = budget.Ledger()     # a fresh MCP session per run
         schemas, co, instructions = co_tools
@@ -319,7 +336,7 @@ def episode(model: str, condition: str, issue: str, ws: Workspace, count,
                           "Its instructions:\n" + instructions
     tools.append(FINISH)
     messages = [{"role": "system", "content": system},
-                {"role": "user", "content": f"Issue:\n\n{issue}"}]
+                {"role": "user", "content": user}]
     rec = {"turns": 0, "tool_calls": {}, "input_tokens": 0, "output_tokens": 0,
            "tool_tokens": 0, "peak_context": 0, "ollama_prompt": 0, "ollama_eval": 0,
            "answer": None, "stop": "turns", "malformed": 0}
@@ -469,6 +486,7 @@ def target_files(conn, targets: list[str]) -> dict:
 # --------------------------------------------------------------- run
 
 def run(args) -> None:
+    global PROFILE
     from codeorbit import db, llm
     from codeorbit.indexer import index_project
     from codeorbit.resolve import resolve_project
@@ -485,6 +503,7 @@ def run(args) -> None:
         meta = json.loads((out / "meta.json").read_text(encoding="utf-8"))
         r = meta["run"]
         args.model, args.seed_runs, args.embed = r["model"], r["seed"], r["embed"]
+        args.profile = r.get("profile", "full")
         sel = meta["dataset"]["selection"]
         for k in ("repos", "instances", "limit", "sample", "seed", "exclude_sample",
                   "exclude_seed"):
@@ -497,6 +516,7 @@ def run(args) -> None:
         print(f"resuming {out}: {len(done)} run(s) already done")
     else:
         done = set()
+    PROFILE = args.profile
 
     all_tasks = swe.load_tasks(args.split)
     if args.exclude_split:
@@ -542,7 +562,8 @@ def run(args) -> None:
 
     if not args.resume:
         stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-        safe = re.sub(r"[^A-Za-z0-9.]+", "-", args.model)
+        safe = re.sub(r"[^A-Za-z0-9.]+", "-", args.model) + (
+            "-inject" if args.profile == "inject" else "")
         if args.shard:
             safe += "-shard" + args.shard.replace("/", "of")
         out = Path(args.out) / f"{stamp}-agent-{safe}"
@@ -565,6 +586,7 @@ def run(args) -> None:
                                                    "--untracked-files=no", cwd=REPO))},
             "run": {"utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
                     "model": args.model, "conditions": list(CONDITIONS),
+                    "profile": args.profile,
                     "seed": args.seed_runs, "temperature": 0, "think": think_setting(args.model), "num_predict": num_predict(args.model),
                     "num_ctx": NUM_CTX, "max_turns": MAX_TURNS, "tool_chars": TOOL_CHARS,
                     "grep_matches": GREP_MATCHES, "read_lines": READ_LINES,
@@ -824,6 +846,8 @@ def main() -> None:
     r.add_argument("--out", default=str(REPO / "bench" / "agent_runs"))
     r.add_argument("--max-hours", type=float)
     r.add_argument("--resume")
+    r.add_argument("--profile", choices=["full", "inject"], default="full",
+                   help="how CodeOrbit reaches the model in the with condition")
     p = sub.add_parser("report", help="paired with/without comparison of finished runs")
     p.add_argument("runs", nargs="+")
     p.add_argument("--pool", action="store_true",
