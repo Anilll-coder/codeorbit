@@ -412,3 +412,19 @@ reported in full whatever it shows and never pooled with the first test.
   with-CodeOrbit sessions called CodeOrbit. Pilot results are not part of the test.
 - Reported in full whatever it shows, per sample and per part, never pooled with
   the qwen3:14b or OpenCode results.
+
+### Added 2026-11-28, before any run on it: the lean profile with Claude Code (Sonnet)
+
+`codeorbit mcp --lean` (two tools, grep-sized answers; codeorbit/mcp_lean.py at
+the commit that adds this entry) was tuned on 16 dev issues (10 Verified,
+`--exclude-split lite --exclude-sample 100 --exclude-seed 3 --sample 10 --seed
+41`; 6 from lucene, druid and terraform). Five versions were tried there; the
+fourth is kept. Its claim (fewer input tokens than grep alone at the same
+accuracy, for a strong model) is tested on 30 issues no lean run touched:
+
+- 20 Verified (not Lite, not the first sample, not the dev 10; seed 61; ids
+  sha256 `069adddfc9be403e…`): astropy__astropy-13453 django__django-10880 django__django-11555 django__django-12209 django__django-14011 django__django-14122 django__django-14373 django__django-15268 django__django-16938 matplotlib__matplotlib-24637 matplotlib__matplotlib-26113 matplotlib__matplotlib-26342 matplotlib__matplotlib-26466 pydata__xarray-3993 pytest-dev__pytest-7236 sphinx-doc__sphinx-7985 sphinx-doc__sphinx-8638 sphinx-doc__sphinx-9602 sphinx-doc__sphinx-9711 sympy__sympy-19954
+- 10 Multilingual from large repos (lucene, terraform, prometheus, hugo, ruff,
+  babel; not in any Sonnet run; seed 61; `3a5ac8f402672e61…`): apache__lucene-12022 astral-sh__ruff-15394 astral-sh__ruff-15443 babel__babel-13928 babel__babel-14532 gohugoio__hugo-12204 gohugoio__hugo-12448 prometheus__prometheus-11859 prometheus__prometheus-12874 prometheus__prometheus-9248
+- Claude Code, Sonnet, both conditions, the harness defaults; mean and median
+  input tokens, cost, function found. Reported whatever it shows.

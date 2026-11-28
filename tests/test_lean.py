@@ -46,9 +46,10 @@ def test_find_is_grep_sized_and_points_at_the_lines(project):
     assert out.splitlines()[0] == "pkg/proxy.py"
     assert "function strip_proxy_header(request, keep=False)" in out
     assert "request.proxy_header = None" in out    # the matching line, numbered
-    assert "x30 = 30" not in out                   # no body
-    assert "keep=False):" not in out.split("\n", 2)[2]   # parameter lines are not "matches"
-    assert len(out) // 4 < 200
+    assert "keep=False):" not in out.split("\n", 2)[2]   # the signature is not repeated
+    excerpt = [l for l in out.splitlines() if " | " in l]
+    assert 0 < len(excerpt) <= ml.EXCERPT_LINES     # the best match: a capped excerpt
+    assert len(out) // 4 < 400                       # explore's first answer: ~2,400
 
 
 def test_asking_again_lists_new_places(project):
