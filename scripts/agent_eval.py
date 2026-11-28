@@ -235,9 +235,25 @@ def chat(model: str, messages: list[dict], tools: list[dict], seed: int,
     think = think_setting(model)
     if think is not None:
         body["think"] = think
-    r = requests.post(f"{url}/api/chat", json=body, timeout=900)
-    r.raise_for_status()
-    return r.json()
+    # A 500 from Ollama on one turn is usually the model's output failing to parse
+    # as a tool call (gpt-oss:20b did this on Kaggle, and every such error ended
+    # the whole run). The same seed would fail the same way, so retry with
+    # another; if it keeps failing, the episode ends as a server error and the
+    # run goes on.
+    for attempt in range(SERVER_RETRIES + 1):
+        body["options"]["seed"] = seed + attempt
+        r = requests.post(f"{url}/api/chat", json=body, timeout=900)
+        if r.status_code != 500:
+            r.raise_for_status()
+            return r.json()
+    raise ServerTurnError(r.text[:200])
+
+
+SERVER_RETRIES = 3
+
+
+class ServerTurnError(Exception):
+    """Ollama kept answering 500 for this turn."""
 
 
 def inline_calls(text: str) -> list[dict]:
@@ -352,7 +368,13 @@ def episode(model: str, condition: str, issue: str, ws: Workspace, count,
             ctx = count(conversation_text(messages, tools))
         rec["input_tokens"] += ctx
         rec["peak_context"] = max(rec["peak_context"], ctx)
-        resp = chat(model, messages, tools, seed, url)
+        try:
+            resp = chat(model, messages, tools, seed, url)
+        except ServerTurnError as e:
+            # no answer from this episode; recorded, and counted as unanswered
+            rec["stop"], rec["server_error"] = "server_error", str(e)
+            rec["turns"] += 1
+            break
         rec["turns"] += 1
         rec["ollama_prompt"] += resp.get("prompt_eval_count") or 0
         rec["ollama_eval"] += resp.get("eval_count") or 0

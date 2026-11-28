@@ -123,3 +123,21 @@ def test_inject_profile_puts_codeorbit_in_the_issue_not_in_the_tools(tmp_path, m
     assert rec["answer"] == ["proxy.py:rebuild_proxy_auth"]
     assert "CodeOrbit (automatic" in seen["user"] and "rebuild_proxy_auth" in seen["user"]
     assert not any(t.startswith("codeorbit") for t in seen["tools"])
+
+
+def test_a_turn_ollama_cannot_answer_ends_the_episode_not_the_run(tmp_path, monkeypatch):
+    calls = []
+
+    class Resp:
+        status_code, text = 500, "error parsing tool call"
+
+    def fake_post(url, json, timeout):
+        calls.append(json["options"]["seed"])
+        return Resp()
+
+    monkeypatch.setattr(ae.requests, "post", fake_post)
+    monkeypatch.setattr(ae, "PROFILE", "full")
+    rec = ae.episode("gpt-oss:20b", "without", "an issue", ae.Workspace(tmp_path),
+                     len, 7, "http://x", None)
+    assert rec["stop"] == "server_error" and rec["answer"] is None
+    assert calls == [7, 8, 9, 10]                 # retried with other seeds

@@ -440,3 +440,11 @@ same 30 held-out issues as the lean profile (listed above; no hook run has
 touched them), Claude Code with Sonnet, `cli_agent_eval.py --inject`, both
 conditions, harness defaults. Mean and median input tokens, cost, function
 found; reported whatever it shows.
+- 2026-11-28, deviation: the first gpt-oss:20b session stopped early. Ollama
+  answered HTTP 500 on a turn (gpt-oss output it could not parse as a tool call),
+  and the harness ended the whole run on any Ollama error: Multilingual-2 after
+  20 issues, the Python part after 30; the JS/TS part finished. The harness now
+  retries such a turn with the next seeds (up to 3); if it still fails, that
+  session ends as `server_error`, counted as unanswered, and the run goes on.
+  The stopped runs are resumed in the same order with this change; nothing
+  already recorded is rerun or dropped.
