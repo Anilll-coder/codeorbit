@@ -1,0 +1,66 @@
+{
+  "dataset": {
+    "name": "swebench-verified",
+    "source": "princeton-nlp/SWE-bench_Verified",
+    "sha256": "36208eba46969ebc31e68d8da059f30e28de7cb6ade337e810b7970e1adb0a94",
+    "selection": {
+      "split": "verified",
+      "repos": null,
+      "instances": "astropy__astropy-13453,django__django-10880,django__django-11555,django__django-12209,django__django-14011,django__django-14122,django__django-14373,django__django-15268,django__django-16938,matplotlib__matplotlib-24637,matplotlib__matplotlib-26113,matplotlib__matplotlib-26342,matplotlib__matplotlib-26466,pydata__xarray-3993,pytest-dev__pytest-7236,sphinx-doc__sphinx-7985,sphinx-doc__sphinx-8638,sphinx-doc__sphinx-9602,sphinx-doc__sphinx-9711,sympy__sympy-19954",
+      "limit": null,
+      "sample": null,
+      "seed": 0,
+      "exclude_split": null,
+      "exclude_sample": null,
+      "exclude_seed": 0,
+      "langs": null
+    }
+  },
+  "codeorbit": {
+    "commit": "be68769bd56c60b296eb407e3cfa796f055bf68a",
+    "dirty": false
+  },
+  "run": {
+    "utc": "2026-11-28T14:47:56+00:00",
+    "agent": "claude-code",
+    "agent_version": "2.1.332 (Claude Code)",
+    "model": "sonnet",
+    "conditions": [
+      "without",
+      "with"
+    ],
+    "max_turns": 20,
+    "embed": false,
+    "base_tools": [
+      "Read",
+      "Grep",
+      "Glob"
+    ],
+    "codeorbit_tools": [],
+    "profile": "inject",
+    "mcp_code": {
+      "path": "C:\\Users\\anilk\\Desktop\\major_project\\codeorbit\\codeorbit",
+      "sha1_of_py": "39da4dc3d2dd"
+    },
+    "tokenizer_for_tool_tokens": "hf microsoft/Phi-4-mini-instruct (tokenizers 0.23.3)",
+    "tasks_selected": 20,
+    "complete": true,
+    "models_seen": [
+      "claude-sonnet-5-5"
+    ],
+    "wall_s": 1214.1
+  },
+  "environment": {
+    "python": "3.13.7",
+    "platform": "Windows-11-10.0.26200-SP0",
+    "packages": {
+      "codeorbit": "0.1.0",
+      "tree-sitter": "0.26.1",
+      "tree-sitter-language-pack": "1.25.2",
+      "tree-sitter-python": "0.25.0",
+      "tree-sitter-javascript": "0.25.0",
+      "tree-sitter-typescript": "0.23.2",
+      "tokenizers": "0.23.3"
+    }
+  }
+}
