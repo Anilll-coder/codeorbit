@@ -158,7 +158,8 @@ def _spawn_detached_upgrade(source: str) -> Path | None:
             f"$ErrorActionPreference='Continue'\n"
             f"try {{ Wait-Process -Id {pid} -Timeout 60 -ErrorAction SilentlyContinue }} catch {{}}\n"
             f"Start-Sleep -Milliseconds 800\n"
-            f"$out = & '{py}' -m pip install --upgrade '{source}' 2>&1 | Out-String\n"
+            f"$out = & '{py}' -m pip {' '.join(REINSTALL)} '{source}' 2>&1 | Out-String\n"
+            f"$out += & '{py}' -m pip install '{source}' 2>&1 | Out-String\n"
             f"$ver = & '{py}' -c \"import importlib.metadata as m; "
             f"print(m.version('codeorbit'))\" 2>&1 | Out-String\n"
             f"[System.IO.File]::WriteAllText('{log}', "
@@ -193,7 +194,8 @@ def _spawn_detached_upgrade(source: str) -> Path | None:
     try:
         subprocess.Popen(
             ["sh", "-c",
-             f'sleep 1; "{py}" -m pip install --upgrade "{source}" > "{log}" 2>&1'],
+             f'sleep 1; "{py}" -m pip {" ".join(REINSTALL)} "{source}" > "{log}" 2>&1; '
+             f'"{py}" -m pip install "{source}" >> "{log}" 2>&1'],
             start_new_session=True,
             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL)
@@ -213,6 +215,14 @@ class Outcome:
     @property
     def changed(self) -> bool:
         return self.before != self.after
+
+
+# Every build is version 0.1.0, so `pip install --upgrade <git url>` saw the same
+# version already installed and kept the OLD code ("Requirement already
+# satisfied"): upgrade reported success and changed nothing. Reinstall the
+# package itself regardless of version; dependencies are left alone there and
+# brought up to what the new version needs by a plain install after it.
+REINSTALL = ("install", "--upgrade", "--force-reinstall", "--no-deps")
 
 
 def _pip(*args: str, timeout: int = 900) -> tuple[int, str]:
@@ -275,7 +285,10 @@ def run(explicit: str | None = None, pull: bool = True) -> Outcome:
             if log else "finishing after this process exits",
         )
 
-    code, out = _pip("install", "--upgrade", source)
+    code, out = _pip(*REINSTALL, source)
+    if code == 0:
+        code, more = _pip("install", source)     # any dependency the new version adds
+        out += more
 
     if code != 0 and _is_self_lock(out):
         log = _spawn_detached_upgrade(source)
